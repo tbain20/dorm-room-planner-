@@ -149,3 +149,18 @@ html,body,#root{margin:0;height:100%;background:var(--blueprint-bg-deep);font-fa
 
 ::-webkit-scrollbar{width:8px;}
 ::-webkit-scrollbar-thumb{background:var(--paper-shadow); border-radius:4px;}
+
+@media (max-width: 760px){
+  html,body,#root{overflow:auto;}
+  #app{flex-direction:column; width:100%; height:auto; min-height:100vh;}
+  #canvas-wrap{height:52vh; flex:none;}
+  #titleblock{min-width:0; padding:10px 12px; max-width:60vw;}
+  #titleblock h1{font-size:12px;}
+  .dim-row input{width:44px; font-size:12px;}
+  #hint{display:none;}
+  #selection-panel{width:auto; left:18px; right:18px; top:auto; bottom:16px;}
+  #sidebar{width:100%; flex:none; box-shadow:0 -8px 24px rgba(0,0,0,0.3);}
+  .cat-item, .cart-row{padding:13px 8px;}
+  .add-btn{width:32px; height:32px; font-size:18px;}
+  .remove-btn{font-size:20px; padding:6px;}
+}

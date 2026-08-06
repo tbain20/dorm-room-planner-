@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { RoomEngine } from './roomEngine.js'
 import { CATALOG, retailerLink } from './catalog.js'
 import { saveLayout, listLayouts, deleteLayout } from './storage.js'
+import { supabase } from './supabaseClient.js'
+import { useAuth } from './useAuth.js'
+import AuthPanel from './AuthPanel.jsx'
 
 export default function App() {
   const canvasWrapRef = useRef(null)
   const engineRef = useRef(null)
+  const { session, loading: authLoading } = useAuth()
 
   const [room, setRoom] = useState({ w: 12, l: 14, h: 9 })
   const [cart, setCart] = useState([])
@@ -14,6 +18,7 @@ export default function App() {
   const [savedLayouts, setSavedLayouts] = useState([])
   const [layoutName, setLayoutName] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
+  const [layoutsError, setLayoutsError] = useState('')
 
   // Init the Three.js engine once, tear it down on unmount
   useEffect(() => {
@@ -26,8 +31,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'saved') setSavedLayouts(listLayouts())
-  }, [tab])
+    if (tab !== 'saved' || !session) return
+    listLayouts()
+      .then(setSavedLayouts)
+      .catch((err) => setLayoutsError(err.message))
+  }, [tab, session])
 
   const total = cart.reduce((sum, it) => sum + it.cat.price, 0)
 
@@ -37,12 +45,17 @@ export default function App() {
     engineRef.current?.setRoomDims(next.w, next.l, next.h)
   }
 
-  function handleSave() {
+  async function handleSave() {
     const name = layoutName.trim()
     if (!name) return
-    saveLayout(name, engineRef.current.getState())
-    setLayoutName('')
-    setSavedLayouts(listLayouts())
+    setLayoutsError('')
+    try {
+      await saveLayout(name, engineRef.current.getState())
+      setLayoutName('')
+      setSavedLayouts(await listLayouts())
+    } catch (err) {
+      setLayoutsError(err.message)
+    }
   }
 
   function handleLoad(data) {
@@ -51,9 +64,14 @@ export default function App() {
     setTab('cart')
   }
 
-  function handleDelete(name) {
-    deleteLayout(name)
-    setSavedLayouts(listLayouts())
+  async function handleDelete(name) {
+    setLayoutsError('')
+    try {
+      await deleteLayout(name)
+      setSavedLayouts(await listLayouts())
+    } catch (err) {
+      setLayoutsError(err.message)
+    }
   }
 
   return (
@@ -157,37 +175,62 @@ export default function App() {
         )}
 
         {tab === 'saved' && (
-          <div id="saved-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-              <input
-                placeholder="Layout name…"
-                value={layoutName}
-                onChange={(e) => setLayoutName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                style={{ flex: 1, padding: 8, border: '1px solid var(--paper-shadow)', fontSize: 12, fontFamily: "'JetBrains Mono','Courier New',monospace" }}
-              />
-              <button
-                onClick={handleSave}
-                style={{ background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: '0 12px', fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 2 }}
-              >
-                Save
-              </button>
-            </div>
-            {savedLayouts.length === 0 ? (
-              <div className="empty-note">No saved layouts yet. Build a room, then name and save it above.</div>
-            ) : (
-              savedLayouts.map((data) => (
-                <div key={data.name} className="cart-row">
-                  <div className="name">
-                    {data.name}
-                    <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
-                      {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}'
-                    </span>
+          <div id="saved-panel" style={{ display: 'flex', padding: session ? 14 : 0, flexDirection: 'column' }}>
+            {authLoading ? (
+              <div className="empty-note">Loading…</div>
+            ) : !session ? (
+              <>
+                {supabase && (
+                  <div style={{ padding: '14px 14px 0 14px', fontSize: 10, color: 'var(--ink-soft)', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span>ACCOUNT</span>
                   </div>
-                  <button className="add-btn" style={{ background: 'var(--ink)' }} onClick={() => handleLoad(data)}>↺</button>
-                  <button className="remove-btn" onClick={() => handleDelete(data.name)}>×</button>
+                )}
+                <AuthPanel />
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, fontSize: 10.5, color: 'var(--ink-soft)' }}>
+                  <span>Signed in as {session.user.email}</span>
+                  <button
+                    onClick={() => supabase.auth.signOut()}
+                    style={{ background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, color: 'var(--ink-soft)', padding: 0 }}
+                  >
+                    Sign out
+                  </button>
                 </div>
-              ))
+                <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                  <input
+                    placeholder="Layout name…"
+                    value={layoutName}
+                    onChange={(e) => setLayoutName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                    style={{ flex: 1, padding: 8, border: '1px solid var(--paper-shadow)', fontSize: 12, fontFamily: "'JetBrains Mono','Courier New',monospace" }}
+                  />
+                  <button
+                    onClick={handleSave}
+                    style={{ background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: '0 12px', fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 2 }}
+                  >
+                    Save
+                  </button>
+                </div>
+                {layoutsError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{layoutsError}</div>}
+                {savedLayouts.length === 0 ? (
+                  <div className="empty-note">No saved layouts yet. Build a room, then name and save it above.</div>
+                ) : (
+                  savedLayouts.map((data) => (
+                    <div key={data.name} className="cart-row">
+                      <div className="name">
+                        {data.name}
+                        <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+                          {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}'
+                        </span>
+                      </div>
+                      <button className="add-btn" style={{ background: 'var(--ink)' }} onClick={() => handleLoad(data)}>↺</button>
+                      <button className="remove-btn" onClick={() => handleDelete(data.name)}>×</button>
+                    </div>
+                  ))
+                )}
+              </>
             )}
           </div>
         )}

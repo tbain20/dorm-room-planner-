@@ -37,31 +37,55 @@ src/
 
 - Room shell + dimension input ✅
 - Add/drag/rotate furniture, clamped to room bounds ✅
-- Real glTF model loading (auto-scaled to fit catalog dims) — wired up, only one demo item uses
-  it right now (`demo3d` in `catalog.js`). Swap in real model URLs as you source them.
-- Save/load layouts — currently per-browser via `localStorage`. Fine for testing, not for real
-  users (no accounts, doesn't sync across devices).
+- Real glTF models for 9 of 12 catalog items (bed, desk, chair, fridge, wardrobe, bookshelf,
+  nightstand, lamp, rug), sourced from Kenney's CC0 Furniture Kit — see `public/models/`. The
+  other 3 (mattress, storage cubes, mirror) had no close match in that kit and still use the box
+  placeholder rather than force a wrong-looking stand-in.
+- Save/load layouts — now backed by Supabase (auth + a `layouts` table), gated behind sign-in on
+  the "Saved" tab. **You still need to create the actual Supabase project** — see "Setting up
+  Supabase" below. Until you do, the app runs fine but the Saved tab shows a "not configured"
+  message instead of localStorage (the old on-device save is gone).
 - Shopping list with retailer links — currently plain search-result links. Affiliate tagging
   hook is in `catalog.js` (`AFFILIATE_TAGS`), just needs your real IDs once approved.
+- Touch: pinch-to-zoom, `touch-action: none` on the canvas, and a stacked mobile layout below
+  760px are in place.
+
+## Setting up Supabase
+
+1. Create a free project at [supabase.com](https://supabase.com).
+2. In the Supabase dashboard: **SQL Editor → New query**, paste in the contents of
+   [`supabase/schema.sql`](supabase/schema.sql), and run it. This creates the `layouts` table
+   with row-level security so each user can only see their own rows.
+3. In **Project Settings → API**, copy the **Project URL** and **anon public** key.
+4. Copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+   `.env` is gitignored — never commit real keys.
+5. Restart `npm run dev`. The "Saved" tab will now show sign-up/sign-in instead of the
+   "not configured" message.
+6. By default Supabase requires email confirmation on sign-up. For local testing you can turn
+   this off under **Authentication → Providers → Email → Confirm email**, or just click the
+   confirmation link Supabase emails you.
+7. When you deploy to Vercel, add the same two `VITE_SUPABASE_*` variables in the Vercel project's
+   Environment Variables settings — `.env` only applies locally.
 
 ## Next steps
 
-**1. Backend + accounts**
-Right now nothing is tied to a user. You'll want:
-- Auth (Clerk or Supabase Auth are both fast to wire into a Vite app)
-- A `layouts` table (user_id, room dims, items JSON, is_public, designer_id) — replace
-  `storage.js` with real API calls; nothing else in the app needs to change, since `App.jsx`
-  only talks to `saveLayout` / `listLayouts` / `deleteLayout`
-- This unlocks cross-device saving, and is also the foundation for the designer marketplace
-  (a "layout" with `is_public: true` is a template other users can browse and copy)
+**1. Backend + accounts — code done, needs your Supabase project**
+`storage.js` now talks to Supabase instead of `localStorage` (`saveLayout` / `listLayouts` /
+`deleteLayout`, same call sites in `App.jsx` as before, now async). The `layouts` table already
+has `is_public` and `designer_id` columns reserved for the marketplace phase below — follow
+"Setting up Supabase" above to make it live.
 
-**2. Grow the real 3D catalog**
-This is the long pole. For each item you want a real model for:
+**2. Grow the real 3D catalog — 9/12 stubbed in with generic CC0 models, still the long pole**
+The models in `public/models/` are generic low-poly stand-ins (Kenney's kit), not the actual
+IKEA/Amazon/Target/Best Buy products in the catalog — good enough to stop the room looking like
+a pile of boxes, not good enough to ship as "this is the exact item you're buying." For each item:
 - Best case: the retailer/manufacturer already has a glTF/GLB (IKEA has some; Wayfair has 3D/AR
   for parts of their catalog via partner APIs)
 - Otherwise: model it yourself in Blender (doesn't need to be photoreal — just recognizable and
   correctly scaled) or hire someone on a freelance platform to do a batch of simple furniture
   models
+- Still no good CC0 match for mattress, storage cubes, or a full-length mirror — those plus any
+  retailer-accurate replacements are the remaining gap
 - Keep using the box placeholder for anything without a model yet — it degrades gracefully
   already (see `_loadItemMesh` in `roomEngine.js`)
 
@@ -78,7 +102,8 @@ specific user's room). Commission split logic lives wherever you calculate the s
 total — attribute a layout's `designer_id` and take your cut off the top before affiliate
 payout tracking.
 
-**5. Mobile**
-This is a plain web app so it already works on phones, but dragging/orbiting a 3D scene with
-touch is fiddly — worth a pass on touch-specific interaction tuning (pinch-to-zoom, larger hit
-targets) before you lean on mobile traffic.
+**5. Mobile — done for now**
+Pinch-to-zoom, `touch-action: none` on the canvas (so touch-drag doesn't fight the browser's
+scroll/pinch gestures), a stacked layout under 760px, and larger tap targets for buttons are in.
+Still untested on a real device — worth a pass with actual hardware before leaning on mobile
+traffic.

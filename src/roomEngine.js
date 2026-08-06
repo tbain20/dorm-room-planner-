@@ -293,17 +293,24 @@ export class RoomEngine {
   // ---------- Pointer interaction ----------
   _initInteraction() {
     const el = this.renderer.domElement
+    // Touch browsers otherwise intercept single-finger drags (scroll) and two-finger
+    // gestures (pinch-zoom page / pull-to-refresh) before our pointer handlers see them.
+    el.style.touchAction = 'none'
+
     this.raycaster = new THREE.Raycaster()
     this.pointerNDC = new THREE.Vector2()
     this.floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
     this.mode = null
     this.dragOffset = new THREE.Vector3()
     this.lastPointer = { x: 0, y: 0 }
+    this.activePointers = new Map() // pointerId -> {x, y}, tracks all touches for pinch
+    this.primaryPointerId = null
+    this.pinch = null // { startDist, startRadius }
 
-    const setPointerNDC = (e) => {
+    const setPointerNDC = (x, y) => {
       const rect = el.getBoundingClientRect()
-      this.pointerNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-      this.pointerNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      this.pointerNDC.x = ((x - rect.left) / rect.width) * 2 - 1
+      this.pointerNDC.y = -((y - rect.top) / rect.height) * 2 + 1
     }
     const getFloorPoint = () => {
       this.raycaster.setFromCamera(this.pointerNDC, this.camera)
@@ -311,9 +318,25 @@ export class RoomEngine {
       this.raycaster.ray.intersectPlane(this.floorPlane, pt)
       return pt
     }
+    const pinchDist = () => {
+      const pts = [...this.activePointers.values()]
+      return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+    }
 
     el.addEventListener('pointerdown', (e) => {
-      setPointerNDC(e)
+      el.setPointerCapture(e.pointerId)
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (this.activePointers.size === 2) {
+        // A second touch landed — abandon any single-pointer drag/orbit and start pinch-zoom.
+        this.mode = null
+        this.pinch = { startDist: pinchDist(), startRadius: this.camState.radius }
+        return
+      }
+      if (this.activePointers.size > 2) return
+
+      this.primaryPointerId = e.pointerId
+      setPointerNDC(e.clientX, e.clientY)
       this.lastPointer = { x: e.clientX, y: e.clientY }
       this.raycaster.setFromCamera(this.pointerNDC, this.camera)
       const meshes = this.placedItems.map((p) => p.mesh)
@@ -332,11 +355,21 @@ export class RoomEngine {
         this.mode = 'orbit'
         this.deselectItem()
       }
-      el.setPointerCapture(e.pointerId)
     })
 
     el.addEventListener('pointermove', (e) => {
-      if (!this.mode) return
+      if (!this.activePointers.has(e.pointerId)) return
+      this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (this.pinch && this.activePointers.size === 2) {
+        const dist = pinchDist()
+        const scale = this.pinch.startDist > 0 ? this.pinch.startDist / dist : 1
+        this.camState.radius = Math.max(4, Math.min(40, this.pinch.startRadius * scale))
+        this._updateCameraPosition()
+        return
+      }
+
+      if (!this.mode || e.pointerId !== this.primaryPointerId) return
       const dx = e.clientX - this.lastPointer.x
       const dy = e.clientY - this.lastPointer.y
       if (this.mode === 'orbit') {
@@ -344,7 +377,7 @@ export class RoomEngine {
         this.camState.phi = Math.max(0.3, Math.min(1.45, this.camState.phi - dy * 0.006))
         this._updateCameraPosition()
       } else if (this.mode === 'drag-item' && this.selected) {
-        setPointerNDC(e)
+        setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         this.selected.mesh.position.x = floorPt.x + this.dragOffset.x
         this.selected.mesh.position.z = floorPt.z + this.dragOffset.z
@@ -353,9 +386,25 @@ export class RoomEngine {
       this.lastPointer = { x: e.clientX, y: e.clientY }
     })
 
-    el.addEventListener('pointerup', () => {
-      this.mode = null
-    })
+    const endPointer = (e) => {
+      this.activePointers.delete(e.pointerId)
+      if (this.activePointers.size < 2) this.pinch = null
+      if (e.pointerId === this.primaryPointerId) {
+        this.mode = null
+        this.primaryPointerId = null
+      }
+      // One finger lifted off a pinch, one remains: resume orbiting from here instead of
+      // jumping (which would happen if we reused the old lastPointer position).
+      if (this.activePointers.size === 1) {
+        const [[id, pos]] = this.activePointers
+        this.primaryPointerId = id
+        this.lastPointer = { x: pos.x, y: pos.y }
+        this.mode = 'orbit'
+        this.deselectItem()
+      }
+    }
+    el.addEventListener('pointerup', endPointer)
+    el.addEventListener('pointercancel', endPointer)
 
     el.addEventListener(
       'wheel',
