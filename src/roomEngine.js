@@ -45,11 +45,11 @@ export class RoomEngine {
     this.renderer.setSize(w, h)
     this.container.appendChild(this.renderer.domElement)
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.75))
-    const dir1 = new THREE.DirectionalLight(0xffffff, 0.9)
+    this.scene.add(new THREE.AmbientLight(0xfff3e4, 0.8))
+    const dir1 = new THREE.DirectionalLight(0xfff8ef, 0.9)
     dir1.position.set(8, 14, 6)
     this.scene.add(dir1)
-    const dir2 = new THREE.DirectionalLight(0x5fa8d3, 0.25)
+    const dir2 = new THREE.DirectionalLight(0xf3e6d2, 0.3)
     dir2.position.set(-8, 6, -6)
     this.scene.add(dir2)
 
@@ -101,17 +101,20 @@ export class RoomEngine {
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(w, l),
-      new THREE.MeshStandardMaterial({ color: 0x1c3f5e, side: THREE.DoubleSide })
+      new THREE.MeshStandardMaterial({ color: 0xd7be99, side: THREE.DoubleSide, roughness: 0.9 })
     )
     floor.rotation.x = -Math.PI / 2
     this.roomGroup.add(floor)
 
-    const grid = new THREE.GridHelper(Math.max(w, l), Math.max(w, l), 0x5fa8d3, 0x2b587a)
+    // Barely-there grid — a soft reference, not a drafting/blueprint layer.
+    const grid = new THREE.GridHelper(Math.max(w, l), Math.max(w, l), 0xc2a877, 0xc2a877)
     grid.position.y = 0.01
+    grid.material.transparent = true
+    grid.material.opacity = 0.28
     this.roomGroup.add(grid)
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x5fa8d3, transparent: true, opacity: 0.08, side: THREE.DoubleSide })
-    const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0x5fa8d3 })
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+    const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0xd9cfba, transparent: true, opacity: 0.6 })
     const addWall = (width, height, x, z, rotY) => {
       const geo = new THREE.PlaneGeometry(width, height)
       const mesh = new THREE.Mesh(geo, wallMat)
@@ -247,7 +250,7 @@ export class RoomEngine {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item) return
     this.selected = item
-    this.selectionHelper = new THREE.BoxHelper(item.mesh, 0xe8a33d)
+    this.selectionHelper = new THREE.BoxHelper(item.mesh, 0xc1502e)
     this.roomGroup.add(this.selectionHelper)
     const cat = CATALOG.find((c) => c.id === item.catalogId)
     this.onSelectionChange({ uid, cat })

@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { RoomEngine } from './roomEngine.js'
 import { CATALOG, retailerLink } from './catalog.js'
-import { saveLayout, listLayouts, deleteLayout } from './storage.js'
+import { saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile } from './storage.js'
 import { supabase } from './supabaseClient.js'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
+
+// TODO: replace with your real contact address before shipping — this is where "apply to be a
+// designer" emails land. There's no approval workflow yet by design (see README); for the first
+// few designers, just flip is_designer = true on their row in the Supabase table editor.
+const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
 
 export default function App() {
   const canvasWrapRef = useRef(null)
@@ -19,6 +24,10 @@ export default function App() {
   const [layoutName, setLayoutName] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
   const [layoutsError, setLayoutsError] = useState('')
+  const [myProfile, setMyProfile] = useState(null)
+  const [publicLayouts, setPublicLayouts] = useState([])
+  const [browseError, setBrowseError] = useState('')
+  const [browseNotice, setBrowseNotice] = useState('')
 
   // Init the Three.js engine once, tear it down on unmount
   useEffect(() => {
@@ -36,6 +45,24 @@ export default function App() {
       .then(setSavedLayouts)
       .catch((err) => setLayoutsError(err.message))
   }, [tab, session])
+
+  useEffect(() => {
+    if (!session) {
+      setMyProfile(null)
+      return
+    }
+    getMyProfile()
+      .then(setMyProfile)
+      .catch(() => {})
+  }, [session])
+
+  useEffect(() => {
+    if (tab !== 'browse') return
+    setBrowseError('')
+    listPublicLayouts()
+      .then(setPublicLayouts)
+      .catch((err) => setBrowseError(err.message))
+  }, [tab])
 
   const total = cart.reduce((sum, it) => sum + it.cat.price, 0)
 
@@ -74,12 +101,39 @@ export default function App() {
     }
   }
 
+  async function handleTogglePublic(name, nextPublic) {
+    setLayoutsError('')
+    try {
+      await setLayoutPublic(name, nextPublic)
+      setSavedLayouts(await listLayouts())
+    } catch (err) {
+      setLayoutsError(err.message)
+    }
+  }
+
+  async function handleCopyPublic(layout) {
+    if (!session) {
+      setTab('saved')
+      return
+    }
+    setBrowseError('')
+    setBrowseNotice('')
+    try {
+      const name = await copyLayout(layout)
+      setBrowseNotice(`Copied to your layouts as "${name}".`)
+      // Load it into the room immediately — don't make them go hunt for it in Saved.
+      handleLoad(layout)
+    } catch (err) {
+      setBrowseError(err.message)
+    }
+  }
+
   return (
     <div id="app">
       <div id="canvas-wrap" ref={canvasWrapRef}>
         <div id="titleblock">
           <h1>Room Planner</h1>
-          <div className="sub">DRG. NO. 001 — DORM LAYOUT</div>
+          <div className="sub">Set your dimensions, then start furnishing.</div>
           <div className="dim-row">
             <label>Width</label>
             <input type="number" value={room.w} min={6} max={25} step={0.5} onChange={(e) => handleDimChange('w', e.target.value)} />
@@ -97,7 +151,7 @@ export default function App() {
           </div>
         </div>
 
-        <div id="hint">DRAG FLOOR TO ORBIT · SCROLL TO ZOOM · DRAG AN ITEM TO MOVE IT · SELECT + R TO ROTATE</div>
+        <div id="hint">Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate</div>
 
         {selection && (
           <div id="selection-panel" className="visible">
@@ -107,7 +161,7 @@ export default function App() {
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
-                style={{ background: 'var(--ink)', color: 'var(--paper)', flex: 1, border: 'none', padding: 7, borderRadius: 2, fontSize: 11, cursor: 'pointer' }}
+                style={{ background: 'var(--ink)', color: 'var(--paper)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
                 onClick={() => engineRef.current.rotateSelected()}
               >
                 ⟳ Rotate 90°
@@ -129,6 +183,7 @@ export default function App() {
             Your room {cart.length > 0 && `(${cart.length})`}
           </button>
           <button className={`tab-btn ${tab === 'saved' ? 'active' : ''}`} onClick={() => setTab('saved')}>Saved</button>
+          <button className={`tab-btn ${tab === 'browse' ? 'active' : ''}`} onClick={() => setTab('browse')}>Browse</button>
         </div>
 
         {tab === 'catalog' && (
@@ -139,7 +194,7 @@ export default function App() {
                 <div className="cat-info">
                   <div className="name">{cat.name}</div>
                   <div className="meta">
-                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · {cat.retailer}
+                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
                   </div>
                 </div>
                 <div className="cat-price">${cat.price}</div>
@@ -190,7 +245,14 @@ export default function App() {
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, fontSize: 10.5, color: 'var(--ink-soft)' }}>
-                  <span>Signed in as {session.user.email}</span>
+                  <span>
+                    Signed in as {session.user.email}
+                    {myProfile?.is_designer && (
+                      <span style={{ marginLeft: 6, color: 'var(--sage)', fontWeight: 600, background: 'var(--sage-soft)', padding: '2px 7px', borderRadius: 999, fontSize: 9.5, letterSpacing: '0.03em' }}>
+                        DESIGNER
+                      </span>
+                    )}
+                  </span>
                   <button
                     onClick={() => supabase.auth.signOut()}
                     style={{ background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, color: 'var(--ink-soft)', padding: 0 }}
@@ -198,17 +260,25 @@ export default function App() {
                     Sign out
                   </button>
                 </div>
+                {!myProfile?.is_designer && (
+                  <a
+                    href={`mailto:${DESIGNER_APPLY_EMAIL}?subject=${encodeURIComponent('Designer application — Dorm Room Planner')}&body=${encodeURIComponent(`Account email: ${session.user.email}\n\nTell us a bit about your design background:`)}`}
+                    style={{ display: 'block', fontSize: 10.5, color: 'var(--sage)', marginBottom: 14, textDecoration: 'none', fontWeight: 600 }}
+                  >
+                    Want to publish layouts as a designer? Apply here →
+                  </a>
+                )}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
                   <input
                     placeholder="Layout name…"
                     value={layoutName}
                     onChange={(e) => setLayoutName(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                    style={{ flex: 1, padding: 8, border: '1px solid var(--paper-shadow)', fontSize: 12, fontFamily: "'JetBrains Mono','Courier New',monospace" }}
+                    style={{ flex: 1, padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 12.5 }}
                   />
                   <button
                     onClick={handleSave}
-                    style={{ background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: '0 12px', fontSize: 11, textTransform: 'uppercase', cursor: 'pointer', borderRadius: 2 }}
+                    style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 14px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 8 }}
                   >
                     Save
                   </button>
@@ -218,19 +288,82 @@ export default function App() {
                   <div className="empty-note">No saved layouts yet. Build a room, then name and save it above.</div>
                 ) : (
                   savedLayouts.map((data) => (
-                    <div key={data.name} className="cart-row">
+                    <div
+                      key={data.name}
+                      className="cart-row"
+                      onClick={() => handleLoad(data)}
+                      title="Click to load this layout into your room"
+                    >
                       <div className="name">
                         {data.name}
                         <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
                           {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}'
                         </span>
                       </div>
-                      <button className="add-btn" style={{ background: 'var(--ink)' }} onClick={() => handleLoad(data)}>↺</button>
-                      <button className="remove-btn" onClick={() => handleDelete(data.name)}>×</button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTogglePublic(data.name, !data.isPublic)
+                        }}
+                        title={data.isPublic ? 'Public — visible on the Browse tab. Click to make private.' : 'Private — only you can see this. Click to publish.'}
+                        style={{
+                          border: 'none', borderRadius: 999, padding: '4px 9px', fontSize: 9.5, fontWeight: 600,
+                          letterSpacing: '0.03em', cursor: 'pointer', flexShrink: 0,
+                          background: data.isPublic ? 'var(--sage-soft)' : 'var(--paper-shadow)',
+                          color: data.isPublic ? 'var(--sage)' : 'var(--ink-soft)',
+                        }}
+                      >
+                        {data.isPublic ? 'PUBLIC' : 'PRIVATE'}
+                      </button>
+                      <button className="add-btn" style={{ background: 'var(--ink)' }} title="Load into room" onClick={(e) => { e.stopPropagation(); handleLoad(data) }}>↺</button>
+                      <button className="remove-btn" onClick={(e) => { e.stopPropagation(); handleDelete(data.name) }}>×</button>
                     </div>
                   ))
                 )}
               </>
+            )}
+          </div>
+        )}
+
+        {tab === 'browse' && (
+          <div id="browse-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
+            <div className="empty-note" style={{ padding: '0 0 12px 0' }}>
+              Layouts other users have made public. Copy one to start from it, or view it in 3D first.
+            </div>
+            {browseNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600 }}>{browseNotice}</div>}
+            {browseError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{browseError}</div>}
+            {publicLayouts.length === 0 ? (
+              <div className="empty-note">No public layouts yet. Publish one of your own from the Saved tab to be the first.</div>
+            ) : (
+              publicLayouts.map((layout) => (
+                <div
+                  key={layout.id}
+                  className="cart-row"
+                  style={{ alignItems: 'flex-start' }}
+                  onClick={() => handleLoad(layout)}
+                  title="Click to view this layout in your room"
+                >
+                  <div className="name">
+                    {layout.name}
+                    <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+                      {layout.items.length} item{layout.items.length === 1 ? '' : 's'} · {layout.room.w}'×{layout.room.l}'
+                    </span>
+                    {layout.designerName && (
+                      <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 2 }}>
+                        Designed by {layout.designerName}
+                      </span>
+                    )}
+                  </div>
+                  <button className="add-btn" style={{ background: 'var(--ink)' }} title="View in 3D" onClick={(e) => { e.stopPropagation(); handleLoad(layout) }}>↺</button>
+                  <button
+                    className="add-btn"
+                    title={session ? 'Copy to your layouts' : 'Sign in to copy'}
+                    onClick={(e) => { e.stopPropagation(); handleCopyPublic(layout) }}
+                  >
+                    +
+                  </button>
+                </div>
+              ))
             )}
           </div>
         )}

@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { supabase } from './supabaseClient.js'
 
 const inputStyle = {
-  padding: 8,
+  padding: 9,
   border: '1px solid var(--paper-shadow)',
-  fontSize: 12,
-  fontFamily: "'JetBrains Mono','Courier New',monospace",
+  borderRadius: 8,
+  fontSize: 12.5,
 }
 
 export default function AuthPanel() {
@@ -67,7 +67,7 @@ export default function AuthPanel() {
         <button
           type="submit"
           disabled={busy}
-          style={{ background: 'var(--ink)', color: 'var(--paper)', border: 'none', padding: 9, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', cursor: 'pointer', borderRadius: 2 }}
+          style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: 10, fontSize: 12, fontWeight: 600, letterSpacing: '0.01em', cursor: 'pointer', borderRadius: 8 }}
         >
           {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
         </button>
