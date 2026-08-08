@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, retailerLink } from './catalog.js'
-import { saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile } from './storage.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, retailerLink, thumbnailUrl, resolveRelatedItems } from './catalog.js'
+import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
+import {
+  saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile,
+  listChecklistItems, setChecklistItemChecked, addChecklistItem, deleteChecklistItem,
+} from './storage.js'
 import { supabase } from './supabaseClient.js'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
@@ -11,6 +15,44 @@ import AuthPanel from './AuthPanel.jsx'
 // few designers, just flip is_designer = true on their row in the Supabase table editor.
 const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
 
+// Real thumbnail rendered from the item's model when one exists; falls back to the flat color
+// swatch (plus a category icon, so it's not just a blank chip) for box-placeholder items or if
+// the image 404s — some future catalog item might get a modelUrl before anyone regenerates
+// public/thumbnails/, and this shouldn't break the row when that happens.
+function CatalogThumb({ cat }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const swatchColor = `#${cat.color.toString(16).padStart(6, '0')}`
+  const url = thumbnailUrl(cat)
+
+  if (url && !imgFailed) {
+    return (
+      <div className="swatch" style={{ background: swatchColor, padding: 0 }}>
+        <img src={url} alt="" onError={() => setImgFailed(true)} className="swatch-img" />
+      </div>
+    )
+  }
+  return (
+    <div className="swatch" style={{ background: swatchColor }}>
+      <span className="swatch-icon">{CATEGORY_ICONS[cat.category] || '📦'}</span>
+    </div>
+  )
+}
+
+// Screenshot captured at save time (roomEngine's captureSnapshot), shown on Saved/Browse rows.
+// Falls back to a generic room icon for layouts saved before this feature existed (thumbnailUrl
+// is null) or if the image fails to load.
+function LayoutThumb({ url }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  if (url && !imgFailed) {
+    return <img src={url} alt="" onError={() => setImgFailed(true)} className="layout-thumb" />
+  }
+  return (
+    <div className="layout-thumb layout-thumb-fallback">
+      <span>🏠</span>
+    </div>
+  )
+}
+
 export default function App() {
   const canvasWrapRef = useRef(null)
   const engineRef = useRef(null)
@@ -19,6 +61,8 @@ export default function App() {
   const [room, setRoom] = useState({ w: 12, l: 14, h: 9 })
   const [cart, setCart] = useState([])
   const [selection, setSelection] = useState(null)
+  const [featureSelection, setFeatureSelection] = useState(null)
+  const [relatedNotice, setRelatedNotice] = useState('')
   const [tab, setTab] = useState('catalog')
   const [savedLayouts, setSavedLayouts] = useState([])
   const [layoutName, setLayoutName] = useState('')
@@ -28,16 +72,29 @@ export default function App() {
   const [publicLayouts, setPublicLayouts] = useState([])
   const [browseError, setBrowseError] = useState('')
   const [browseNotice, setBrowseNotice] = useState('')
+  const [providedAdded, setProvidedAdded] = useState(false)
+  const [openCategories, setOpenCategories] = useState(() => new Set())
+  const [checklistItems, setChecklistItems] = useState([])
+  const [checklistError, setChecklistError] = useState('')
+  const [checklistLoading, setChecklistLoading] = useState(false)
+  const [hideChecked, setHideChecked] = useState(false)
+  const [openChecklistCategories, setOpenChecklistCategories] = useState(() => new Set())
+  const [checklistDrafts, setChecklistDrafts] = useState({})
 
   // Init the Three.js engine once, tear it down on unmount
   useEffect(() => {
     const engine = new RoomEngine(canvasWrapRef.current, {
       onCartChange: setCart,
       onSelectionChange: setSelection,
+      onFeatureSelectionChange: setFeatureSelection,
     })
     engineRef.current = engine
     return () => engine.destroy()
   }, [])
+
+  useEffect(() => {
+    setRelatedNotice('')
+  }, [selection])
 
   useEffect(() => {
     if (tab !== 'saved' || !session) return
@@ -64,7 +121,101 @@ export default function App() {
       .catch((err) => setBrowseError(err.message))
   }, [tab])
 
-  const total = cart.reduce((sum, it) => sum + it.cat.price, 0)
+  useEffect(() => {
+    if (tab !== 'checklist' || !session) return
+    setChecklistError('')
+    setChecklistLoading(true)
+    listChecklistItems()
+      .then(setChecklistItems)
+      .catch((err) => setChecklistError(err.message))
+      .finally(() => setChecklistLoading(false))
+  }, [tab, session])
+
+  // Colgate-provided furniture isn't for sale — it doesn't count toward the total or appear on
+  // the shopping list, since there's nothing to buy.
+  const purchasableCart = cart.filter((it) => !it.cat.isProvided)
+  const total = purchasableCart.reduce((sum, it) => sum + it.cat.price, 0)
+
+  const relatedItems = selection ? resolveRelatedItems(selection.cat) : []
+
+  // category -> subcategory -> items, in CATEGORY_ORDER's display order. Items with no
+  // subcategory group under 'General' (rendered without its own label).
+  const groupedCatalog = {}
+  for (const item of CATALOG) {
+    const sub = item.subcategory || 'General'
+    groupedCatalog[item.category] ??= {}
+    groupedCatalog[item.category][sub] ??= []
+    groupedCatalog[item.category][sub].push(item)
+  }
+
+  function toggleCategory(category) {
+    setOpenCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
+
+  // category -> subcategory -> items, same shape/ordering approach as groupedCatalog above but
+  // over CHECKLIST_CATEGORY_ORDER (all 11 categories, not just the ones with placeable items).
+  // Built from the full unfiltered list, not "hide checked" — otherwise a fully-packed category
+  // would vanish instead of showing "5/5", and per-category counts would go stale. The toggle is
+  // applied per-row at render time instead.
+  const groupedChecklist = {}
+  for (const item of checklistItems) {
+    const sub = item.subcategory || 'General'
+    groupedChecklist[item.category] ??= {}
+    groupedChecklist[item.category][sub] ??= []
+    groupedChecklist[item.category][sub].push(item)
+  }
+  const checkedCount = checklistItems.filter((i) => i.checked).length
+
+  function toggleChecklistCategory(category) {
+    setOpenChecklistCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
+
+  async function refreshChecklist() {
+    setChecklistItems(await listChecklistItems())
+  }
+
+  async function handleToggleChecklistItem(id, checked) {
+    setChecklistError('')
+    try {
+      await setChecklistItemChecked(id, checked)
+      await refreshChecklist()
+    } catch (err) {
+      setChecklistError(err.message)
+    }
+  }
+
+  async function handleAddChecklistItem(category) {
+    const label = (checklistDrafts[category] || '').trim()
+    if (!label) return
+    setChecklistError('')
+    try {
+      await addChecklistItem(category, null, label)
+      setChecklistDrafts((prev) => ({ ...prev, [category]: '' }))
+      await refreshChecklist()
+    } catch (err) {
+      setChecklistError(err.message)
+    }
+  }
+
+  async function handleDeleteChecklistItem(id) {
+    setChecklistError('')
+    try {
+      await deleteChecklistItem(id)
+      await refreshChecklist()
+    } catch (err) {
+      setChecklistError(err.message)
+    }
+  }
 
   function handleDimChange(key, value) {
     const next = { ...room, [key]: parseFloat(value) || room[key] }
@@ -72,12 +223,60 @@ export default function App() {
     engineRef.current?.setRoomDims(next.w, next.l, next.h)
   }
 
+  function handleAddDoor() {
+    engineRef.current.addDoor()
+  }
+
+  function handleAddWindow() {
+    engineRef.current.addWindow()
+  }
+
+  function handleFeatureWallChange(wall) {
+    engineRef.current.setFeatureWall(featureSelection.id, wall)
+  }
+
+  function handleFeatureSizeChange(key, value) {
+    const next = { width: featureSelection.width, height: featureSelection.height, [key]: parseFloat(value) || featureSelection[key] }
+    engineRef.current.setFeatureSize(featureSelection.id, next.width, next.height)
+  }
+
+  function handleRemoveFeature() {
+    engineRef.current.removeFeature(featureSelection.id)
+  }
+
+  function handleAddProvided() {
+    colgateDefaultLayout(room).forEach(({ catalogId, x, z, rotY }) => {
+      engineRef.current.addItemAt(catalogId, x, z, rotY)
+    })
+    setProvidedAdded(true)
+  }
+
+  function handleAddRelatedToRoom(catalogId) {
+    engineRef.current.addItem(catalogId)
+  }
+
+  async function handleAddRelatedToChecklist(related) {
+    setRelatedNotice('')
+    if (!session) {
+      setTab('checklist')
+      return
+    }
+    try {
+      await addChecklistItem(related.category, related.subcategory, related.label)
+      setRelatedNotice(`Added "${related.label}" to your checklist.`)
+    } catch (err) {
+      setRelatedNotice(err.message)
+    }
+  }
+
   async function handleSave() {
     const name = layoutName.trim()
     if (!name) return
     setLayoutsError('')
     try {
-      await saveLayout(name, engineRef.current.getState())
+      const state = engineRef.current.getState()
+      const thumbnailDataUrl = engineRef.current.captureSnapshot()
+      await saveLayout(name, { ...state, thumbnailDataUrl })
       setLayoutName('')
       setSavedLayouts(await listLayouts())
     } catch (err) {
@@ -149,6 +348,10 @@ export default function App() {
             <input type="number" value={room.h} min={7} max={14} step={0.5} onChange={(e) => handleDimChange('h', e.target.value)} />
             <span className="unit">ft</span>
           </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
+            <button className="structure-btn" onClick={handleAddDoor}>+ Door</button>
+            <button className="structure-btn" onClick={handleAddWindow}>+ Window</button>
+          </div>
         </div>
 
         <div id="hint">Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate</div>
@@ -157,7 +360,12 @@ export default function App() {
           <div id="selection-panel" className="visible">
             <h3>{selection.cat.name}</h3>
             <div className="meta">
-              {selection.cat.dims[0]}' x {selection.cat.dims[1]}' x {selection.cat.dims[2]}' · ${selection.cat.price}
+              {selection.cat.dims[0]}' x {selection.cat.dims[1]}' x {selection.cat.dims[2]}'
+              {selection.cat.isProvided ? (
+                <span style={{ color: 'var(--sage)', fontWeight: 600 }}> · Included by Colgate</span>
+              ) : (
+                <> · ${selection.cat.price}</>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
@@ -168,6 +376,86 @@ export default function App() {
               </button>
             </div>
             <button onClick={() => engineRef.current.removeItem(selection.uid)}>Remove item</button>
+
+            {relatedItems.length > 0 && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--paper-shadow)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 8 }}>
+                  Goes well with
+                </div>
+                {relatedItems.map((rel) => (
+                  <div key={rel.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 11.5, color: 'var(--ink)' }}>{rel.label}</span>
+                    <button
+                      onClick={() => (rel.isChecklist ? handleAddRelatedToChecklist(rel) : handleAddRelatedToRoom(rel.catalogId))}
+                      title={rel.isChecklist && !session ? 'Sign in to add to your checklist' : undefined}
+                      style={{
+                        background: rel.isChecklist ? 'var(--sage-soft)' : 'var(--accent-soft)',
+                        color: rel.isChecklist ? 'var(--sage)' : 'var(--accent)',
+                        border: 'none', borderRadius: 999, padding: '3px 9px', fontSize: 10, fontWeight: 600,
+                        cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap', width: 'auto',
+                      }}
+                    >
+                      {rel.isChecklist ? '+ Checklist' : '+ Room'}
+                    </button>
+                  </div>
+                ))}
+                {relatedNotice && <div style={{ fontSize: 10.5, color: 'var(--sage)', marginTop: 4 }}>{relatedNotice}</div>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {featureSelection && (
+          <div id="selection-panel" className="visible">
+            <h3>{featureSelection.type === 'door' ? 'Door' : 'Window'}</h3>
+            <div className="meta">
+              {featureSelection.width.toFixed(1)}' x {featureSelection.height.toFixed(1)}'
+              {featureSelection.type === 'door' && ' · Standard size'}
+            </div>
+
+            <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+              Wall
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
+              {['back', 'front', 'left', 'right'].map((wall) => (
+                <button
+                  key={wall}
+                  onClick={() => handleFeatureWallChange(wall)}
+                  style={{
+                    border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
+                    background: featureSelection.wall === wall ? 'var(--accent)' : 'var(--paper-shadow)',
+                    color: featureSelection.wall === wall ? '#fff' : 'var(--ink-soft)',
+                  }}
+                >
+                  {wall}
+                </button>
+              ))}
+            </div>
+
+            {featureSelection.type === 'window' && (
+              <>
+                <div className="dim-row" style={{ marginBottom: 6 }}>
+                  <label style={{ color: 'var(--ink-soft)' }}>Width</label>
+                  <input
+                    type="number" value={featureSelection.width} min={1.5} max={6} step={0.5}
+                    onChange={(e) => handleFeatureSizeChange('width', e.target.value)}
+                    style={{ border: '1px solid var(--paper-shadow)', borderRadius: 6, padding: '3px 6px', width: 56, color: 'var(--ink)' }}
+                  />
+                  <span className="unit">ft</span>
+                </div>
+                <div className="dim-row" style={{ marginBottom: 12 }}>
+                  <label style={{ color: 'var(--ink-soft)' }}>Height</label>
+                  <input
+                    type="number" value={featureSelection.height} min={2} max={5} step={0.5}
+                    onChange={(e) => handleFeatureSizeChange('height', e.target.value)}
+                    style={{ border: '1px solid var(--paper-shadow)', borderRadius: 6, padding: '3px 6px', width: 56, color: 'var(--ink)' }}
+                  />
+                  <span className="unit">ft</span>
+                </div>
+              </>
+            )}
+
+            <button onClick={handleRemoveFeature}>Remove {featureSelection.type}</button>
           </div>
         )}
       </div>
@@ -184,23 +472,62 @@ export default function App() {
           </button>
           <button className={`tab-btn ${tab === 'saved' ? 'active' : ''}`} onClick={() => setTab('saved')}>Saved</button>
           <button className={`tab-btn ${tab === 'browse' ? 'active' : ''}`} onClick={() => setTab('browse')}>Browse</button>
+          <button className={`tab-btn ${tab === 'checklist' ? 'active' : ''}`} onClick={() => setTab('checklist')}>Checklist</button>
         </div>
 
         {tab === 'catalog' && (
           <div id="catalog-panel">
-            {CATALOG.map((cat) => (
-              <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
-                <div className="swatch" style={{ background: `#${cat.color.toString(16).padStart(6, '0')}` }} />
-                <div className="cat-info">
-                  <div className="name">{cat.name}</div>
-                  <div className="meta">
-                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
-                  </div>
-                </div>
-                <div className="cat-price">${cat.price}</div>
-                <button className="add-btn">+</button>
+            <div style={{ background: 'var(--sage-soft)', border: '1px solid var(--sage)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 14, marginBottom: 4, color: 'var(--ink)' }}>
+                🎓 Colgate dorm room?
               </div>
-            ))}
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginBottom: 10, lineHeight: 1.5 }}>
+                Add the furniture Colgate already provides — bed, desk, chair, wardrobe, and dresser — placed for you. Move, rotate, or remove anything afterward.
+              </div>
+              <button
+                onClick={handleAddProvided}
+                disabled={providedAdded}
+                style={{
+                  background: providedAdded ? 'var(--paper-shadow)' : 'var(--sage)', color: providedAdded ? 'var(--ink-soft)' : '#fff',
+                  border: 'none', padding: '8px 14px', fontSize: 11.5, fontWeight: 600, borderRadius: 8,
+                  cursor: providedAdded ? 'default' : 'pointer',
+                }}
+              >
+                {providedAdded ? 'Added ✓' : 'Add Colgate furniture'}
+              </button>
+            </div>
+            {CATEGORY_ORDER.filter((category) => groupedCatalog[category]).map((category) => {
+              const subcats = groupedCatalog[category]
+              const itemCount = Object.values(subcats).reduce((n, items) => n + items.length, 0)
+              const isOpen = openCategories.has(category)
+              return (
+                <div key={category} className="category-section">
+                  <button className="category-header" onClick={() => toggleCategory(category)}>
+                    <span>{CATEGORY_ICONS[category]} {category}</span>
+                    <span className="category-meta">{itemCount} {isOpen ? '−' : '+'}</span>
+                  </button>
+                  {isOpen &&
+                    Object.entries(subcats).map(([subcategory, items]) => (
+                      <div key={subcategory}>
+                        {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
+                        {items.map((cat) => (
+                          <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
+                            <CatalogThumb cat={cat} />
+                            <div className="cat-info">
+                              <div className="name">{cat.name}</div>
+                              <div className="meta">
+                                {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                              </div>
+                            </div>
+                            <div className="cat-price">${cat.price}</div>
+                            <button className="add-btn">+</button>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -211,9 +538,15 @@ export default function App() {
             ) : (
               cart.map((it) => (
                 <div key={it.uid} className="cart-row" onClick={() => engineRef.current.selectItem(it.uid)}>
-                  <div className="swatch" style={{ background: `#${it.cat.color.toString(16).padStart(6, '0')}` }} />
+                  <CatalogThumb cat={it.cat} />
                   <div className="name">{it.cat.name}</div>
-                  <div className="price">${it.cat.price}</div>
+                  {it.cat.isProvided ? (
+                    <span style={{ background: 'var(--sage-soft)', color: 'var(--sage)', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.03em', padding: '4px 9px', borderRadius: 999, flexShrink: 0 }}>
+                      COLGATE
+                    </span>
+                  ) : (
+                    <div className="price">${it.cat.price}</div>
+                  )}
                   <button
                     className="remove-btn"
                     onClick={(e) => {
@@ -294,6 +627,7 @@ export default function App() {
                       onClick={() => handleLoad(data)}
                       title="Click to load this layout into your room"
                     >
+                      <LayoutThumb url={data.thumbnailUrl} />
                       <div className="name">
                         {data.name}
                         <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
@@ -343,6 +677,7 @@ export default function App() {
                   onClick={() => handleLoad(layout)}
                   title="Click to view this layout in your room"
                 >
+                  <LayoutThumb url={layout.thumbnailUrl} />
                   <div className="name">
                     {layout.name}
                     <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
@@ -368,12 +703,93 @@ export default function App() {
           </div>
         )}
 
+        {tab === 'checklist' && (
+          <div id="checklist-panel" style={{ display: 'flex', padding: session ? 14 : 0, flexDirection: 'column' }}>
+            {authLoading ? (
+              <div className="empty-note">Loading…</div>
+            ) : !session ? (
+              <>
+                {supabase && (
+                  <div style={{ padding: '14px 14px 0 14px', fontSize: 10, color: 'var(--ink-soft)' }}>ACCOUNT</div>
+                )}
+                <AuthPanel />
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                    {checkedCount} of {checklistItems.length} packed
+                  </span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={hideChecked} onChange={(e) => setHideChecked(e.target.checked)} />
+                    Hide packed
+                  </label>
+                </div>
+                {checklistError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{checklistError}</div>}
+                {checklistLoading ? (
+                  <div className="empty-note">Loading your checklist…</div>
+                ) : (
+                  CHECKLIST_CATEGORY_ORDER.filter((category) => groupedChecklist[category]).map((category) => {
+                    const subcats = groupedChecklist[category]
+                    const totalInCategory = Object.values(subcats).flat().length
+                    const checkedInCategory = Object.values(subcats).flat().filter((i) => i.checked).length
+                    const isOpen = openChecklistCategories.has(category)
+                    return (
+                      <div key={category} className="category-section">
+                        <button className="category-header" onClick={() => toggleChecklistCategory(category)}>
+                          <span>{CATEGORY_ICONS[category] || '📦'} {category}</span>
+                          <span className="category-meta">{checkedInCategory}/{totalInCategory} {isOpen ? '−' : '+'}</span>
+                        </button>
+                        {isOpen && (
+                          <>
+                            {Object.entries(subcats).map(([subcategory, items]) => {
+                              const visible = items.filter((item) => !hideChecked || !item.checked)
+                              if (visible.length === 0) return null
+                              return (
+                                <div key={subcategory}>
+                                  {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
+                                  {visible.map((item) => (
+                                    <div key={item.id} className="checklist-row">
+                                      <label className="checklist-label-wrap">
+                                        <input
+                                          type="checkbox"
+                                          checked={item.checked}
+                                          onChange={(e) => handleToggleChecklistItem(item.id, e.target.checked)}
+                                        />
+                                        <span className={`checklist-label ${item.checked ? 'checked' : ''}`}>{item.label}</span>
+                                      </label>
+                                      <button className="remove-btn" onClick={() => handleDeleteChecklistItem(item.id)}>×</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )
+                            })}
+                            <div className="checklist-add-row">
+                              <input
+                                placeholder="Add an item…"
+                                value={checklistDrafts[category] || ''}
+                                onChange={(e) => setChecklistDrafts((prev) => ({ ...prev, [category]: e.target.value }))}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddChecklistItem(category)}
+                              />
+                              <button onClick={() => handleAddChecklistItem(category)}>+</button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div id="total-bar">
           <div id="total-row">
             <span className="label">Estimated total</span>
             <span className="amount">${total.toLocaleString()}</span>
           </div>
-          <button id="checkout-btn" disabled={cart.length === 0} onClick={() => setShowReceipt(true)}>
+          <button id="checkout-btn" disabled={purchasableCart.length === 0} onClick={() => setShowReceipt(true)}>
             Get shopping list
           </button>
         </div>
@@ -383,9 +799,9 @@ export default function App() {
         <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setShowReceipt(false)}>
           <div id="receipt">
             <h2>Shopping list</h2>
-            <div className="rsub">Everything you placed, ready to buy. Opens each retailer's site.</div>
+            <div className="rsub">Everything you placed, ready to buy. Opens each retailer's site. Colgate-provided furniture isn't included — there's nothing to buy for that.</div>
             <div>
-              {cart.map((it) => (
+              {purchasableCart.map((it) => (
                 <div key={it.uid} className="receipt-line">
                   <div className="rname">
                     {it.cat.name}

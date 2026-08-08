@@ -1,23 +1,172 @@
+import { DEFAULT_CHECKLIST_ITEMS } from './checklistItems.js'
+
 // dims are [width, depth, height] in feet.
 // modelUrl (glTF/GLB) makes the engine load a real 3D model instead of a placeholder box —
 // it auto-scales and floor-aligns whatever model you point it at. Models below are from
 // Kenney's CC0-licensed Furniture Kit (kenney.nl/assets/furniture-kit, public domain, no
-// attribution required) — stand-ins chosen for silhouette, not exact retailer matches. Items
-// without a close match in that kit (mattress, storage cubes, mirror) still use box placeholders.
-export const CATALOG = [
-  { id: 'bed', name: 'Twin XL Bed Frame', price: 189, retailer: 'IKEA', dims: [3.4, 6.5, 2.0], color: 0x8a6b4f, category: 'Sleep', modelUrl: '/models/bedSingle.glb' },
-  { id: 'mattress', name: 'Twin XL Mattress', price: 159, retailer: 'Amazon', dims: [3.3, 6.3, 0.8], color: 0xd8cbb0, category: 'Sleep' },
-  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Work', modelUrl: '/models/desk.glb' },
-  { id: 'chair', name: 'Desk Chair', price: 79, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0x3a3a3a, category: 'Work', modelUrl: '/models/chairDesk.glb' },
-  { id: 'fridge', name: 'Mini Fridge', price: 139, retailer: 'Best Buy', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Living', modelUrl: '/models/kitchenFridgeSmall.glb' },
-  { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Storage', modelUrl: '/models/bookcaseClosedDoors.glb' },
-  { id: 'shelf', name: 'Bookshelf', price: 59, retailer: 'IKEA', dims: [2.5, 1.0, 4.0], color: 0x9c7a4d, category: 'Storage', modelUrl: '/models/bookcaseOpen.glb' },
-  { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Storage' },
-  { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Storage', modelUrl: '/models/sideTableDrawers.glb' },
-  { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Living', modelUrl: '/models/lampRoundFloor.glb' },
-  { id: 'rug', name: 'Area Rug 5x3', price: 49, retailer: 'Amazon', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Living', modelUrl: '/models/rugRectangle.glb' },
-  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Living' },
+// attribution required) — stand-ins chosen for silhouette, not exact retailer matches.
+//
+// This is the "placeable" half of Tyler's full dorm-shopping list — items with a real physical
+// footprint worth positioning in the 3D room. The other half (small/consumable items like pens,
+// detergent, sticky notes — things that don't make sense as 3D objects) lives in
+// checklistItems.js instead, for the packing-checklist tab.
+//
+// category/subcategory match Tyler's taxonomy (see CATEGORY_ORDER below for display order and
+// icons). A few existing items predate that taxonomy and were retagged into it; a few categories
+// in the taxonomy (School Supplies, Bathroom) have zero placeable items — everything in those is
+// checklist-only — so they never show up here.
+export const CATEGORY_ORDER = [
+  'Bedding',
+  'Furniture & Organization',
+  'Kitchen & Food',
+  'Cleaning Supplies',
+  'Laundry',
+  'Sleep & Comfort',
+  'Entertainment',
+  'Decor',
+  'Optional Luxury Items',
 ]
+
+export const CATEGORY_ICONS = {
+  Bedding: '🛏️',
+  'Furniture & Organization': '🪑',
+  'School Supplies': '📚',
+  'Kitchen & Food': '🍽️',
+  'Cleaning Supplies': '🧹',
+  Laundry: '🧺',
+  Bathroom: '🚿',
+  'Sleep & Comfort': '😴',
+  Entertainment: '🎮',
+  Decor: '🖼️',
+  'Optional Luxury Items': '🐾',
+  Provided: '🎓',
+}
+
+// Catalog rows show a real thumbnail (rendered from the item's own glTF model — see
+// thumbnailRenderer.js) instead of a flat color swatch when one's been generated. Falls back to
+// the swatch + a category icon for box-placeholder items or if the image is missing.
+export function thumbnailUrl(cat) {
+  return cat.modelUrl ? `/thumbnails/${cat.id}.png` : null
+}
+
+// Deliberately sparse — only a handful of catalog items have relatedIds, per the instruction not
+// to try to cross-link the whole catalog up front. Each entry is either a bare CATALOG id (a
+// placeable item — "Add to room") or a "chk:<id>" reference into checklistItems.js's
+// DEFAULT_CHECKLIST_ITEMS (a checklist-only item — "Add to checklist"). Resolves against both
+// CATALOG and PROVIDED_CATALOG so a Colgate-provided bed frame can still suggest bedding.
+export function resolveRelatedItems(cat) {
+  if (!cat.relatedIds) return []
+  return cat.relatedIds
+    .map((relId) => {
+      if (relId.startsWith('chk:')) {
+        const item = DEFAULT_CHECKLIST_ITEMS.find((c) => c.id === relId.slice(4))
+        if (!item) return null
+        return { key: relId, label: item.label, isChecklist: true, category: item.category, subcategory: item.subcategory }
+      }
+      const item = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === relId)
+      if (!item) return null
+      return { key: relId, label: item.name, isChecklist: false, catalogId: item.id }
+    })
+    .filter(Boolean)
+}
+
+export const CATALOG = [
+  // ---- Bedding ----
+  { id: 'mattress', name: 'Twin XL Mattress', price: 159, retailer: 'Amazon', dims: [3.3, 6.3, 0.8], color: 0xd8cbb0, category: 'Bedding', subcategory: 'Essentials' },
+
+  // ---- Furniture & Organization ----
+  { id: 'bed', name: 'Twin XL Bed Frame', price: 189, retailer: 'IKEA', dims: [3.4, 6.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedSingle.glb', relatedIds: ['mattress', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  { id: 'underbed-bins', name: 'Under-Bed Storage Bins (2)', price: 24, retailer: 'Target', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb' },
+  { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb' },
+  { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb' },
+  { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
+  { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet' },
+  { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb' },
+  { id: 'hamper', name: 'Laundry Hamper', price: 19, retailer: 'Target', dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb' },
+  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', relatedIds: ['chair', 'lamp', 'chk:desk-organizer', 'chk:pencil-holder'] },
+  { id: 'chair', name: 'Desk Chair', price: 79, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0x3a3a3a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairDesk.glb', relatedIds: ['desk'] },
+  { id: 'shelf', name: 'Bookshelf', price: 59, retailer: 'IKEA', dims: [2.5, 1.0, 4.0], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseOpen.glb' },
+  { id: 'rolling-cart', name: 'Rolling Storage Cart', price: 39, retailer: 'Amazon', dims: [1.3, 1.3, 2.8], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'General Storage' },
+  { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Target', dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb' },
+  { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb' },
+  { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Best Buy', dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', relatedIds: ['chk:streaming-device', 'chk:gaming-console', 'chk:bluetooth-speaker'] },
+
+  // ---- Kitchen & Food ----
+  { id: 'fridge', name: 'Mini Fridge', price: 139, retailer: 'Best Buy', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb' },
+  { id: 'microwave', name: 'Microwave', price: 79, retailer: 'Best Buy', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb' },
+
+  // ---- Cleaning Supplies ----
+  { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb' },
+
+  // ---- Laundry ----
+  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/coatRackStanding.glb' },
+  { id: 'ironing-board', name: 'Ironing Board', price: 30, retailer: 'Amazon', dims: [4.0, 1.1, 2.9], color: 0xd8d8d8, category: 'Laundry', subcategory: 'Optional' },
+
+  // ---- Sleep & Comfort ----
+  { id: 'fan', name: 'Fan', price: 25, retailer: 'Target', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort' },
+
+  // ---- Entertainment ----
+  { id: 'instrument', name: 'Musical Instrument', price: 199, retailer: 'Amazon', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies' },
+
+  // ---- Decor ----
+  { id: 'rug', name: 'Area Rug 5x3', price: 49, retailer: 'Amazon', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb' },
+  { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb' },
+  { id: 'throw-pillow', name: 'Throw Pillow', price: 15, retailer: 'Target', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pillow.glb' },
+  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall' },
+
+  // ---- Optional Luxury Items ----
+  { id: 'beanbag', name: 'Bean Bag Chair', price: 69, retailer: 'Amazon', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb' },
+  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb' },
+  { id: 'bev-cooler', name: 'Beverage Cooler', price: 89, retailer: 'Best Buy', dims: [1.6, 1.6, 2.6], color: 0xe4e4e4, category: 'Optional Luxury Items', modelUrl: '/models/kitchenFridgeSmall.glb' },
+]
+
+// Furniture Colgate already provides in every standard residence hall room — the student isn't
+// buying these, so they're kept separate from CATALOG (the purchasable list) and carry
+// isProvided: true instead of a price. Source: Colgate Office of Residential Life, "Standard
+// Residence Hall Furniture," updated 6.1.2026. Room-variant sizes (Curtis Hall's smaller desk,
+// taller 3-drawer chests) are skipped for v1 — these are the standard-room dimensions.
+// modelUrl reuses the same generic CC0 stand-ins as visually-similar purchasable items, since
+// these are silhouettes, not real Colgate-furniture photos either way.
+export const PROVIDED_CATALOG = [
+  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0x8a6b4f, category: 'Provided', isProvided: true, modelUrl: '/models/bedSingle.glb', relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  { id: 'colgate-mattress', name: 'Twin XL Mattress', modelNo: null, dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, category: 'Provided', isProvided: true },
+  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xb08d57, category: 'Provided', isProvided: true, modelUrl: '/models/desk.glb' },
+  { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0x3a3a3a, category: 'Provided', isProvided: true, modelUrl: '/models/chairDesk.glb' },
+  { id: 'colgate-chest', name: 'Stackable Chest', modelNo: '140B31', dims: [2.58, 2.0, 1.58], color: 0x8a6b4f, category: 'Provided', isProvided: true, modelUrl: '/models/sideTableDrawers.glb' },
+  { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0x6f7f8c, category: 'Provided', isProvided: true, modelUrl: '/models/bookcaseClosedDoors.glb' },
+]
+
+// Default positions for the "Add Colgate furniture" one-click action — against the back wall
+// (bed) and the two side walls (desk/chair, wardrobe/chest), scaled to whatever the current room
+// dimensions are. Not meant to be clever, just non-overlapping and roughly plausible; the engine's
+// normal wall-clamping still applies as a safety net for small rooms. The mattress is deliberately
+// left out of auto-placement — the bed frame model already renders bedding on top of it, so a
+// second flat box at floor level would just overlap it. It's still in the catalog above so it's
+// there if you want to place or inspect it separately.
+export function colgateDefaultLayout(room) {
+  const byId = Object.fromEntries(PROVIDED_CATALOG.map((c) => [c.id, c]))
+  const margin = 0.3
+  const bed = byId['colgate-bed']
+  const desk = byId['colgate-desk']
+  const chair = byId['colgate-chair']
+  const wardrobe = byId['colgate-wardrobe']
+  const chest = byId['colgate-chest']
+
+  const wardrobeZ = -room.l / 2 + wardrobe.dims[0] / 2 + margin
+  const chestZ = wardrobeZ + wardrobe.dims[0] / 2 + margin + chest.dims[0] / 2
+
+  return [
+    // Bed: long side flush against the back wall.
+    { catalogId: bed.id, x: 0, z: -room.l / 2 + bed.dims[1] / 2, rotY: 0 },
+    // Desk against the left wall, rotated 90° so its depth (not width) touches the wall.
+    { catalogId: desk.id, x: -room.w / 2 + desk.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
+    // Chair pulled out from the desk, facing the same way.
+    { catalogId: chair.id, x: -room.w / 2 + desk.dims[1] + margin + chair.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
+    // Wardrobe and chest along the right wall, stacked along its length.
+    { catalogId: wardrobe.id, x: room.w / 2 - wardrobe.dims[1] / 2, z: wardrobeZ, rotY: -Math.PI / 2 },
+    { catalogId: chest.id, x: room.w / 2 - chest.dims[1] / 2, z: chestZ, rotY: -Math.PI / 2 },
+  ]
+}
 
 // AFFILIATE LINKS — replace with real tracked affiliate links once approved for each program.
 // Sign-up starting points: Amazon Associates (affiliate-program.amazon.com), Impact (impact.com

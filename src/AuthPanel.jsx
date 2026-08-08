@@ -50,7 +50,7 @@ export default function AuthPanel() {
   return (
     <div style={{ padding: 14 }}>
       <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginBottom: 10 }}>
-        {mode === 'signin' ? 'Sign in to save layouts and access them anywhere.' : 'Create an account to save layouts.'}
+        {mode === 'signin' ? 'Sign in to save layouts and your packing checklist, and access them anywhere.' : 'Create an account to save layouts and your packing checklist.'}
       </div>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <input type="email" placeholder="Email" value={email} required autoComplete="email" style={inputStyle} onChange={(e) => setEmail(e.target.value)} />
