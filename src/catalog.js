@@ -79,6 +79,11 @@ export const CATALOG = [
   { id: 'underbed-bins', name: 'Under-Bed Storage Bins (2)', price: 24, retailer: 'Target', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb' },
   { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb' },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb' },
+  // Same real item/model as Colgate's provided "Stackable Chest" (see PROVIDED_CATALOG below) —
+  // this is the purchasable version, for a student who wants a second one or whose room didn't
+  // come with one. Unlike the provided furniture, this one has a price and counts toward the
+  // shopping list, since it's genuinely something you'd buy.
+  { id: 'stackable-chest', name: 'Stackable Chest', price: 79, retailer: 'IKEA', dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb' },
   { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
   { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet' },
   { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb' },
@@ -123,21 +128,33 @@ export const CATALOG = [
 // Furniture Colgate already provides in every standard residence hall room — the student isn't
 // buying these, so they're kept separate from CATALOG (the purchasable list) and carry
 // isProvided: true instead of a price. Source: Colgate Office of Residential Life, "Standard
-// Residence Hall Furniture," updated 6.1.2026. Room-variant sizes (Curtis Hall's smaller desk,
-// taller 3-drawer chests) are skipped for v1 — these are the standard-room dimensions.
-// modelUrl reuses the same generic CC0 stand-ins as visually-similar purchasable items, since
-// these are silhouettes, not real Colgate-furniture photos either way.
+// Residence Hall Furniture," updated 6.1.2026 (PDF). Room-variant sizes (Curtis Hall's smaller
+// desk, taller 3-drawer chests) are skipped for v1 — these are the standard-room dimensions,
+// verified against the PDF's own numbers.
+//
+// modelUrl picks are the closest free CC0 shape matches from Kenney's Furniture Kit, chosen by
+// rendering several candidates and comparing them side-by-side against the PDF's product photos
+// — not just grabbed by name. Notably chair.glb (a plain 4-leg wood chair) replaced an office-
+// chair-with-wheels model that looked nothing like Colgate's actual solid-wood desk chair. The
+// one open gap: the PDF's bed is a bare metal-frame/wood-end style with the mattress sold
+// separately, but no bare-frame twin bed exists in this kit — bedSingle.glb (a bed with a built-
+// in upholstered look) is the closest available proportions-wise, not a great shape match. A
+// real fix would need actual 3D modeling (Blender) or licensed assets, out of scope here.
+//
+// The Stackable Chest is deliberately NOT in this list — see 'stackable-chest' in CATALOG above.
+// Colgate doesn't guarantee every room gets one (the PDF's own wording is about variation between
+// rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
+// treated as purchasable.
 export const PROVIDED_CATALOG = [
-  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0x8a6b4f, category: 'Provided', isProvided: true, modelUrl: '/models/bedSingle.glb', relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bedSingle.glb', relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
   { id: 'colgate-mattress', name: 'Twin XL Mattress', modelNo: null, dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, category: 'Provided', isProvided: true },
-  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xb08d57, category: 'Provided', isProvided: true, modelUrl: '/models/desk.glb' },
-  { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0x3a3a3a, category: 'Provided', isProvided: true, modelUrl: '/models/chairDesk.glb' },
-  { id: 'colgate-chest', name: 'Stackable Chest', modelNo: '140B31', dims: [2.58, 2.0, 1.58], color: 0x8a6b4f, category: 'Provided', isProvided: true, modelUrl: '/models/sideTableDrawers.glb' },
-  { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0x6f7f8c, category: 'Provided', isProvided: true, modelUrl: '/models/bookcaseClosedDoors.glb' },
+  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/desk.glb' },
+  { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/chair.glb' },
+  { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bookcaseClosedDoors.glb' },
 ]
 
 // Default positions for the "Add Colgate furniture" one-click action — against the back wall
-// (bed) and the two side walls (desk/chair, wardrobe/chest), scaled to whatever the current room
+// (bed) and the two side walls (desk/chair, wardrobe), scaled to whatever the current room
 // dimensions are. Not meant to be clever, just non-overlapping and roughly plausible; the engine's
 // normal wall-clamping still applies as a safety net for small rooms. The mattress is deliberately
 // left out of auto-placement — the bed frame model already renders bedding on top of it, so a
@@ -150,10 +167,8 @@ export function colgateDefaultLayout(room) {
   const desk = byId['colgate-desk']
   const chair = byId['colgate-chair']
   const wardrobe = byId['colgate-wardrobe']
-  const chest = byId['colgate-chest']
 
   const wardrobeZ = -room.l / 2 + wardrobe.dims[0] / 2 + margin
-  const chestZ = wardrobeZ + wardrobe.dims[0] / 2 + margin + chest.dims[0] / 2
 
   return [
     // Bed: long side flush against the back wall.
@@ -162,9 +177,8 @@ export function colgateDefaultLayout(room) {
     { catalogId: desk.id, x: -room.w / 2 + desk.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
     // Chair pulled out from the desk, facing the same way.
     { catalogId: chair.id, x: -room.w / 2 + desk.dims[1] + margin + chair.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
-    // Wardrobe and chest along the right wall, stacked along its length.
+    // Wardrobe along the right wall.
     { catalogId: wardrobe.id, x: room.w / 2 - wardrobe.dims[1] / 2, z: wardrobeZ, rotY: -Math.PI / 2 },
-    { catalogId: chest.id, x: room.w / 2 - chest.dims[1] / 2, z: chestZ, rotY: -Math.PI / 2 },
   ]
 }
 

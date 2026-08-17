@@ -72,7 +72,7 @@ export default function App() {
   const [publicLayouts, setPublicLayouts] = useState([])
   const [browseError, setBrowseError] = useState('')
   const [browseNotice, setBrowseNotice] = useState('')
-  const [providedAdded, setProvidedAdded] = useState(false)
+  const [roomPlannerCollapsed, setRoomPlannerCollapsed] = useState(false)
   const [openCategories, setOpenCategories] = useState(() => new Set())
   const [checklistItems, setChecklistItems] = useState([])
   const [checklistError, setChecklistError] = useState('')
@@ -244,11 +244,16 @@ export default function App() {
     engineRef.current.removeFeature(featureSelection.id)
   }
 
+  // Only (re-)adds whichever default Colgate items aren't currently in the room — so if you
+  // delete one (or all), clicking this again brings back just what's missing instead of either
+  // doing nothing (a one-time "already added" lockout) or duplicating items you never removed.
   function handleAddProvided() {
-    colgateDefaultLayout(room).forEach(({ catalogId, x, z, rotY }) => {
-      engineRef.current.addItemAt(catalogId, x, z, rotY)
-    })
-    setProvidedAdded(true)
+    const presentIds = new Set(cart.map((it) => it.catalogId))
+    colgateDefaultLayout(room)
+      .filter(({ catalogId }) => !presentIds.has(catalogId))
+      .forEach(({ catalogId, x, z, rotY }) => {
+        engineRef.current.addItemAt(catalogId, x, z, rotY)
+      })
   }
 
   function handleAddRelatedToRoom(catalogId) {
@@ -331,27 +336,44 @@ export default function App() {
     <div id="app">
       <div id="canvas-wrap" ref={canvasWrapRef}>
         <div id="titleblock">
-          <h1>Room Planner</h1>
-          <div className="sub">Set your dimensions, then start furnishing.</div>
-          <div className="dim-row">
-            <label>Width</label>
-            <input type="number" value={room.w} min={6} max={25} step={0.5} onChange={(e) => handleDimChange('w', e.target.value)} />
-            <span className="unit">ft</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <h1 style={{ margin: roomPlannerCollapsed ? 0 : undefined }}>Room Planner</h1>
+            <button
+              onClick={() => setRoomPlannerCollapsed((v) => !v)}
+              title={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
+              aria-label={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)',
+                fontSize: 13, padding: 4, lineHeight: 1, flexShrink: 0,
+              }}
+            >
+              {roomPlannerCollapsed ? '▸' : '▾'}
+            </button>
           </div>
-          <div className="dim-row">
-            <label>Length</label>
-            <input type="number" value={room.l} min={6} max={25} step={0.5} onChange={(e) => handleDimChange('l', e.target.value)} />
-            <span className="unit">ft</span>
-          </div>
-          <div className="dim-row">
-            <label>Ceiling</label>
-            <input type="number" value={room.h} min={7} max={14} step={0.5} onChange={(e) => handleDimChange('h', e.target.value)} />
-            <span className="unit">ft</span>
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
-            <button className="structure-btn" onClick={handleAddDoor}>+ Door</button>
-            <button className="structure-btn" onClick={handleAddWindow}>+ Window</button>
-          </div>
+          {!roomPlannerCollapsed && (
+            <>
+              <div className="sub">Set your dimensions, then start furnishing.</div>
+              <div className="dim-row">
+                <label>Width</label>
+                <input type="number" value={room.w} min={6} max={25} step={0.5} onChange={(e) => handleDimChange('w', e.target.value)} />
+                <span className="unit">ft</span>
+              </div>
+              <div className="dim-row">
+                <label>Length</label>
+                <input type="number" value={room.l} min={6} max={25} step={0.5} onChange={(e) => handleDimChange('l', e.target.value)} />
+                <span className="unit">ft</span>
+              </div>
+              <div className="dim-row">
+                <label>Ceiling</label>
+                <input type="number" value={room.h} min={7} max={14} step={0.5} onChange={(e) => handleDimChange('h', e.target.value)} />
+                <span className="unit">ft</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
+                <button className="structure-btn" onClick={handleAddDoor}>+ Door</button>
+                <button className="structure-btn" onClick={handleAddWindow}>+ Window</button>
+              </div>
+            </>
+          )}
         </div>
 
         <div id="hint">Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate</div>
@@ -482,18 +504,17 @@ export default function App() {
                 🎓 Colgate dorm room?
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginBottom: 10, lineHeight: 1.5 }}>
-                Add the furniture Colgate already provides — bed, desk, chair, wardrobe, and dresser — placed for you. Move, rotate, or remove anything afterward.
+                Add the furniture Colgate already provides — bed, desk, chair, and wardrobe — placed for you. Move, rotate, or remove anything afterward; click again anytime to bring back whatever you've removed. (Not every room gets a stackable chest — look for it further down if you want one.)
               </div>
               <button
                 onClick={handleAddProvided}
-                disabled={providedAdded}
                 style={{
-                  background: providedAdded ? 'var(--paper-shadow)' : 'var(--sage)', color: providedAdded ? 'var(--ink-soft)' : '#fff',
+                  background: 'var(--sage)', color: '#fff',
                   border: 'none', padding: '8px 14px', fontSize: 11.5, fontWeight: 600, borderRadius: 8,
-                  cursor: providedAdded ? 'default' : 'pointer',
+                  cursor: 'pointer',
                 }}
               >
-                {providedAdded ? 'Added ✓' : 'Add Colgate furniture'}
+                Add Colgate furniture
               </button>
             </div>
             {CATEGORY_ORDER.filter((category) => groupedCatalog[category]).map((category) => {

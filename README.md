@@ -46,9 +46,11 @@ public/
 - Room shell + dimension input ✅
 - Add/drag/rotate furniture, clamped to room bounds ✅
 - Warm/editorial visual theme (terracotta + sage + serif headings) — see "Visual design" below.
-- Colgate-provided default furniture (bed, desk, chair, wardrobe, dresser) — one-click add from
-  the Catalog tab, auto-placed against the walls, excluded from the total/shopping list since
-  there's nothing to buy. See "Colgate default furniture" below.
+- Colgate-provided default furniture (bed, desk, chair, wardrobe) — one-click add from the
+  Catalog tab, auto-placed against the walls, excluded from the total/shopping list since there's
+  nothing to buy, and recoverable any time by clicking the button again. Models chosen to match
+  Colgate's real furniture photos/dimensions as closely as free CC0 assets allow. See "Colgate
+  default furniture" below.
 - Catalog expanded from 12 to 30 placeable items, grouped into collapsible categories/
   subcategories matching Tyler's full dorm-shopping taxonomy. See "Expanded catalog" below —
   including where the other ~120 items from that list went (they're not 3D objects).
@@ -78,6 +80,9 @@ public/
   hook is in `catalog.js` (`AFFILIATE_TAGS`), just needs your real IDs once approved.
 - Touch: pinch-to-zoom, `touch-action: none` on the canvas, and a stacked mobile layout below
   760px are in place.
+- The Room Planner card (dimensions + door/window add buttons) can be minimized to a title bar
+  via a toggle, freeing up screen space — see "Colgate default furniture" below for why this
+  landed alongside that feature.
 
 ## Setting up Supabase
 
@@ -154,31 +159,58 @@ All of this lives in `src/index.css` plus light JSX tweaks in `App.jsx`/`AuthPan
 ## Colgate default furniture
 
 Source: Colgate Office of Residential Life, "Standard Residence Hall Furniture," updated
-6.1.2026 — the six items every standard room ships with (bed, mattress, desk, chair, wardrobe,
-dresser). Lives in `catalog.js` as `PROVIDED_CATALOG`, a separate array from the purchasable
-`CATALOG` — each item carries `isProvided: true` and no price.
+6.1.2026 (PDF Tyler provided) — bed, mattress, desk, chair, and wardrobe. Lives in `catalog.js`
+as `PROVIDED_CATALOG`, a separate array from the purchasable `CATALOG` — each item carries
+`isProvided: true` and no price.
 
 - **Adding them**: a "🎓 Colgate dorm room?" card at the top of the Catalog tab, one button
-  ("Add Colgate furniture") that places five of the six items (see below) via
+  ("Add Colgate furniture") that places the bed, desk, chair, and wardrobe via
   `colgateDefaultLayout(room)` in `catalog.js` — bed along the back wall, desk+chair along the
-  left wall, wardrobe+dresser along the right wall, scaled to whatever the current room
-  dimensions are. The button disables itself after use to avoid accidental duplicate placement
-  (component state, not persisted — reloading the page resets it).
+  left wall, wardrobe alone along the right wall, scaled to whatever the current room dimensions
+  are.
+- **Recoverable after deletion**: the button is idempotent, not a one-time action — it only adds
+  whichever of those four items aren't currently in the room, so deleting one (or all) and
+  clicking the button again brings back just what's missing without duplicating anything still
+  there. (Earlier version disabled the button permanently after first use, which meant deleting a
+  Colgate item lost it for good; fixed per Tyler's explicit request.)
+- **Matched against real photos**: the models were chosen by rendering several free CC0
+  candidates from Kenney's Furniture Kit (`public/models/`) and comparing each against the PDF's
+  actual product photos, not just picked by name — e.g. the desk chair uses `chair.glb` (a plain
+  4-leg wood chair) instead of the office-chair-with-wheels model that ships elsewhere in the
+  catalog, since Colgate's real chair is solid wood with no wheels. Colors unified to a light oak
+  tone (`#c9a876`) matching the PDF photos. This is a "closest free shape match," not a pixel-
+  identical replica — see the one open gap below.
+  - **Known gap**: the PDF's bed is a bare metal-frame style with wood headboard/footboard ends
+    and the mattress sold separately; no bare-frame twin bed exists in the free CC0 kit, so
+    `bedSingle.glb` (which has a built-in upholstered/bedding look) is used as the closest
+    available proportions-wise — not a strong shape match. Fixing this for real would need actual
+    3D modeling (Blender) or a licensed asset.
 - **The mattress is deliberately not auto-placed.** The bed frame model already renders bedding
   on top of it, and the engine has no concept of stacking one item on another (everything sits
   at floor level) — a separate flat box at floor level would just overlap/clip through the bed
   frame. The mattress is still in `PROVIDED_CATALOG` so the data matches the source list and it's
   there if you want to place or inspect it manually.
+- **Stackable Chest is *not* part of the default set.** Colgate doesn't guarantee every room gets
+  one, so it isn't auto-placed as "provided" — instead it's a normal purchasable `CATALOG` entry
+  (`stackable-chest`, $79, same real dims/model as before) that shows up in the Furniture &
+  Organization → Bed section like anything else, and *does* count toward the shopping list total,
+  unlike the four items above.
 - **Treated like any other placed item** — selectable, rotatable, movable, removable. The
   selection panel and cart list show "Included by Colgate" / a sage "COLGATE" tag instead of a
   price, and both the total and the shopping-list modal filter on `isProvided` so nothing shows
   up as something to buy.
-- **Room-variant sizes skipped for v1**: Curtis Hall's smaller desk (2.5×1.67×2.5) and the taller
-  3-drawer dresser variant aren't modeled — everyone gets the standard-room dimensions from the
-  table. Worth a toggle later if it turns out to matter.
+- **Room-variant sizes skipped for v1**: Curtis Hall's smaller desk (2.5×1.67×2.5) isn't modeled —
+  everyone gets the standard-room dimensions from the PDF. Worth a toggle later if it turns out to
+  matter.
 - **Not built**: an automatic/forced default (it's opt-in via the button, not applied to every
   new room) — a lot of users of this app won't be Colgate students, so auto-applying Colgate-
   specific furniture by default felt wrong. Revisit if usage data says otherwise.
+- **Verified live**: added the 4 default items, deleted the wardrobe, clicked "Add Colgate
+  furniture" again and confirmed only the wardrobe came back (no duplicates of the other three);
+  added the Stackable Chest from the catalog and confirmed it renders with its own thumbnail, adds
+  a real 3D model to the room, and is the only line item in the shopping list ($79 total) while
+  the four provided items stay excluded; confirmed the Room Planner card's collapse toggle hides
+  the dimension inputs and door/window buttons down to just the title bar and back.
 
 ## Expanded catalog
 
