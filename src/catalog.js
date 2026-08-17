@@ -146,7 +146,14 @@ export const CATALOG = [
 // rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
 // treated as purchasable.
 export const PROVIDED_CATALOG = [
-  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bedSingle.glb', relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  // bedFrameBare.glb is a hand-edited copy of Kenney's bedSingle.glb (still CC0 — a derivative of
+  // a public-domain asset) with the headboard triangles surgically removed (18 of 52 in the
+  // "wood" primitive, isolated by z-position + height — see the python script in this feature's
+  // session if you need to redo this for another model). Colgate's real bed frame is a bare
+  // metal-frame/low-rail style with no headboard, and hideNodes strips the two remaining baked-in
+  // decorations (blue mattress cover, pillow) so the frame reads as genuinely empty — the
+  // mattress is a separate item below, and the student's own bedding goes on top of that.
+  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bedFrameBare.glb', hideNodes: ['cover', 'pillow'], relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
   { id: 'colgate-mattress', name: 'Twin XL Mattress', modelNo: null, dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, category: 'Provided', isProvided: true },
   { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/desk.glb' },
   { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/chair.glb' },

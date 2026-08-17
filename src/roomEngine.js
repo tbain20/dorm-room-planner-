@@ -201,6 +201,9 @@ export class RoomEngine {
       this.gltfLoader.load(
         cat.modelUrl,
         (gltf) => {
+          if (cat.hideNodes) {
+            gltf.scene.traverse((o) => { if (cat.hideNodes.includes(o.name)) o.visible = false })
+          }
           const group = new THREE.Group()
           this._fitModelToDims(gltf.scene, cat.dims)
           group.add(gltf.scene)
@@ -219,7 +222,12 @@ export class RoomEngine {
   }
 
   _clampItemToRoom(mesh) {
-    let [w, , d] = mesh.userData.dims
+    // dims is [width, depth, height] — only the first two matter for floor clamping. (A previous
+    // version of this destructure skipped depth and grabbed height by mistake, which meant any
+    // tall rotated item — e.g. a 6'-tall wardrobe with a 2.08' depth — got clamped as if its
+    // footprint were 6' deep, leaving it stuck several feet short of the wall it was dragged
+    // toward instead of sitting flush against it.)
+    let [w, d] = mesh.userData.dims
     const rotDeg = (((mesh.rotation.y * 180) / Math.PI) % 360 + 360) % 360
     const swapped = (rotDeg > 45 && rotDeg < 135) || (rotDeg > 225 && rotDeg < 315)
     if (swapped) [w, d] = [d, w]

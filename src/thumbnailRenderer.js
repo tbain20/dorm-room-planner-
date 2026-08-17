@@ -19,7 +19,7 @@ function getRenderer(size) {
 // Renders a single glTF model to an off-screen canvas and returns it as a PNG data URL — used to
 // generate the static catalog thumbnails in public/thumbnails/. Not used at runtime by normal
 // users; see generateAllThumbnails() below for how to regenerate them.
-export function renderModelThumbnail(modelUrl, dims, size = 128) {
+export function renderModelThumbnail(modelUrl, dims, size = 128, hideNodes = null) {
   return new Promise((resolve, reject) => {
     const renderer = getRenderer(size)
     const scene = new THREE.Scene()
@@ -39,6 +39,9 @@ export function renderModelThumbnail(modelUrl, dims, size = 128) {
       modelUrl,
       (gltf) => {
         const object3d = gltf.scene
+        if (hideNodes) {
+          object3d.traverse((o) => { if (hideNodes.includes(o.name)) o.visible = false })
+        }
         // Scale to the item's real dims, same as roomEngine's _fitModelToDims, so relative
         // proportions (a bed vs. a nightstand) still read correctly in the thumbnail.
         const [w, d, h] = dims
@@ -94,7 +97,7 @@ export async function generateAllThumbnails({ download = true, saveToServer = fa
       // A brief yield between renders — back-to-back renders on the shared context under load
       // (e.g. a slow GPU, or many items) can otherwise stall waiting on the previous frame.
       await new Promise((r) => setTimeout(r, 60))
-      const dataUrl = await renderModelThumbnail(cat.modelUrl, cat.dims)
+      const dataUrl = await renderModelThumbnail(cat.modelUrl, cat.dims, 128, cat.hideNodes)
       results[cat.id] = dataUrl
       if (download) {
         const a = document.createElement('a')
@@ -122,4 +125,5 @@ export async function generateAllThumbnails({ download = true, saveToServer = fa
 
 if (typeof window !== 'undefined') {
   window.generateAllThumbnails = generateAllThumbnails
+  window.renderModelThumbnail = renderModelThumbnail
 }

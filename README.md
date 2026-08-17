@@ -211,6 +211,31 @@ as `PROVIDED_CATALOG`, a separate array from the purchasable `CATALOG` — each 
   a real 3D model to the room, and is the only line item in the shopping list ($79 total) while
   the four provided items stay excluded; confirmed the Room Planner card's collapse toggle hides
   the dimension inputs and door/window buttons down to just the title bar and back.
+- **Follow-up fixes (after Tyler tried it live)**:
+  - **Bed frame, take two**: `bedSingle.glb`'s baked-in headboard wasn't fixable with `hideNodes`
+    alone (it's fused into the same mesh primitive as the side rails/legs — no separate node to
+    hide), so it needed actual geometry surgery. Wrote a one-off Python script (pygltflib +
+    numpy) that loads the glTF, isolates the headboard's 18 triangles by position (the one
+    z-extreme with vertices rising well above the rest of the frame's height) out of the 52 in
+    the "wood" primitive, and re-exports the buffer with those triangles removed and every
+    bufferView after that point in the binary blob re-offset to match. Saved as
+    `public/models/bedFrameBare.glb` (still CC0 — a derivative of a public-domain asset), used
+    only for `colgate-bed`; the purchasable "Twin XL Bed Frame" elsewhere in the catalog still
+    uses the original `bedSingle.glb` since nothing was reported wrong with that one. Result: a
+    bare frame with side rails and legs, no headboard, no footboard — `hideNodes: ['cover',
+    'pillow']` (added in the same pass) still strips the blue mattress cover and pillow that are
+    separate nodes on top of the frame mesh.
+  - **A real, unrelated bug found while testing this**: dragging any *tall* item after rotating it
+    90° (e.g. the wardrobe, 6' tall but only 2.08' deep) stopped several feet short of the wall
+    instead of going flush. Root cause: `_clampItemToRoom` in `roomEngine.js` destructured
+    `dims` (`[width, depth, height]`) as `let [w, , d] = dims`, skipping index 1 (depth) and
+    grabbing index 2 (**height**) into `d` by mistake — so the wall clamp was using the item's
+    *height* as if it were its horizontal footprint. For a squat item this was barely noticeable
+    (the bed's height and depth happen to be close); for a 6'-tall wardrobe with a 2.08' depth it
+    left a multi-foot gap no amount of dragging could close. Fixed to `let [w, d] = dims` (just
+    the first two). Confirmed via direct engine calls that the wardrobe's clamp boundary now
+    exactly matches `room.w/2 - depth/2` instead of the old (wrong) `room.w/2 - height/2`, and
+    confirmed visually that it now sits flush against the wall.
 
 ## Expanded catalog
 
