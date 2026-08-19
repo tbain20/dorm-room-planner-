@@ -62,10 +62,20 @@ create table if not exists layouts (
   designer_id uuid references profiles(id),
   thumbnail_url text,
   features jsonb not null default '[]'::jsonb,
+  likes_count integer not null default 0,
+  view_count integer not null default 0,
+  copy_count integer not null default 0,
+  parent_layout_id uuid references layouts(id) on delete set null,
+  hall text,
+  room_type text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, name)
 );
+
+create index if not exists layouts_hall_idx on layouts (hall);
+create index if not exists layouts_room_type_idx on layouts (room_type);
+create index if not exists layouts_parent_layout_id_idx on layouts (parent_layout_id);
 
 alter table layouts enable row level security;
 
@@ -144,3 +154,104 @@ create policy "Users can update their own checklist items"
 create policy "Users can delete their own checklist items"
   on checklist_items for delete
   using (auth.uid() = user_id);
+
+-- Community tier 1: likes, saves/bookmarks, and the denormalized counters they (and copy/view
+-- actions) feed on layouts. See migrations/006_community_tier1.sql for the full narrative on why
+-- likes_count/copy_count/view_count are only ever touched via trigger/RPC, never a direct client
+-- UPDATE — the short version is that liking/copying/viewing someone else's layout is an action
+-- taken by a user who doesn't own that row, which the owner-only layouts UPDATE policy blocks.
+create table if not exists layout_likes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  layout_id uuid not null references layouts(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, layout_id)
+);
+
+alter table layout_likes enable row level security;
+create index if not exists layout_likes_layout_id_idx on layout_likes (layout_id);
+
+create policy "Users can view their own likes"
+  on layout_likes for select
+  using (auth.uid() = user_id);
+
+create policy "Users can like layouts"
+  on layout_likes for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can unlike layouts"
+  on layout_likes for delete
+  using (auth.uid() = user_id);
+
+create or replace function public.handle_layout_like_change()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    update layouts set likes_count = likes_count + 1 where id = new.layout_id;
+    return new;
+  elsif (tg_op = 'DELETE') then
+    update layouts set likes_count = greatest(likes_count - 1, 0) where id = old.layout_id;
+    return old;
+  end if;
+  return null;
+end;
+$$;
+
+create trigger on_layout_like_change
+  after insert or delete on layout_likes
+  for each row execute function public.handle_layout_like_change();
+
+create table if not exists layout_saves (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  layout_id uuid not null references layouts(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (user_id, layout_id)
+);
+
+alter table layout_saves enable row level security;
+create index if not exists layout_saves_layout_id_idx on layout_saves (layout_id);
+
+create policy "Users can view their own saves"
+  on layout_saves for select
+  using (auth.uid() = user_id);
+
+create policy "Users can save layouts"
+  on layout_saves for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can unsave layouts"
+  on layout_saves for delete
+  using (auth.uid() = user_id);
+
+create or replace function public.increment_layout_view_count(p_layout_id uuid)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  update layouts
+  set view_count = view_count + 1
+  where id = p_layout_id
+    and (is_public = true or user_id = auth.uid());
+end;
+$$;
+
+create or replace function public.increment_layout_copy_count(p_layout_id uuid)
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  update layouts
+  set copy_count = copy_count + 1
+  where id = p_layout_id
+    and (is_public = true or user_id = auth.uid());
+end;
+$$;
+
+grant execute on function public.increment_layout_view_count(uuid) to anon, authenticated;
+grant execute on function public.increment_layout_copy_count(uuid) to anon, authenticated;

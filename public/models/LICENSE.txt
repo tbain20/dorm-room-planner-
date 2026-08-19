@@ -1,3 +1,6 @@
 Models in this folder are from Kenney's Furniture Kit (https://kenney.nl/assets/furniture-kit),
 licensed CC0 1.0 (public domain) — no attribution required, but Kenney appreciates it if you
 credit "kenney.nl" or link back when convenient.
+
+See LICENSES.md in this same folder for the per-file ledger (source URL, license, author) —
+kept up to date every time a model is added.

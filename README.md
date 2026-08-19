@@ -57,6 +57,10 @@ public/
 - Real glTF models for 23 of 30 catalog items, sourced from Kenney's CC0 Furniture Kit — see
   `public/models/`. The other 7 still use the box placeholder (no close model match, or
   genuinely fine as a plain box — see "Expanded catalog" below).
+- Catalog grown again, from 30 to 44 items — most major categories (beds, desks, desk chairs,
+  bookshelves, lighting, rugs) now have 2-3 real style options instead of one predetermined item,
+  plus a brand-new Seating subcategory (accent chair, loveseat). Every new model is CC0, sourced
+  and logged in `public/models/LICENSES.md`. See "Furniture sourcing" below.
 - Real thumbnail images in the catalog list (rendered from those same models, not sourced product
   photos) instead of flat color swatches — see "Real catalog thumbnails" below.
 - Save/load layouts — backed by Supabase (auth + a `layouts` table), gated behind sign-in on the
@@ -68,6 +72,10 @@ public/
   "Doors & windows" below.
 - Browse public layouts, copy one into your own account, and a lightweight designer flag +
   "Designed by" attribution — see "Marketplace, level 1" below.
+- Community tier 1: likes, saves/bookmarks, copy attribution ("Based on X"), hall/room-type
+  filters, and Browse as the default landing tab. Code-complete and builds clean, but **needs
+  migration 006 run and the whole thing tested by you** — see "Community tier 1" below and
+  "Setting up Supabase" above.
 - Real screenshot thumbnails on Browse/Saved rows, captured automatically on every save — see
   "Layout thumbnails" below.
 - Packing checklist tab, seeded from Tyler's full ~150-item list on first visit, grouped/
@@ -86,7 +94,7 @@ public/
 
 ## Setting up Supabase
 
-Your project already exists and `.env` is filled in — the `layouts` table works. Four migrations
+Your project already exists and `.env` is filled in — the `layouts` table works. Five migrations
 have been added since you last ran one — all additive and safe to re-run:
 
 1. Supabase dashboard → **SQL Editor → New query**, paste in the contents of
@@ -106,7 +114,14 @@ have been added since you last ran one — all additive and safe to re-run:
 4. New query → paste in
    [`supabase/migrations/005_wall_features.sql`](supabase/migrations/005_wall_features.sql), run
    it. Adds a `features` jsonb column to `layouts` (doors/windows — see "Doors & windows" below).
-5. That's it — no new env vars needed for any of these.
+5. New query → paste in
+   [`supabase/migrations/006_community_tier1.sql`](supabase/migrations/006_community_tier1.sql),
+   run it. Adds likes, saves/bookmarks, copy attribution, and hall/room-type filtering — see
+   "Community tier 1" below. **I could not run this one for you or test against it** — this dev
+   environment only has the app's anon key, not enough to run DDL against your project, so
+   everything in that section is code-complete and builds clean but genuinely untested against a
+   live database. Run the migration, then work through that section's testing checklist yourself.
+6. That's it — no new env vars needed for any of these.
 
 (`supabase/schema.sql` is the complete from-scratch version, for reference or for setting up a
 second environment. Since your project already has the original `layouts` table, use the
@@ -483,6 +498,137 @@ from the shell group that actually gets rebuilt.
 - Deliberately not built: profile-editing UI (display name defaults to your email prefix), any
   kind of moderation/reporting on public layouts, sorting/filtering the browse list beyond
   newest-first. Add these once there's enough real usage to know which ones matter.
+
+## Community tier 1 (likes, saves, copy attribution, hall/room-type filters)
+
+First slice of "make Browse feel like a community, not a plain list" — explicitly not the full
+thing (no profiles, follow, comments, or sharing yet; those are later sessions once this is live
+and tested). **I could not run migration 006 or test any of this against your live database** —
+see "Setting up Supabase" above. Everything below is code-complete and builds clean; treat it as
+reviewed-but-unverified until you've run the migration and clicked through the testing checklist
+at the end of this section yourself.
+
+- **Data model**: migration `006_community_tier1.sql` adds `likes_count`/`view_count`/
+  `copy_count` (all denormalized integers, default 0), `parent_layout_id` (set when a layout is
+  created via Copy, points at the original), and optional `hall`/`room_type` text columns to
+  `layouts`; two new tables, `layout_likes` and `layout_saves`, both `(user_id, layout_id)` with a
+  unique constraint so toggling is a plain insert-or-delete, never a race-prone read-then-write.
+- **Why counters are triggers/RPCs, not client-side updates**: liking, copying, or viewing someone
+  *else's* layout is an action taken by a user who doesn't own that row — the existing owner-only
+  `layouts` UPDATE policy would block a plain client `.update()` call from anyone but the layout's
+  creator. `likes_count` syncs via a `SECURITY DEFINER` trigger on `layout_likes` insert/delete;
+  `view_count`/`copy_count` go through two narrow `SECURITY DEFINER` RPC functions
+  (`increment_layout_view_count`/`increment_layout_copy_count`) that only ever nudge one column by
+  exactly 1, and only on layouts that are public or owned by the caller — bypassing RLS just
+  enough to make the counter work, not opening any broader write access.
+- **Likes**: heart icon on every Browse/Saved-from-others row, filled + count when you've liked it.
+  `likeLayout`/`unlikeLayout`/`listMyLikedLayoutIds` in `storage.js`; the UI updates the count
+  optimistically on click rather than refetching the whole list.
+- **Saves/bookmarks**: a separate ☆/🔖 button, deliberately not reusing Like — saving-for-later and
+  liking are different actions (you might like a layout you'd never use, or bookmark one you're
+  lukewarm on). Doesn't duplicate the layout into your own editable set the way Copy does; it just
+  marks it. Shows up under the Saved tab's new "Saved from others" view.
+- **Saved tab split**: "My Layouts" (yours, editable/publishable, unchanged from before) vs. "Saved
+  from others" (bookmarks — new) as two sub-views within the same tab, since they're different
+  things now. Both use the same underlying row rendering as Browse for the "others'" case
+  (`PublicLayoutRow` in `App.jsx`) to avoid maintaining three near-identical row layouts.
+- **Copy attribution**: `copyLayout` now stamps the new row's `parent_layout_id` and bumps the
+  original's `copy_count`. Any row with a parent shows "Based on '<name>' by <author>" with a link
+  that loads the original (`getPublicLayoutById` — fetches fresh rather than trusting possibly
+  stale data already in hand). On your own layouts in "My Layouts", if anyone has copied *from*
+  one of yours, it also shows "X people remixed this" (tallied client-side from one extra query
+  in `listLayouts`, not N+1 per row).
+- **Hall / room-type filters**: two dropdowns above the Browse list. Hall is free text (per the
+  brief — no fixed hall list), so its dropdown is populated from whatever distinct values already
+  exist among public layouts (`listDistinctHalls`), not hardcoded. Room type is a fixed
+  `['single', 'double', 'triple']` (`ROOM_TYPES` in `App.jsx`) since the brief called it
+  "enum-ish" — enforced only at the app layer, not a DB check constraint, so old/blank data never
+  blocks a read.
+- **Publish flow**: going from PRIVATE → PUBLIC in "My Layouts" now opens a small prompt for
+  optional hall + room type before publishing (a "Skip & publish" button publishes without them).
+  Going PUBLIC → PRIVATE is unchanged — no prompt, since there's nothing to ask at that point.
+  Un-publishing never clears previously-set hall/room type, so republishing later doesn't lose them.
+- **Landing tab**: default tab changed from Catalog to Browse (`useState('browse')` in `App.jsx`)
+  — first thing anyone sees, signed in or not, is real layouts from other students. "start from
+  scratch" is one click away in Browse's own header copy (jumps to Catalog), and View/Copy on any
+  row are the "start from a copied layout" path — nothing about starting fresh in an empty room
+  got harder to reach, it's just no longer the default.
+- **Signed-out visitors**: View (and the view-count bump it triggers) works with no session — the
+  RPC is granted to the `anon` role, and it silently no-ops rather than erroring if a layout isn't
+  visible to the caller. Like/Save redirect to the Saved tab's sign-in gate, same pattern already
+  used for Copy.
+- **What I verified before the migration was even runnable**: the app builds clean, and Browse
+  degrades correctly against the *current* (pre-migration) database — it renders the landing tab,
+  filter dropdowns, and empty state, and surfaces a clear inline error (not a crash) when the query
+  hits a column/relationship that doesn't exist yet. Confirmed every other tab (Catalog, Your room,
+  Checklist) is unaffected by any of this.
+- **Testing checklist — please work through this yourself once migration 006 is applied** (from
+  the brief, unchanged): like/unlike updates the count and persists across reload; save/bookmark
+  shows up under "Saved from others" and is distinct from Copy; copying sets `parent_layout_id`
+  and "Based on X" renders on the copy; hall/room-type filters actually filter, including with zero
+  layouts tagged yet (shouldn't crash or show a broken empty state — the "match this filter" vs.
+  "no public layouts yet" empty-state copy already branches on whether a filter is active); view/
+  copy/like counts don't error for a signed-out visitor; the new Browse landing tab works both
+  signed in and signed out.
+
+## Furniture sourcing (catalog variety pass)
+
+Independent of Community tier 1 above — a separate brief, done as a separate pass, worth keeping
+as its own commit. Most catalog categories had exactly one item; this adds real style variety
+without touching the Colgate-specific items (Tyler's modeling those himself in Blender).
+
+- **14 new models, 0 new licensing risk**: every addition comes from the same Kenney Furniture
+  Kit zip already in use — it turned out to have enough unused, clearly-CC0 pieces to cover every
+  category the brief asked about, so there was no need to pull from Quaternius, Poly Pizza,
+  Sketchfab, or itch.io this round (all four were on the list to check; see
+  `public/models/LICENSES.md` for the full note on why they weren't needed). Re-downloaded the kit
+  fresh from kenney.nl rather than trusting a stale local copy, to confirm current license terms
+  before using anything.
+- **New catalog ids, old ones untouched**: every addition is a new `id` in `catalog.js`
+  (`bed-full`, `chair-cushion`, etc.) alongside the original, never a replacement — same pattern
+  already established by `stackable-chest`/`colgate-chest` earlier. 30 → 44 placeable items.
+- **What got added, by category**:
+  - Beds: `bed-full` (Full-Size Bed Frame, `bedDouble.glb`) and `bed-bunk` (Bunk Bed Frame,
+    `bedBunk.glb`) alongside the existing Twin XL. Full-size doesn't fit a standard dorm frame,
+    but this app isn't exclusively for dorm students — off-campus/apartment users are real users
+    too (same reasoning as the "not every user is a Colgate student" note elsewhere).
+  - Desks: `desk-corner` (Corner Desk, `deskCorner.glb`) alongside the existing Compact Desk. Only
+    one clean second option turned up in the kit — left at 2 rather than forcing a 3rd.
+  - Desk chairs: `chair-cushion` (Cushioned Desk Chair) and `chair-rounded` (Rounded-Back Chair)
+    alongside the existing office-style Desk Chair — 3 total, genuinely different silhouettes
+    (wheeled office chair vs. two wood chair styles), verified by rendering and eyeballing all
+    three side-by-side before committing to them, not just picked by filename.
+  - Storage/dresser: `dresser` (`kitchenCabinetDrawer.glb`) — one clean new option. A second
+    candidate (`cabinetBedDrawerTable.glb`) turned out to be nearly identical in shape/scale to
+    the existing Nightstand once rendered, so it was dropped rather than added just to hit a
+    count.
+  - Bookshelves: `shelf-closed` and `shelf-wide` alongside the existing open Bookshelf — 3 total,
+    spanning open vs. closed-cabinet styles and two different width/height proportions.
+  - Lighting: `lamp-square` (a second floor lamp style) and `desk-lamp` (the first non-floor
+    lighting option) alongside the existing round Floor Lamp — 3 total, and genuinely covers both
+    sub-types the brief called out (floor + desk lamps).
+  - Seating: brand new subcategory (`Furniture & Organization → Seating`) — `accent-chair` and
+    `loveseat`. There was no non-desk seating option before this beyond the bean bag under Optional
+    Luxury Items.
+  - Rugs: `rug-round` and `rug-square` alongside the existing rectangular Area Rug — 3 total. A
+    third candidate (`rugRounded.glb`, a soft-corner rectangle) was dropped for looking too close
+    to the existing rectangle once rendered — square and round are the genuinely distinct options.
+- **Retailer links unchanged**: every new item reuses the existing generic
+  `retailerLink(retailer, name)` search-link helper, same as everything else in the catalog — no
+  attempt to point at a specific real product page, per the brief.
+- **Prices are estimates**, picked to be roughly in line with the existing catalog's price points
+  for similar real furniture, not sourced from an actual listing — same standard the rest of the
+  catalog was already held to.
+- **Verified live**: rebuilt clean, generated real thumbnails for all 14 new models through the
+  existing `generateAllThumbnails()` pipeline (same one used for the original 23 — see "Real
+  catalog thumbnails" below), confirmed all 12 new Furniture & Organization items and both new
+  rugs show up in the right subcategories with correct counts, added five of the new items
+  (Loveseat, Corner Desk, Dresser, Cushioned Desk Chair, Bunk Bed Frame) into a room and confirmed
+  real 3D models load (not placeholder boxes) and the shopping list totals them correctly ($1,015
+  for that combination, checked against the sum of their individual prices).
+- **Spot-check this yourself**: `public/models/LICENSES.md` has the full per-file table — worth a
+  quick manual look given this pulls in outside content, even with the verification step already
+  built into how it was sourced.
 
 ## Marketplace, level 2 (custom orders + payment — not started, on purpose)
 

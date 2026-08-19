@@ -5,6 +5,8 @@ import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile,
   listChecklistItems, setChecklistItemChecked, addChecklistItem, deleteChecklistItem,
+  listDistinctHalls, incrementLayoutViewCount, likeLayout, unlikeLayout, listMyLikedLayoutIds,
+  saveLayoutBookmark, unsaveLayoutBookmark, listMySavedLayoutIds, listSavedLayouts, getPublicLayoutById,
 } from './storage.js'
 import { supabase } from './supabaseClient.js'
 import { useAuth } from './useAuth.js'
@@ -14,6 +16,9 @@ import AuthPanel from './AuthPanel.jsx'
 // designer" emails land. There's no approval workflow yet by design (see README); for the first
 // few designers, just flip is_designer = true on their row in the Supabase table editor.
 const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
+
+// room_type is stored as free text (see migration 006) but the app only ever writes one of these.
+const ROOM_TYPES = ['single', 'double', 'triple']
 
 // Real thumbnail rendered from the item's model when one exists; falls back to the flat color
 // swatch (plus a category icon, so it's not just a blank chip) for box-placeholder items or if
@@ -53,6 +58,81 @@ function LayoutThumb({ url }) {
   )
 }
 
+// Shared row for anything that's someone else's layout (Browse, and Saved tab's "Saved from
+// others" view) — same actions apply in both places: view, copy, like, bookmark, and a "Based on"
+// link if it's itself a remix. "My Layouts" gets its own row markup instead (publish toggle +
+// delete + remix count aren't relevant here, and copy/like/save aren't relevant there).
+function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onToggleLike, onToggleSave, onViewParent }) {
+  return (
+    <div className="cart-row" style={{ alignItems: 'flex-start' }} onClick={onView} title="Click to view this layout in your room">
+      <LayoutThumb url={layout.thumbnailUrl} />
+      <div className="name">
+        {layout.name}
+        <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+          {layout.items.length} item{layout.items.length === 1 ? '' : 's'} · {layout.room.w}'×{layout.room.l}'
+          {layout.roomType && ` · ${layout.roomType}`}
+          {layout.hall && ` · ${layout.hall}`}
+        </span>
+        {layout.designerName && (
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 2 }}>
+            Designed by {layout.designerName}
+          </span>
+        )}
+        {layout.parentLayoutId && (
+          <span
+            style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)', marginTop: 2, textDecoration: 'underline', cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onViewParent(layout.parentLayoutId)
+            }}
+          >
+            Based on {layout.parentLayoutName ? `"${layout.parentLayoutName}"` : 'another layout'}
+            {layout.parentAuthorName && ` by ${layout.parentAuthorName}`}
+          </span>
+        )}
+        <span style={{ display: 'block', fontSize: 9.5, color: 'var(--ink-soft)', marginTop: 3 }}>
+          {layout.viewCount > 0 && `Viewed ${layout.viewCount} time${layout.viewCount === 1 ? '' : 's'}`}
+          {layout.viewCount > 0 && layout.copyCount > 0 && ' · '}
+          {layout.copyCount > 0 && `Copied ${layout.copyCount} time${layout.copyCount === 1 ? '' : 's'}`}
+        </span>
+      </div>
+      <button
+        className="add-btn"
+        style={{ background: liked ? 'var(--accent)' : 'var(--paper-shadow)', color: liked ? '#fff' : 'var(--ink-soft)' }}
+        title={signedIn ? (liked ? 'Unlike' : 'Like') : 'Sign in to like'}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleLike(layout)
+        }}
+      >
+        {liked ? '♥' : '♡'} {layout.likesCount > 0 ? layout.likesCount : ''}
+      </button>
+      <button
+        className="add-btn"
+        style={{ background: saved ? 'var(--ink)' : 'var(--paper-shadow)', color: saved ? '#fff' : 'var(--ink-soft)' }}
+        title={signedIn ? (saved ? 'Remove from saved' : 'Save for later') : 'Sign in to save'}
+        onClick={(e) => {
+          e.stopPropagation()
+          onToggleSave(layout)
+        }}
+      >
+        {saved ? '🔖' : '☆'}
+      </button>
+      <button className="add-btn" style={{ background: 'var(--ink)' }} title="View in 3D" onClick={(e) => { e.stopPropagation(); onView() }}>↺</button>
+      <button
+        className="add-btn"
+        title={signedIn ? 'Copy to your layouts' : 'Sign in to copy'}
+        onClick={(e) => {
+          e.stopPropagation()
+          onCopy(layout)
+        }}
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
 export default function App() {
   const canvasWrapRef = useRef(null)
   const engineRef = useRef(null)
@@ -63,7 +143,9 @@ export default function App() {
   const [selection, setSelection] = useState(null)
   const [featureSelection, setFeatureSelection] = useState(null)
   const [relatedNotice, setRelatedNotice] = useState('')
-  const [tab, setTab] = useState('catalog')
+  // Browse is the landing tab — the first thing anyone sees (signed in or not) is real layouts
+  // from other students, not an empty room. "Catalog" is one click away for starting from scratch.
+  const [tab, setTab] = useState('browse')
   const [savedLayouts, setSavedLayouts] = useState([])
   const [layoutName, setLayoutName] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
@@ -72,6 +154,21 @@ export default function App() {
   const [publicLayouts, setPublicLayouts] = useState([])
   const [browseError, setBrowseError] = useState('')
   const [browseNotice, setBrowseNotice] = useState('')
+  const [hallFilter, setHallFilter] = useState('')
+  const [roomTypeFilter, setRoomTypeFilter] = useState('')
+  const [distinctHalls, setDistinctHalls] = useState([])
+  const [likedIds, setLikedIds] = useState(() => new Set())
+  const [mySavedIds, setMySavedIds] = useState(() => new Set())
+  // "My Layouts" (yours, editable/publishable) vs "Saved from others" (bookmarks — see A5) are
+  // different things now that saving exists, so they're two views within the same Saved tab.
+  const [savedSubView, setSavedSubView] = useState('mine')
+  const [savedFromOthers, setSavedFromOthers] = useState([])
+  const [savedFromOthersError, setSavedFromOthersError] = useState('')
+  // { name } of the layout currently prompting for optional hall/room type before publishing —
+  // null when the prompt isn't open. Only shown on the private→public transition (see A4).
+  const [publishPrompt, setPublishPrompt] = useState(null)
+  const [publishHall, setPublishHall] = useState('')
+  const [publishRoomType, setPublishRoomType] = useState('')
   const [roomPlannerCollapsed, setRoomPlannerCollapsed] = useState(false)
   const [openCategories, setOpenCategories] = useState(() => new Set())
   const [checklistItems, setChecklistItems] = useState([])
@@ -97,28 +194,48 @@ export default function App() {
   }, [selection])
 
   useEffect(() => {
-    if (tab !== 'saved' || !session) return
+    if (tab !== 'saved' || !session || savedSubView !== 'mine') return
     listLayouts()
       .then(setSavedLayouts)
       .catch((err) => setLayoutsError(err.message))
-  }, [tab, session])
+  }, [tab, session, savedSubView])
+
+  useEffect(() => {
+    if (tab !== 'saved' || !session || savedSubView !== 'saved') return
+    setSavedFromOthersError('')
+    listSavedLayouts()
+      .then(setSavedFromOthers)
+      .catch((err) => setSavedFromOthersError(err.message))
+  }, [tab, session, savedSubView])
 
   useEffect(() => {
     if (!session) {
       setMyProfile(null)
+      setLikedIds(new Set())
+      setMySavedIds(new Set())
       return
     }
     getMyProfile()
       .then(setMyProfile)
       .catch(() => {})
+    // Fetched independent of which tab is open (not gated to 'browse') so hearts/bookmarks render
+    // correctly the moment Browse becomes visible — Browse is now the landing tab, and a
+    // signed-in user's session is often already restored before this effect's first run.
+    listMyLikedLayoutIds().then((ids) => setLikedIds(new Set(ids))).catch(() => {})
+    listMySavedLayoutIds().then((ids) => setMySavedIds(new Set(ids))).catch(() => {})
   }, [session])
 
   useEffect(() => {
     if (tab !== 'browse') return
     setBrowseError('')
-    listPublicLayouts()
+    listPublicLayouts({ hall: hallFilter || undefined, roomType: roomTypeFilter || undefined })
       .then(setPublicLayouts)
       .catch((err) => setBrowseError(err.message))
+  }, [tab, hallFilter, roomTypeFilter])
+
+  useEffect(() => {
+    if (tab !== 'browse') return
+    listDistinctHalls().then(setDistinctHalls).catch(() => {})
   }, [tab])
 
   useEffect(() => {
@@ -293,6 +410,18 @@ export default function App() {
     engineRef.current.loadState(data)
     setRoom(data.room)
     setTab('cart')
+    // Best-effort, no dedup for v1 (see brief) — incrementLayoutViewCount() swallows its own
+    // errors, so this never blocks or breaks loading the layout itself. data.id is only present
+    // on layouts that came from Supabase (Browse/Saved), not a from-scratch room.
+    if (data.id) incrementLayoutViewCount(data.id)
+  }
+
+  // Loads the original a copy was "Based on", via its id rather than the (possibly stale, if the
+  // original changed since) data already sitting in browseNotice/parent* fields.
+  async function handleViewParent(parentLayoutId) {
+    const parent = await getPublicLayoutById(parentLayoutId)
+    if (parent) handleLoad(parent)
+    else setBrowseError('That original layout is no longer available.')
   }
 
   async function handleDelete(name) {
@@ -305,13 +434,93 @@ export default function App() {
     }
   }
 
-  async function handleTogglePublic(name, nextPublic) {
+  async function handleTogglePublic(name, nextPublic, opts) {
     setLayoutsError('')
     try {
-      await setLayoutPublic(name, nextPublic)
+      await setLayoutPublic(name, nextPublic, opts)
       setSavedLayouts(await listLayouts())
     } catch (err) {
       setLayoutsError(err.message)
+    }
+  }
+
+  // Only the private→public transition prompts for hall/room type (A4) — going public is the
+  // moment those fields are actually useful to fill in, and re-publishing without touching them
+  // just keeps whatever was set the first time (see setLayoutPublic's own comment).
+  function openPublishPrompt(name) {
+    setPublishHall('')
+    setPublishRoomType('')
+    setPublishPrompt({ name })
+  }
+
+  async function confirmPublish() {
+    const { name } = publishPrompt
+    setPublishPrompt(null)
+    await handleTogglePublic(name, true, { hall: publishHall.trim(), roomType: publishRoomType })
+  }
+
+  function skipPublishPrompt() {
+    const { name } = publishPrompt
+    setPublishPrompt(null)
+    handleTogglePublic(name, true)
+  }
+
+  // Local optimistic update for likes_count after a like/unlike — avoids a full refetch on every
+  // click. Applied to whichever list(s) currently hold this layout; a plain no-op on lists that
+  // don't (e.g. liking from Browse doesn't need to touch savedFromOthers unless it's also there).
+  function bumpLikesCount(layoutId, delta) {
+    const patch = (list) => list.map((l) => (l.id === layoutId ? { ...l, likesCount: Math.max(0, l.likesCount + delta) } : l))
+    setPublicLayouts(patch)
+    setSavedFromOthers(patch)
+  }
+
+  async function handleToggleLike(layout) {
+    if (!session) {
+      setTab('saved')
+      return
+    }
+    const isLiked = likedIds.has(layout.id)
+    try {
+      if (isLiked) {
+        await unlikeLayout(layout.id)
+        setLikedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(layout.id)
+          return next
+        })
+        bumpLikesCount(layout.id, -1)
+      } else {
+        await likeLayout(layout.id)
+        setLikedIds((prev) => new Set(prev).add(layout.id))
+        bumpLikesCount(layout.id, 1)
+      }
+    } catch (err) {
+      setBrowseError(err.message)
+    }
+  }
+
+  async function handleToggleSave(layout) {
+    if (!session) {
+      setTab('saved')
+      return
+    }
+    const isSaved = mySavedIds.has(layout.id)
+    try {
+      if (isSaved) {
+        await unsaveLayoutBookmark(layout.id)
+        setMySavedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(layout.id)
+          return next
+        })
+        setSavedFromOthers((prev) => prev.filter((l) => l.id !== layout.id))
+      } else {
+        await saveLayoutBookmark(layout.id)
+        setMySavedIds((prev) => new Set(prev).add(layout.id))
+        setSavedFromOthers((prev) => [{ ...layout, bookmarkedAt: Date.now() }, ...prev])
+      }
+    } catch (err) {
+      setBrowseError(err.message)
     }
   }
 
@@ -623,57 +832,130 @@ export default function App() {
                   </a>
                 )}
                 <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-                  <input
-                    placeholder="Layout name…"
-                    value={layoutName}
-                    onChange={(e) => setLayoutName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                    style={{ flex: 1, padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 12.5 }}
-                  />
                   <button
-                    onClick={handleSave}
-                    style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 14px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 8 }}
+                    className={`tab-btn ${savedSubView === 'mine' ? 'active' : ''}`}
+                    style={{ flex: 1 }}
+                    onClick={() => setSavedSubView('mine')}
                   >
-                    Save
+                    My Layouts
+                  </button>
+                  <button
+                    className={`tab-btn ${savedSubView === 'saved' ? 'active' : ''}`}
+                    style={{ flex: 1 }}
+                    onClick={() => setSavedSubView('saved')}
+                  >
+                    Saved from others
                   </button>
                 </div>
-                {layoutsError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{layoutsError}</div>}
-                {savedLayouts.length === 0 ? (
-                  <div className="empty-note">No saved layouts yet. Build a room, then name and save it above.</div>
-                ) : (
-                  savedLayouts.map((data) => (
-                    <div
-                      key={data.name}
-                      className="cart-row"
-                      onClick={() => handleLoad(data)}
-                      title="Click to load this layout into your room"
-                    >
-                      <LayoutThumb url={data.thumbnailUrl} />
-                      <div className="name">
-                        {data.name}
-                        <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
-                          {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}'
-                        </span>
-                      </div>
+
+                {savedSubView === 'mine' ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                      <input
+                        placeholder="Layout name…"
+                        value={layoutName}
+                        onChange={(e) => setLayoutName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                        style={{ flex: 1, padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 12.5 }}
+                      />
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleTogglePublic(data.name, !data.isPublic)
-                        }}
-                        title={data.isPublic ? 'Public — visible on the Browse tab. Click to make private.' : 'Private — only you can see this. Click to publish.'}
-                        style={{
-                          border: 'none', borderRadius: 999, padding: '4px 9px', fontSize: 9.5, fontWeight: 600,
-                          letterSpacing: '0.03em', cursor: 'pointer', flexShrink: 0,
-                          background: data.isPublic ? 'var(--sage-soft)' : 'var(--paper-shadow)',
-                          color: data.isPublic ? 'var(--sage)' : 'var(--ink-soft)',
-                        }}
+                        onClick={handleSave}
+                        style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '0 14px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 8 }}
                       >
-                        {data.isPublic ? 'PUBLIC' : 'PRIVATE'}
+                        Save
                       </button>
-                      <button className="add-btn" style={{ background: 'var(--ink)' }} title="Load into room" onClick={(e) => { e.stopPropagation(); handleLoad(data) }}>↺</button>
-                      <button className="remove-btn" onClick={(e) => { e.stopPropagation(); handleDelete(data.name) }}>×</button>
                     </div>
-                  ))
+                    {layoutsError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{layoutsError}</div>}
+                    {savedLayouts.length === 0 ? (
+                      <div className="empty-note">No saved layouts yet. Build a room, then name and save it above.</div>
+                    ) : (
+                      savedLayouts.map((data) => (
+                        <div
+                          key={data.name}
+                          className="cart-row"
+                          style={{ alignItems: 'flex-start' }}
+                          onClick={() => handleLoad(data)}
+                          title="Click to load this layout into your room"
+                        >
+                          <LayoutThumb url={data.thumbnailUrl} />
+                          <div className="name">
+                            {data.name}
+                            <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+                              {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}'
+                            </span>
+                            {data.parentLayoutId && (
+                              <span
+                                style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)', marginTop: 2, textDecoration: 'underline', cursor: 'pointer' }}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleViewParent(data.parentLayoutId)
+                                }}
+                              >
+                                Based on {data.parentLayoutName ? `"${data.parentLayoutName}"` : 'another layout'}
+                                {data.parentAuthorName && ` by ${data.parentAuthorName}`}
+                              </span>
+                            )}
+                            {data.remixCount > 0 && (
+                              <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 2 }}>
+                                {data.remixCount} {data.remixCount === 1 ? 'person' : 'people'} remixed this
+                              </span>
+                            )}
+                            {(data.likesCount > 0 || data.viewCount > 0 || data.copyCount > 0) && (
+                              <span style={{ display: 'block', fontSize: 9.5, color: 'var(--ink-soft)', marginTop: 2 }}>
+                                {data.likesCount > 0 && `♥ ${data.likesCount}`}
+                                {data.likesCount > 0 && (data.viewCount > 0 || data.copyCount > 0) && ' · '}
+                                {data.viewCount > 0 && `Viewed ${data.viewCount}×`}
+                                {data.viewCount > 0 && data.copyCount > 0 && ' · '}
+                                {data.copyCount > 0 && `Copied ${data.copyCount}×`}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (data.isPublic) handleTogglePublic(data.name, false)
+                              else openPublishPrompt(data.name)
+                            }}
+                            title={data.isPublic ? 'Public — visible on the Browse tab. Click to make private.' : 'Private — only you can see this. Click to publish.'}
+                            style={{
+                              border: 'none', borderRadius: 999, padding: '4px 9px', fontSize: 9.5, fontWeight: 600,
+                              letterSpacing: '0.03em', cursor: 'pointer', flexShrink: 0,
+                              background: data.isPublic ? 'var(--sage-soft)' : 'var(--paper-shadow)',
+                              color: data.isPublic ? 'var(--sage)' : 'var(--ink-soft)',
+                            }}
+                          >
+                            {data.isPublic ? 'PUBLIC' : 'PRIVATE'}
+                          </button>
+                          <button className="add-btn" style={{ background: 'var(--ink)' }} title="Load into room" onClick={(e) => { e.stopPropagation(); handleLoad(data) }}>↺</button>
+                          <button className="remove-btn" onClick={(e) => { e.stopPropagation(); handleDelete(data.name) }}>×</button>
+                        </div>
+                      ))
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {savedFromOthersError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{savedFromOthersError}</div>}
+                    {savedFromOthers.length === 0 ? (
+                      <div className="empty-note">
+                        Nothing saved yet. Tap the ☆ on any layout in Browse to bookmark it here for later.
+                      </div>
+                    ) : (
+                      savedFromOthers.map((layout) => (
+                        <PublicLayoutRow
+                          key={layout.id}
+                          layout={layout}
+                          liked={likedIds.has(layout.id)}
+                          saved={mySavedIds.has(layout.id)}
+                          signedIn={!!session}
+                          onView={() => handleLoad(layout)}
+                          onCopy={handleCopyPublic}
+                          onToggleLike={handleToggleLike}
+                          onToggleSave={handleToggleSave}
+                          onViewParent={handleViewParent}
+                        />
+                      ))
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -682,43 +964,57 @@ export default function App() {
 
         {tab === 'browse' && (
           <div id="browse-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
-            <div className="empty-note" style={{ padding: '0 0 12px 0' }}>
-              Layouts other users have made public. Copy one to start from it, or view it in 3D first.
+            <div className="empty-note" style={{ padding: '0 0 8px 0' }}>
+              Layouts other students have made public. Copy one to start from it, view it in 3D first, or{' '}
+              <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setTab('catalog')}>
+                start from scratch
+              </span>
+              .
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <select
+                value={hallFilter}
+                onChange={(e) => setHallFilter(e.target.value)}
+                style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 11, color: 'var(--ink)' }}
+              >
+                <option value="">All halls</option>
+                {distinctHalls.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+              <select
+                value={roomTypeFilter}
+                onChange={(e) => setRoomTypeFilter(e.target.value)}
+                style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 11, color: 'var(--ink)', textTransform: 'capitalize' }}
+              >
+                <option value="">All room types</option>
+                {ROOM_TYPES.map((rt) => (
+                  <option key={rt} value={rt} style={{ textTransform: 'capitalize' }}>{rt}</option>
+                ))}
+              </select>
             </div>
             {browseNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600 }}>{browseNotice}</div>}
             {browseError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{browseError}</div>}
             {publicLayouts.length === 0 ? (
-              <div className="empty-note">No public layouts yet. Publish one of your own from the Saved tab to be the first.</div>
+              <div className="empty-note">
+                {hallFilter || roomTypeFilter
+                  ? 'No public layouts match this filter yet.'
+                  : 'No public layouts yet. Publish one of your own from the Saved tab to be the first.'}
+              </div>
             ) : (
               publicLayouts.map((layout) => (
-                <div
+                <PublicLayoutRow
                   key={layout.id}
-                  className="cart-row"
-                  style={{ alignItems: 'flex-start' }}
-                  onClick={() => handleLoad(layout)}
-                  title="Click to view this layout in your room"
-                >
-                  <LayoutThumb url={layout.thumbnailUrl} />
-                  <div className="name">
-                    {layout.name}
-                    <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
-                      {layout.items.length} item{layout.items.length === 1 ? '' : 's'} · {layout.room.w}'×{layout.room.l}'
-                    </span>
-                    {layout.designerName && (
-                      <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 2 }}>
-                        Designed by {layout.designerName}
-                      </span>
-                    )}
-                  </div>
-                  <button className="add-btn" style={{ background: 'var(--ink)' }} title="View in 3D" onClick={(e) => { e.stopPropagation(); handleLoad(layout) }}>↺</button>
-                  <button
-                    className="add-btn"
-                    title={session ? 'Copy to your layouts' : 'Sign in to copy'}
-                    onClick={(e) => { e.stopPropagation(); handleCopyPublic(layout) }}
-                  >
-                    +
-                  </button>
-                </div>
+                  layout={layout}
+                  liked={likedIds.has(layout.id)}
+                  saved={mySavedIds.has(layout.id)}
+                  signedIn={!!session}
+                  onView={() => handleLoad(layout)}
+                  onCopy={handleCopyPublic}
+                  onToggleLike={handleToggleLike}
+                  onToggleSave={handleToggleSave}
+                  onViewParent={handleViewParent}
+                />
               ))
             )}
           </div>
@@ -815,6 +1111,53 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {publishPrompt && (
+        <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setPublishPrompt(null)}>
+          <div id="receipt">
+            <h2>Publish "{publishPrompt.name}"</h2>
+            <div className="rsub">
+              Optional — helps other students find layouts from their own hall or room type on Browse. Skip if you'd rather not say.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 4 }}>Hall</label>
+              <input
+                placeholder="e.g. Curtis Hall"
+                value={publishHall}
+                onChange={(e) => setPublishHall(e.target.value)}
+                style={{ width: '100%', padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 12.5 }}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 4 }}>Room type</label>
+              <select
+                value={publishRoomType}
+                onChange={(e) => setPublishRoomType(e.target.value)}
+                style={{ width: '100%', padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 12.5, textTransform: 'capitalize' }}
+              >
+                <option value="">Not specified</option>
+                {ROOM_TYPES.map((rt) => (
+                  <option key={rt} value={rt} style={{ textTransform: 'capitalize' }}>{rt}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={skipPublishPrompt}
+                style={{ flex: 1, background: 'var(--paper-shadow)', color: 'var(--ink-soft)', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Skip & publish
+              </button>
+              <button
+                onClick={confirmPublish}
+                style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Publish
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showReceipt && (
         <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setShowReceipt(false)}>
