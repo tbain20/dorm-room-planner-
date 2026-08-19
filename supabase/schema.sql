@@ -12,6 +12,9 @@ create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
   is_designer boolean not null default false,
+  bio text,
+  display_hall text,
+  class_year text,
   created_at timestamptz not null default now()
 );
 
@@ -68,6 +71,7 @@ create table if not exists layouts (
   parent_layout_id uuid references layouts(id) on delete set null,
   hall text,
   room_type text,
+  tags text[],
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (user_id, name)
@@ -76,6 +80,7 @@ create table if not exists layouts (
 create index if not exists layouts_hall_idx on layouts (hall);
 create index if not exists layouts_room_type_idx on layouts (room_type);
 create index if not exists layouts_parent_layout_id_idx on layouts (parent_layout_id);
+create index if not exists layouts_tags_idx on layouts using gin (tags);
 
 alter table layouts enable row level security;
 
@@ -255,3 +260,114 @@ $$;
 
 grant execute on function public.increment_layout_view_count(uuid) to anon, authenticated;
 grant execute on function public.increment_layout_copy_count(uuid) to anon, authenticated;
+
+-- Follows (public profiles — see migrations/007_profiles_follow.sql for the full narrative).
+create table if not exists follows (
+  id uuid primary key default gen_random_uuid(),
+  follower_id uuid not null references auth.users(id) on delete cascade,
+  followee_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique (follower_id, followee_id),
+  check (follower_id <> followee_id)
+);
+
+alter table follows enable row level security;
+create index if not exists follows_follower_id_idx on follows (follower_id);
+create index if not exists follows_followee_id_idx on follows (followee_id);
+
+create policy "Follows are viewable by anyone"
+  on follows for select
+  using (true);
+
+create policy "Users can follow others"
+  on follows for insert
+  with check (auth.uid() = follower_id);
+
+create policy "Users can unfollow"
+  on follows for delete
+  using (auth.uid() = follower_id);
+
+-- Featured collections (curated by hand in the Supabase dashboard — see
+-- migrations/008_tags_featured.sql for the full narrative and an example insert).
+create table if not exists featured_collections (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  created_at timestamptz not null default now()
+);
+
+alter table featured_collections enable row level security;
+
+create policy "Featured collections are viewable by anyone"
+  on featured_collections for select
+  using (true);
+
+create table if not exists featured_collection_layouts (
+  collection_id uuid not null references featured_collections(id) on delete cascade,
+  layout_id uuid not null references layouts(id) on delete cascade,
+  sort_order integer not null default 0,
+  primary key (collection_id, layout_id)
+);
+
+alter table featured_collection_layouts enable row level security;
+create index if not exists featured_collection_layouts_collection_id_idx on featured_collection_layouts (collection_id);
+
+create policy "Featured collection layouts are viewable by anyone"
+  on featured_collection_layouts for select
+  using (true);
+
+-- Reports — basic moderation (see migrations/009_moderation.sql). Reviewed by hand in Supabase's
+-- table editor; no client-facing read/update beyond a user seeing their own filed reports.
+create table if not exists reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references auth.users(id) on delete cascade,
+  target_type text not null check (target_type in ('layout', 'comment', 'profile')),
+  target_id uuid not null,
+  reason text not null,
+  status text not null default 'open',
+  created_at timestamptz not null default now()
+);
+
+alter table reports enable row level security;
+create index if not exists reports_target_idx on reports (target_type, target_id);
+create index if not exists reports_status_idx on reports (status);
+
+create policy "Users can view their own reports"
+  on reports for select
+  using (auth.uid() = reporter_id);
+
+create policy "Users can file reports"
+  on reports for insert
+  with check (auth.uid() = reporter_id);
+
+-- Comments (see migrations/010_comments.sql for the full narrative).
+create table if not exists comments (
+  id uuid primary key default gen_random_uuid(),
+  layout_id uuid not null references layouts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table comments enable row level security;
+create index if not exists comments_layout_id_idx on comments (layout_id);
+
+create policy "Comments on public layouts are viewable by anyone"
+  on comments for select
+  using (
+    exists (select 1 from layouts l where l.id = layout_id and (l.is_public = true or l.user_id = auth.uid()))
+  );
+
+create policy "Authenticated users can comment on public layouts"
+  on comments for insert
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from layouts l where l.id = layout_id and l.is_public = true)
+  );
+
+create policy "Users can delete their own comments or layout owners can delete any"
+  on comments for delete
+  using (
+    auth.uid() = user_id
+    or exists (select 1 from layouts l where l.id = layout_id and l.user_id = auth.uid())
+  );

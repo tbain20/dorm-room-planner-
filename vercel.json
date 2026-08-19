@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/layouts/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|LinkedInBot|WhatsApp|TelegramBot|SkypeUriPreview|Googlebot|bingbot|Applebot).*"
+        }
+      ],
+      "destination": "/api/layout-preview?id=:id"
+    },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

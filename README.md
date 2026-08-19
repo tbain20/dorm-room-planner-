@@ -26,7 +26,9 @@ Same flow as "instead.":
 
 ```
 src/
-  App.jsx           — UI + React state, wires the sidebar/panels to the 3D engine
+  main.jsx          — entry point; sets up react-router-dom's two routes (/layouts/:id and *)
+  App.jsx           — UI + React state, wires the sidebar/panels to the 3D engine (the "*" route)
+  LayoutDetailPage.jsx — standalone /layouts/:id page: static render + likes/comments/lineage
   roomEngine.js     — all Three.js logic (scene, camera, items, drag/rotate), framework-agnostic
   catalog.js        — furniture items: dims, price, retailer, optional modelUrl for real 3D models
   storage.js        — Supabase-backed save/load/browse/copy for layouts (see "Setting up Supabase")
@@ -34,11 +36,15 @@ src/
   useAuth.js        — React hook tracking the current Supabase auth session
   AuthPanel.jsx      — sign in / sign up form shown on the Saved tab when signed out
   index.css         — styling (warm/editorial theme — see "Visual design")
+api/
+  layout-preview.js — Vercel serverless function; Open Graph meta tags for link-unfurling bots
+vercel.json         — routes bot user-agents on /layouts/:id to api/layout-preview.js
 supabase/
   schema.sql          — full schema for a brand-new Supabase project
   migrations/          — incremental SQL for existing projects (run in order)
 public/
   models/            — CC0 glTF furniture models (Kenney Furniture Kit) referenced by catalog.js
+  terms.html         — placeholder Terms of Service (needs real legal review, see that section)
 ```
 
 ## Where things stand
@@ -91,6 +97,26 @@ public/
 - The Room Planner card (dimensions + door/window add buttons) can be minimized to a title bar
   via a toggle, freeing up screen space — see "Colgate default furniture" below for why this
   landed alongside that feature.
+- Public profile pages (bio, hall, class year, follower/following counts, their public layouts)
+  and follow/unfollow, reachable by clicking any layout's byline anywhere in the app. **Needs
+  migration 007 run and tested by you** — see "Public profiles + follow" below.
+- Tags on published layouts (suggested chips + custom), a multi-select tag filter on Browse
+  (AND logic, combines with hall/room-type), and a "Featured" horizontal-scroll strip curated by
+  hand in Supabase. **Needs migration 008 run and tested by you** — see "Tags, filters, featured
+  collections" below. **Currently blocks all of Browse until it's run** — see the callout above.
+- Basic moderation: a 🚩 report action on layouts and profiles (and now comments, see below),
+  reviewed by hand in Supabase — no dashboard UI. Plus a placeholder Terms of Service page
+  (`public/terms.html`, linked from the Saved tab) — needs real legal review before this has real
+  public users, see that section for the caveat. **Needs migration 009 run** — see "Basic
+  moderation + Terms of Service" below.
+- Comments on individual layouts, a real shareable `/layouts/:id` route (react-router-dom, new
+  dependency), a 🔗 copy-link action, and a Vercel serverless function for Open Graph link
+  previews in iMessage/Discord/Slack/etc. **Needs migration 010 run, and the OG preview piece
+  specifically can only be tested against your live Vercel deployment, not this dev environment**
+  — see "Comments + shareable links + Open Graph previews" below.
+- Badges (computed on the fly, not stored) and a leaderboard (top designers, top layouts this
+  month) — reachable via a "🏆 Leaderboard" link on Browse. **No migration needed, verified fully
+  live against your real data** — see "Badges + leaderboard" below.
 
 ## Setting up Supabase
 
@@ -117,11 +143,41 @@ have been added since you last ran one — all additive and safe to re-run:
 5. New query → paste in
    [`supabase/migrations/006_community_tier1.sql`](supabase/migrations/006_community_tier1.sql),
    run it. Adds likes, saves/bookmarks, copy attribution, and hall/room-type filtering — see
-   "Community tier 1" below. **I could not run this one for you or test against it** — this dev
-   environment only has the app's anon key, not enough to run DDL against your project, so
-   everything in that section is code-complete and builds clean but genuinely untested against a
-   live database. Run the migration, then work through that section's testing checklist yourself.
-6. That's it — no new env vars needed for any of these.
+   "Community tier 1" below. (Confirmed run — Browse loads with counts/bylines correctly.)
+6. New query → paste in
+   [`supabase/migrations/007_profiles_follow.sql`](supabase/migrations/007_profiles_follow.sql),
+   run it. Adds `bio`/`display_hall`/`class_year` to `profiles` and a new `follows` table — see
+   "Public profiles + follow" below. **Same limitation as before — I can't run this one for you**
+   (anon key only). Until you run it, profile pages show "This profile could not be found" instead
+   of a raw schema error (verified live), and the Follow button/Following filter won't work — the
+   rest of the app is unaffected.
+7. New query → paste in
+   [`supabase/migrations/008_tags_featured.sql`](supabase/migrations/008_tags_featured.sql), run
+   it. Adds a `tags` array column to `layouts` plus `featured_collections`/
+   `featured_collection_layouts` (curated by hand — see that section below for how). **Fixed a
+   real bug in this file** — the GIN index line had `USING gin (tags) ON layouts` (wrong clause
+   order; Postgres wants `ON table USING method`), which you correctly hit as a syntax error when
+   you ran it. Now reads `create index layouts_tags_idx on layouts using gin (tags);` — re-run the
+   file, it should go through cleanly this time. (Not yet re-confirmed against your live project
+   past that fix — please re-run and let me know if anything else comes up.)
+8. New query → paste in
+   [`supabase/migrations/009_moderation.sql`](supabase/migrations/009_moderation.sql), run it.
+   Adds a `reports` table (reviewed by hand in the table editor — no admin UI). This one doesn't
+   block anything else if you skip it for now — the Report button just surfaces whatever error
+   comes back, same graceful-degradation pattern as everything else.
+9. New query → paste in
+   [`supabase/migrations/010_comments.sql`](supabase/migrations/010_comments.sql), run it. Adds a
+   `comments` table — see "Comments + shareable links + Open Graph previews" below.
+10. That's it — still no new env vars needed for any of these, including the OG preview
+    serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
+    in your Vercel project).
+
+**Run migrations 006–009 in order if you haven't already** — 008 in particular currently blocks
+the *entire* Browse list (not just tags), since `listPublicLayouts()` now unconditionally selects
+the new `tags` column. Verified live: right now Browse shows zero rows and one clear inline error
+("column layouts.tags does not exist") instead of the layouts that are actually there. Every
+other migration so far degraded more narrowly (missing a specific feature, not the whole list) —
+this is the one where running the migration matters most before you go looking for missing rows.
 
 (`supabase/schema.sql` is the complete from-scratch version, for reference or for setting up a
 second environment. Since your project already has the original `layouts` table, use the
@@ -570,6 +626,245 @@ at the end of this section yourself.
   "no public layouts yet" empty-state copy already branches on whether a filter is active); view/
   copy/like counts don't error for a signed-out visitor; the new Browse landing tab works both
   signed in and signed out.
+
+## Public profiles + follow (Tier 2, session B1)
+
+First of the B1–B5 batch (see brief) — each meant to be its own commit, this one specifically:
+public profile pages + follow/unfollow. **Needs migration 007 run and tested by you**, same
+anon-key limitation as every migration since 006.
+
+- **Not a real route yet**: there's no `react-router-dom` in the app until B4 (shareable links),
+  so a profile "page" is a pseudo-tab — `tab === 'profile'` plus a separate `viewingProfileId`
+  state, not a URL. Clicking any layout's byline anywhere (Browse, Saved-from-others, another
+  profile's layout grid) opens it; "← Back" returns to whichever tab you came from
+  (`profileReturnTab`). Worth knowing if you're wondering why a profile link isn't shareable —
+  that's coming in B4, not missing by accident.
+- **Byline, not just "Designed by"**: every public-layout row (Browse, Saved-from-others, a
+  profile's own layout grid) now shows *some* clickable author line — "Designed by X" in sage for
+  flagged designers (unchanged styling), "by X" in muted ink for everyone else. Previously only
+  designer layouts had any author line at all; now there's always a path to the person who made
+  it. `listPublicLayouts`/`listSavedLayouts`/`getPublicLayoutById` all now also select `user_id`
+  and expose it as `authorId`/`authorName`.
+- **Profile page shows**: display name, DESIGNER badge if applicable, bio, hall/class year (joined
+  with a `·` only when both are set), follower/following/public-layout counts, and a grid of their
+  public layouts (same row style as Browse, minus the like/save/copy buttons — those act on a
+  specific layout mid-browse, less relevant while reading someone's profile). Works signed out —
+  `getPublicProfile()` needs no auth, same as `listPublicLayouts`.
+- **Follow button**: hidden entirely on your own profile (`session.user.id === viewingProfileId`)
+  rather than shown-disabled — per the brief's either/or, this plus the DB check constraint
+  (`follower_id <> followee_id`) covers both the "hide it" and "block it server-side" options at
+  once. Optimistic local update on click (`followingIds` Set + the viewed profile's
+  `followerCount`), no refetch needed.
+- **Editing your own profile**: no dedicated settings tab for three optional fields — instead a
+  compact inline editor (bio textarea + hall/class-year inputs + Save) right in the Saved tab,
+  above the My Layouts/Saved-from-others toggle, plus a "View my public profile →" link. Seeded
+  from `getMyProfile()`'s existing call so it never shows stale-empty fields and silently blanks
+  out a real bio on first save (caught this while wiring it up — the drafts state needs to be
+  populated on profile *load*, not only when you happen to visit your own profile page first).
+- **"Following" feed**: not a separate feed UI — a "Following only" checkbox on Browse (shown only
+  when signed in), which fetches your following list once and passes it as an `authorIds` filter
+  into the existing `listPublicLayouts()` call, same function Browse already used. Shows a
+  specific "you're not following anyone yet" empty state rather than the generic
+  "no layouts match this filter" one, since the two situations call for different next actions.
+- **Verified live (pre-migration)**: confirmed the byline itself already works today, since it
+  only depends on the always-present `user_id` column, not anything migration 007 adds — a real
+  layout's Browse row correctly showed a clickable "by a student" byline. Clicking it opened the
+  profile pseudo-tab and showed a clean "This profile could not be found" message (not a raw
+  Postgrest schema error) since `profiles.bio` doesn't exist in the live DB yet — confirms the
+  null-on-error handling in `getPublicProfile()` degrades the way it's supposed to. "← Back"
+  correctly returned to Browse. Follow/unfollow, the editor, and the Following filter all need
+  migration 007 live before they're testable — please work through those yourself.
+
+## Tags, filters, featured collections (Tier 2, session B2)
+
+Second of the B1–B5 batch. **Needs migration 008 run and tested by you.**
+
+- **Tags at publish time**: the same publish-prompt modal from Tier 1 (hall/room type) now also
+  has a tag section — `SUGGESTED_TAGS` (minimalist/cozy/plant-heavy/gaming/study-focused) render
+  as one-click "+ tag" chips, plus a free-text input (Enter or comma adds it) for anything not on
+  the list. Tags are lowercased on add so "Cozy" and "cozy" don't end up as two different filter
+  values. "Skip & publish" only skips hall/room type — any tags already picked as chips still go
+  through, since picking a tag chip is a separate, lighter action than the hall/room-type prompt.
+- **Tag filter chips on Browse**: multi-select, not a dropdown (unlike hall/room-type) — clicking
+  a chip toggles it, and multiple selected tags AND together (a layout must have *all* selected
+  tags, not any), same "narrowing, not replacing" combination rule as the brief asked for with
+  hall/room-type. Implemented via Postgres array-contains (`.contains('tags', [...])` in
+  supabase-js) rather than fetching everything and filtering client-side.
+- **Featured collections**: `featured_collections` + a `featured_collection_layouts` join table
+  (with `sort_order`), both read-only from the app's side — no admin UI, no insert/update/delete
+  RLS policy for the anon/authenticated roles at all, since curating these is meant to happen by
+  hand in Supabase's table editor (an example `insert` pair is commented at the bottom of
+  migration 008 to copy-paste from). Renders as a labeled horizontal-scroll strip at the top of
+  Browse, one row per collection, above the hall/room-type filters. `listFeaturedCollections()`
+  filters out any collection that ends up with zero visible layouts (deleted/gone-private since
+  featuring) rather than rendering an empty strip, and the whole section just doesn't render at
+  all if no collections exist yet — no broken empty state to worry about.
+- **Verified live (pre-migration)**: confirmed Browse degrades to one clear inline error
+  ("column layouts.tags does not exist") instead of crashing, with the hall/room-type filters and
+  the rest of the page still rendering normally, and confirmed the Featured section correctly
+  renders nothing (not a broken empty box) since `listFeaturedCollections()`'s `.catch()` swallows
+  the same missing-table error. Catalog and every other tab are unaffected. Tag filtering itself,
+  the publish-time tag chips, and actually featuring a collection all need migration 008 live —
+  please work through those yourself once it's run.
+
+## Basic moderation + Terms of Service (Tier 2, session B3)
+
+Third of the B1–B5 batch, done before comments (B4) on purpose, per the brief. **Needs migration
+009 run.**
+
+- **Reports table only — no dashboard**: `reports` (`reporter_id`, `target_type` — 'layout' /
+  'comment' / 'profile' — `target_id`, `reason`, `status`, defaulting to `'open'`). No
+  update/delete policy for the client at all; status changes happen by hand in the table editor,
+  which runs as the project owner and isn't subject to RLS — exactly the "no admin UI needed at
+  this scale" shape the brief asked for. `select` is scoped to a user's own filed reports (not
+  broad), so the client could show "your reports" someday without another migration, but nothing
+  reads it back today.
+- **🚩 report button**: on every `PublicLayoutRow` (Browse, Saved-from-others) and on the profile
+  page (next to Follow). Comments don't exist yet (that's B4), so comment reporting isn't wired up
+  — the DB already supports `target_type = 'comment'` for when it lands.
+- **Report modal**: three reasons (Spam / Inappropriate / Other), with a free-text box that only
+  appears for "Other" — `reportReason`/`reportDetails` get combined into one string
+  (`"Other: <text>"`) before hitting `submitReport()`, so the `reports.reason` column stays a
+  single plain string rather than needing two.
+- **Terms of Service**: `public/terms.html` — a standalone static page (not part of the React
+  app/bundle, just a plain file Vite serves as-is), linked from the Saved tab for both signed-in
+  and signed-out visitors. **This is a placeholder, not real legal language** — the page says so
+  explicitly at the top. Get an actual lawyer (or Colgate's relevant office, if this stays tied to
+  Colgate) to review it before this app has real public users at any scale; treat this as "the
+  page exists and covers the right topics" (ownership of published content, prohibited content,
+  reporting/removal, no warranty), not "legally sound."
+- **A real interaction worth knowing about**: adding `tags` to `listPublicLayouts()`'s select list
+  in B2 means that until migration 008 is run, the *entire* Browse list fails to load (not just
+  tag-related UI) — confirmed live, see the callout in "Setting up Supabase" above. The report
+  button itself is fine (its code is correct and unaffected), but you can't reach it from Browse
+  until there's a row to click, since no rows render pre-008.
+- **Verified live**: `terms.html` renders correctly and is reachable from both the signed-in and
+  signed-out Saved tab states. Confirmed (per the note above) that Browse currently shows zero
+  rows pre-migration, so the report button on a layout row couldn't be exercised end-to-end in
+  this environment — the wiring is the same proven pattern as the like/save/copy buttons already
+  working on that same row component, so I'm confident in it, but you should click through it
+  yourself once 008 and 009 are both live.
+
+## Comments + shareable links + Open Graph previews (Tier 2, session B4)
+
+Fourth of the B1–B5 batch — the one the brief itself flagged as the most technically involved.
+**Needs migration 010 run**; the OG preview piece needs your live Vercel deployment to test at all.
+
+- **Comments**: `comments` table (`layout_id`, `user_id`, `body`) — anyone can read comments on a
+  public layout (or their own private one), any authenticated user can post, and either the
+  comment's author *or the layout's owner* can delete it (the brief called owner-delete "a
+  reasonable moderation lever to include," so both are allowed rather than picking one). Lives
+  entirely on the new `/layouts/:id` page — no comment UI on the Browse tab's list rows.
+- **`react-router-dom` added** (new dependency, v7) — the first real client-side routing in the
+  app. `main.jsx` now wraps everything in a `<BrowserRouter>` with two routes: `/layouts/:id` →
+  the new `LayoutDetailPage`, and `*` (everything else) → the existing tab-based `App`. Nothing
+  about the existing tab system changed; it's still one big component with `tab` state, just now
+  itself living behind a catch-all route instead of being the only thing rendered.
+- **`/layouts/:id` — `LayoutDetailPage.jsx`**: a standalone page, deliberately *not* a live 3D
+  view — the brief explicitly offered "3D view or a static render" as an either/or, and spinning
+  up a second `RoomEngine` instance just for this page would mean duplicating a good chunk of
+  `App.jsx`'s Three.js setup for a page whose whole point is to load fast and preview well when
+  shared. Shows the layout's thumbnail, name, byline, hall/room type, "Based on X" lineage (links
+  to the parent's own `/layouts/:id` page — remixes can chain), like/save/copy/report actions, and
+  the comment thread. An "Open in 3D editor" button hands the already-fetched layout data to the
+  main app via router state (`navigate('/', { state: { loadLayout } })`) rather than making it
+  re-fetch — `App.jsx` picks that up in a new mount effect and clears the state immediately after
+  consuming it so navigating back later doesn't reload the same layout again.
+- **A real gap, worth knowing about**: profile pages are still the pseudo-tab from session B1, not
+  a route — so the author byline on `/layouts/:id` isn't a clickable link to their profile the way
+  it is inside the main app. Noted directly in a code comment where it'd naturally go
+  (`LayoutDetailPage.jsx`); promoting profiles to a real `/u/:id` route would be a clean follow-up
+  now that routing exists, but wasn't in this session's scope.
+- **🔗 copy-link button**: on every `PublicLayoutRow` (Browse, Saved-from-others) and on your own
+  published layouts in "My Layouts" (only shown once a layout is actually public — no point
+  sharing a link to something only you can see). Builds `<origin>/layouts/:id` and puts it on the
+  clipboard; falls back to just displaying the raw URL in the notice if the Clipboard API is
+  unavailable, rather than failing silently.
+- **Open Graph previews — the genuinely unverified part**: `api/layout-preview.js` is a Vercel
+  serverless function that serves a minimal HTML page with `og:title`/`og:image`/`og:description`
+  tags pulled from Supabase (name + `thumbnail_url`, already existed from the layout-thumbnails
+  feature) — this is necessary because client-side React can't produce correct link previews on
+  its own; platforms like iMessage/Discord/Slack don't execute JavaScript when unfurling a link,
+  so the tags have to already be in the initial HTML response. `vercel.json` routes `/layouts/:id`
+  through this function *only* for requests whose user-agent matches a known bot pattern
+  (facebookexternalhit, Twitterbot, Discordbot, Slackbot, LinkedInBot, WhatsApp, TelegramBot,
+  Googlebot, bingbot, Applebot); every real visitor's request still goes straight to the normal
+  React SPA via the same file's SPA-fallback rewrite. No new env vars — the function reads the
+  same `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` already set in your Vercel project (env vars
+  aren't restricted to build-time just because of the `VITE_` prefix; that prefix only controls
+  what Vite embeds into the *client* bundle).
+  - **I could not test any of this** — it needs an actual Vercel deployment, and this dev
+    environment doesn't have one. Per the brief's own testing note, the only real way to verify it
+    is pasting a live `/layouts/:id` link into iMessage/Discord/Slack after deploying. Please do
+    that once this is live.
+  - **Specifically flagged as an open question, not something to debug blindly if it doesn't
+    work**: Apple's iMessage link-preview fetcher doesn't publish a stable, documented
+    user-agent string the way Facebook/Twitter/Discord's crawlers do. It's included in the bot
+    pattern as a best guess, but if iMessage previews specifically don't render while everything
+    else does, that's the most likely reason — worth its own small follow-up investigation rather
+    than assuming the whole approach is broken.
+  - Per the brief's own escape hatch ("if it's taking significantly longer... ship comments and
+    the route first, treat OG previews as its own follow-up") — comments and the route are solid
+    and verified locally; OG previews are written and should be reviewed as their own small
+    follow-up once you can actually test them live.
+- **Verified live (what's testable without Vercel)**: navigating directly to a `/layouts/:id` URL
+  in the dev server resolves correctly via `react-router-dom` (not a 404, not falling through to
+  the main app) — tested with a nonexistent id and confirmed the clean "This layout isn't
+  available" state renders (same behavior a since-privated layout would get, since
+  `getPublicLayoutById()` already treated both cases identically from session B1). The "←" back
+  link correctly returns to the main app, and the main app itself still loads and behaves
+  correctly after adding the router — the "Browse" landing tab, existing tabs, and the
+  now-expected pre-migration `layouts.tags` error all rendered exactly as before. Comments
+  themselves (post/delete/RLS), the copy-link button's actual clipboard behavior, and — critically
+  — the OG previews all need you to test once 010 is run and this is deployed.
+  - **Follow-up check**: also loaded a real public layout's `/layouts/:id` URL (not just a
+    nonexistent one) — name, byline, dims, like count, and action buttons all rendered with real
+    data from your database; the Comments section correctly showed a clean inline "Could not find
+    the table 'public.comments'" message rather than crashing, confirming migration 010's
+    not-yet-run state degrades the same way every other migration-gated feature in this app does.
+
+## Badges + leaderboard (Tier 3, session B5)
+
+The lower-effort half of B5 — the brief explicitly separated this from roommate collaboration
+(see the note at the end of this section for why that part isn't built). **No migration needed
+at all**, and unlike everything since session B1, this was **fully verified live against your
+real Supabase data**, not just checked for graceful degradation.
+
+- **No new table, on purpose**: the brief called a dedicated awarding/scoring system overkill at
+  this scale ("even just computed client-side from existing counts... no need to build fancy") —
+  both badges and the leaderboard are pure functions over data that already exists
+  (`likes_count`/`copy_count` on every public layout, live since migration 006). Nothing is
+  cached or stored; refresh the page and it recomputes from current numbers. `getLeaderboard()`
+  and `computeBadges()` in `storage.js` have the honest caveat in a comment: this fetches *every*
+  public layout to aggregate client-side, which is fine at today's scale and would need to move
+  server-side (an RPC or materialized view) if the public-layout count ever gets large.
+- **Badges**: shown on the profile page next to the DESIGNER badge — "🎨 5+ layouts published",
+  "🏆 10+ copies", "❤️ 25+ likes", each only appearing once a profile's public layouts cross that
+  threshold (summed across all of them, not per-layout).
+- **Leaderboard**: a new pseudo-tab (`tab === 'leaderboard'`, same non-URL pattern as the profile
+  page from B1), reachable via a "🏆 Leaderboard" link in Browse's header. Two lists: top 10
+  designers by total likes+copies across their public layouts (clicking a row opens their
+  profile), and top 10 layouts updated in the last 30 days by likes+copies (clicking one loads it
+  straight into the room, reusing the same `getPublicLayoutById`-then-load helper as "Based on X"
+  links — renamed from `handleViewParent` to `handleViewLayoutById` in `App.jsx` since it's no
+  longer only about parents).
+- **Verified live — genuinely, not just "doesn't crash"**: this is the first B1–B5 feature that
+  needed zero new migrations, so it was testable end-to-end against your real project as-is.
+  Confirmed the leaderboard correctly aggregated your one real public layout and its real like
+  count ("A student, 1 layout, ♥ 1, Copied 0×"), and confirmed clicking a "top layouts this month"
+  row actually loaded that real 14-item layout into the 3D editor correctly (furniture, prices,
+  and the "Your room (14)" count all matched). Badges themselves need a profile crossing one of
+  the thresholds to see rendered, which none currently do — the logic was reviewed rather than
+  visually confirmed for that part specifically.
+
+**Roommate collaboration (the other half of B5) was not built.** The brief was explicit that this
+one needs a decision made first, not code written speculatively: a simple async "shared edit
+access via a `layout_collaborators` join table, last-write-wins" version, versus a real-time
+Google-Docs-style version with live cursors (meaningfully more complex, needs Supabase Realtime
+and conflict handling). The brief's own recommendation — start with the simple version if you
+build this at all — still stands, but it's a genuine product decision (is this valuable enough to
+build now, given B1–B5 is already a large batch?) rather than something to default into. Worth its
+own short conversation before a session is spent on it either way.
 
 ## Furniture sourcing (catalog variety pass)
 
