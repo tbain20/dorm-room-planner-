@@ -185,7 +185,7 @@ export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
 
-  const [room, setRoom] = useState({ w: 12, l: 14, h: 9 })
+  const [room, setRoom] = useState({ w: 12, l: 14, h: 9, notch: null })
   const [cart, setCart] = useState([])
   const [selection, setSelection] = useState(null)
   const [featureSelection, setFeatureSelection] = useState(null)
@@ -470,6 +470,27 @@ export default function App() {
     const next = { ...room, [key]: parseFloat(value) || room[key] }
     setRoom(next)
     engineRef.current?.setRoomDims(next.w, next.l, next.h)
+  }
+
+  // Room shape: one rectangular cutout/bump-out on a single wall (not a full polygon editor —
+  // see roomEngine.js's setRoomNotch/_roomOutline for how it's clamped and rendered). depth is
+  // signed: negative cuts into the room (an alcove), positive bumps the boundary out past the
+  // wall (an extension).
+  function handleAddNotch() {
+    const next = { wall: 'back', offset: room.w / 2, width: 3, depth: -2 }
+    setRoom((r) => ({ ...r, notch: next }))
+    engineRef.current?.setRoomNotch(next)
+  }
+
+  function handleNotchChange(partial) {
+    const next = { ...room.notch, ...partial }
+    setRoom((r) => ({ ...r, notch: next }))
+    engineRef.current?.setRoomNotch(next)
+  }
+
+  function handleRemoveNotch() {
+    setRoom((r) => ({ ...r, notch: null }))
+    engineRef.current?.setRoomNotch(null)
   }
 
   function handleAddDoor() {
@@ -835,6 +856,87 @@ export default function App() {
                 <button className="structure-btn" onClick={handleAddDoor}>+ Door</button>
                 <button className="structure-btn" onClick={handleAddWindow}>+ Window</button>
               </div>
+
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Room shape
+                </div>
+                {!room.notch ? (
+                  <button className="structure-btn" onClick={handleAddNotch}>+ Cutout / bump-out</button>
+                ) : (
+                  <>
+                    <div className="sub" style={{ marginTop: 0, marginBottom: 6 }}>
+                      One rectangular cutout (an alcove) or bump-out (extends past the wall).
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+                      {['back', 'front', 'left', 'right'].map((wall) => (
+                        <button
+                          key={wall}
+                          onClick={() => handleNotchChange({ wall })}
+                          style={{
+                            border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
+                            background: room.notch.wall === wall ? 'var(--accent)' : 'var(--paper-shadow)',
+                            color: room.notch.wall === wall ? '#fff' : 'var(--ink-soft)',
+                          }}
+                        >
+                          {wall}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                      <button
+                        onClick={() => handleNotchChange({ depth: -Math.abs(room.notch.depth || 2) })}
+                        style={{
+                          flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
+                          background: room.notch.depth < 0 ? 'var(--accent)' : 'var(--paper-shadow)',
+                          color: room.notch.depth < 0 ? '#fff' : 'var(--ink-soft)',
+                        }}
+                      >
+                        Cut in
+                      </button>
+                      <button
+                        onClick={() => handleNotchChange({ depth: Math.abs(room.notch.depth || 2) })}
+                        style={{
+                          flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
+                          background: room.notch.depth > 0 ? 'var(--accent)' : 'var(--paper-shadow)',
+                          color: room.notch.depth > 0 ? '#fff' : 'var(--ink-soft)',
+                        }}
+                      >
+                        Bump out
+                      </button>
+                    </div>
+                    <div className="dim-row">
+                      <label>Width</label>
+                      <input
+                        type="number" value={room.notch.width} min={1} max={Math.max(1, (room.notch.wall === 'left' || room.notch.wall === 'right' ? room.l : room.w) - 1)} step={0.5}
+                        onChange={(e) => handleNotchChange({ width: parseFloat(e.target.value) || room.notch.width })}
+                      />
+                      <span className="unit">ft</span>
+                    </div>
+                    <div className="dim-row">
+                      <label>Depth</label>
+                      <input
+                        type="number" value={Math.abs(room.notch.depth)} min={0.5} step={0.5}
+                        onChange={(e) => {
+                          const mag = parseFloat(e.target.value)
+                          if (!mag) return
+                          handleNotchChange({ depth: room.notch.depth < 0 ? -mag : mag })
+                        }}
+                      />
+                      <span className="unit">ft</span>
+                    </div>
+                    <div className="dim-row">
+                      <label>Position</label>
+                      <input
+                        type="number" value={room.notch.offset} min={0} step={0.5}
+                        onChange={(e) => handleNotchChange({ offset: parseFloat(e.target.value) })}
+                      />
+                      <span className="unit">ft</span>
+                    </div>
+                    <button onClick={handleRemoveNotch} style={{ marginTop: 6 }}>Remove cutout</button>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -883,6 +985,29 @@ export default function App() {
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--ink-soft)' }}>Height</span>
                   <span>{formatFeetInches(selection.cat.dims[2])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[2]}')</span></span>
+                </div>
+              </div>
+            )}
+
+            {selection.cat.bedHeights && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Bed height
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['low', 'standard', 'lofted'].map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => engineRef.current.setBedHeight(selection.uid, level)}
+                      style={{
+                        flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
+                        background: (selection.bedHeightLevel || 'standard') === level ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: (selection.bedHeightLevel || 'standard') === level ? '#fff' : 'var(--ink-soft)',
+                      }}
+                    >
+                      {level}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

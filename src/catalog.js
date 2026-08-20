@@ -78,19 +78,49 @@ export function resolveRelatedItems(cat) {
     .filter(Boolean)
 }
 
+// Bed frames that support the Low/Standard/Lofted height presets (see 'Adjustable bed height' in
+// roomEngine.js) get a bedHeights map: the world-space Y (in feet, off the floor) that the
+// sleeping surface — and anything stacked on it — sits at for each preset. Modeled on how
+// Colgate's real frames have a few fixed peg positions rather than infinite adjustment. Bunk beds
+// don't get this — real Colgate bunks are a fixed configuration, no peg adjustment.
 export const CATALOG = [
   // ---- Bedding ----
-  { id: 'mattress', name: 'Twin XL Mattress', price: 159, retailer: 'Amazon', dims: [3.3, 6.3, 0.8], color: 0xd8cbb0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed', 'chk:mattress-protector', 'chk:fitted-sheets-2-3-sets', 'chk:pillows', 'chk:comforter'] },
+  // No standalone "mattress" prop anymore — every bed frame model (Kenney's kit beds, and
+  // colgate-bed's fused stackedModelUrl mattress) already renders its own sleeping surface, so a
+  // separate mattress box wasn't adding anything besides a stacking target. These are the loose
+  // bedding layers a student actually shops for, meant to be stacked directly onto a bed frame
+  // (topper → sheets → comforter → pillow — see roomEngine.js's multi-level stacking) via
+  // "Put on top of…". Flat, thin placeholder boxes sized to a twin mattress footprint, except the
+  // pillow, which reuses the existing pillow.glb (distinct catalog entry from Decor's
+  // 'throw-pillow' — same model, different price/category/relatedIds).
+  { id: 'mattress-topper', name: 'Mattress Topper', price: 49, retailer: 'Amazon', dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed', 'colgate-bed'] },
+  { id: 'mattress-protector', name: 'Mattress Protector', price: 25, retailer: 'Amazon', dims: [3.3, 6.3, 0.15], color: 0xf2efe6, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-topper', 'sheet-set', 'bed', 'colgate-bed'] },
+  { id: 'sheet-set', name: 'Sheet Set (Fitted + Flat)', price: 29, retailer: 'Target', dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed', 'colgate-bed'] },
+  { id: 'comforter', name: 'Comforter', price: 45, retailer: 'Target', dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed', 'colgate-bed'] },
+  { id: 'bed-pillow', name: 'Pillow', price: 15, retailer: 'Amazon', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed', 'colgate-bed'] },
+  { id: 'pillowcase-set', name: 'Pillowcase Set', price: 12, retailer: 'Target', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
 
   // ---- Furniture & Organization ----
-  { id: 'bed', name: 'Twin XL Bed Frame', price: 189, retailer: 'IKEA', dims: [3.4, 6.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedSingle.glb', relatedIds: ['mattress', 'nightstand', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  { id: 'bed', name: 'Twin XL Bed Frame', price: 189, retailer: 'IKEA', dims: [3.4, 6.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedSingle.glb', bedHeights: { low: 0.5, standard: 1.0, lofted: 1.7 }, relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
   // Variety additions (see public/models/LICENSES.md) — same category/id-suffix convention as the
   // Colgate-chest/purchasable-chest split earlier: new ids alongside the original, not replacing
   // it. Full/double doesn't fit a standard dorm frame, but plenty of this app's users aren't in a
   // dorm at all (apartment, off-campus) — see the "not every user is a Colgate student" note on
   // the Colgate section below.
-  { id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [4.5, 6.4, 2.2], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedDouble.glb', relatedIds: ['mattress', 'nightstand', 'chk:mattress-protector', 'chk:comforter'] },
-  { id: 'bed-bunk', name: 'Bunk Bed Frame', price: 349, retailer: 'Amazon', dims: [3.4, 6.5, 5.5], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedBunk.glb', relatedIds: ['mattress', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'] },
+  //
+  // Both now render as the real Colgate bed frame (ColgateBed.glb) instead of the old Kenney-kit
+  // bed models, scaled to their own dims — same modelRotationY/tintMaterial treatment colgate-bed
+  // below already uses. The twin ('bed' above) is deliberately left as bedSingle.glb — it's the
+  // one frame that's already Colgate-accurate in spirit as a plain purchasable twin.
+  { id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [4.5, 6.4, 2.2], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedHeights: { low: 0.5, standard: 1.1, lofted: 1.9 }, relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'] },
+  // Rendered as two Colgate frames stacked (bottom bunk's own frame, then a second copy fused on
+  // top via the same stackedModelUrl mechanism colgate-bed uses for its mattress) rather than one
+  // model stretched to the full 5.5' height — a single stretched frame would just look like one
+  // oversized, distorted bed rather than an actual bunk. primaryModelFitDims sizes the bottom
+  // frame to its own real proportions instead of the item's full dims (see _loadItemMesh in
+  // roomEngine.js); dims stays the true overall footprint/height for room clamping and stacking.
+  // No bedHeights — real Colgate bunks are a fixed configuration, no peg adjustment.
+  { id: 'bed-bunk', name: 'Bunk Bed Frame', price: 349, retailer: 'Amazon', dims: [3.4, 6.5, 5.5], primaryModelFitDims: [3.4, 6.5, 2.75], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/ColgateBed.glb', stackedModelRotationY: Math.PI / 2, stackedDims: [3.4, 6.5, 2.75], stackedYOffset: 2.75, stackedColor: 0x8a6b4f, relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'] },
   { id: 'underbed-bins', name: 'Under-Bed Storage Bins (2)', price: 24, retailer: 'Target', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed'] },
   { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb', relatedIds: ['bed', 'desk-lamp'] },
@@ -129,9 +159,12 @@ export const CATALOG = [
   // ---- Kitchen & Food ----
   { id: 'fridge', name: 'Mini Fridge', price: 139, retailer: 'Best Buy', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
   { id: 'microwave', name: 'Microwave', price: 79, retailer: 'Best Buy', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Target', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['electric-kettle', 'fridge'] },
+  { id: 'electric-kettle', name: 'Electric Kettle', price: 25, retailer: 'Amazon', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
 
   // ---- Cleaning Supplies ----
   { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] },
+  { id: 'handheld-vacuum', name: 'Handheld Vacuum', price: 45, retailer: 'Target', dims: [0.5, 1.1, 0.6], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', relatedIds: ['trash-can'] },
 
   // ---- Laundry ----
   { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/coatRackStanding.glb', relatedIds: ['hamper', 'chk:detergent'] },
@@ -150,6 +183,12 @@ export const CATALOG = [
   { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
   { id: 'throw-pillow', name: 'Throw Pillow', price: 15, retailer: 'Target', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pillow.glb', relatedIds: ['loveseat', 'accent-chair'] },
   { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', relatedIds: ['dresser'] },
+  { id: 'poster', name: 'Poster', price: 12, retailer: 'Amazon', dims: [2.0, 0.05, 2.7], color: 0x4d6373, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster-landscape', 'flag'] },
+  { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
+  { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
+  { id: 'tapestry', name: 'Tapestry', price: 22, retailer: 'Amazon', dims: [4.5, 0.05, 5.5], color: 0x7a3f6b, category: 'Decor', subcategory: 'Wall', relatedIds: ['flag', 'chk:string-lights'] },
+  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster'] },
+  { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['mirror'] },
 
   // ---- Optional Luxury Items ----
   { id: 'beanbag', name: 'Bean Bag Chair', price: 69, retailer: 'Amazon', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
@@ -198,7 +237,10 @@ export const PROVIDED_CATALOG = [
   // an unmistakable flat plateau, i.e. the slat base — versus ~1000 vertices per bin everywhere
   // else (the thin corner posts). That local band scales to ~0.9-1.1ft of world height once
   // stretched to the 3.0ft dims target; 1.0ft is the middle of that, confirmed visually.
-  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/colgateMattress.glb', stackedDims: [6.67, 3.08, 0.5], stackedColor: 0xd8cbb0, stackedYOffset: 1.0, relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  // bedHeights models the real Colgate frame's peg positions (raise it and put the mattress on a
+  // higher rung to open up storage space underneath — "loft" it) — standard matches the original
+  // stackedYOffset (1.0ft) exactly, so existing saved layouts render unchanged by default.
+  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/colgateMattress.glb', stackedDims: [6.67, 3.08, 0.5], stackedColor: 0xd8cbb0, stackedYOffset: 1.0, bedHeights: { low: 0.5, standard: 1.0, lofted: 2.2 }, relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
   { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, relatedIds: ['lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
   { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateChair.glb', tintMaterial: true, relatedIds: ['colgate-desk'] },
   { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateWardrobe.glb', tintMaterial: true, relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },

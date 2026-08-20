@@ -28,7 +28,7 @@ export class RoomEngine {
     this.onFeatureSelectionChange = onFeatureSelectionChange || (() => {})
     this.onStackPickModeChange = onStackPickModeChange || (() => {})
 
-    this.room = { w: 12, l: 14, h: 9 }
+    this.room = { w: 12, l: 14, h: 9, notch: null }
     this.placedItems = [] // { mesh, catalogId, uid, stackedOnUid }
     this.selected = null
     this.selectionHelper = null
@@ -124,8 +124,21 @@ export class RoomEngine {
 
   // ---------- Room ----------
   setRoomDims(w, l, h) {
-    this.room = { w, l, h }
+    this.room = { ...this.room, w, l, h }
     this.buildRoom()
+    this._reclampAllItems()
+  }
+
+  // notch is null, or { wall, offset, width, depth } — see _roomOutline()/_clampedNotch() below
+  // for the exact convention. A single rectangular cutout (depth < 0, an inset alcove) or
+  // bump-out (depth > 0, extends past the wall) on one wall — not a general polygon editor.
+  setRoomNotch(notch) {
+    this.room = { ...this.room, notch }
+    this.buildRoom()
+    this._reclampAllItems()
+  }
+
+  _reclampAllItems() {
     // Un-stacked items first — a stacked item's own clamp depends on its base's (possibly
     // just-moved) position, and stacking order isn't the same as placedItems array order (you
     // can place the base after the item that ends up on top of it).
@@ -139,12 +152,75 @@ export class RoomEngine {
     })
   }
 
+  // Clamps a raw notch spec (whatever the UI last set) to something geometrically sane: enough
+  // flat wall left on either side of the cutout to still read as a wall, and a depth that can't
+  // turn the floor polygon self-intersecting (an inset can't eat more than ~60% of the room's
+  // other dimension; a bump-out is capped at a generous but finite size).
+  _clampedNotch() {
+    const notch = this.room.notch
+    if (!notch) return null
+    const { w, l } = this.room
+    const wallLen = notch.wall === 'left' || notch.wall === 'right' ? l : w
+    const margin = 0.5
+    const maxWidth = Math.max(1, wallLen - margin * 2)
+    const width = Math.max(1, Math.min(maxWidth, notch.width))
+    const half = width / 2
+    const offset = Math.max(margin + half, Math.min(wallLen - margin - half, notch.offset))
+    const otherDim = notch.wall === 'left' || notch.wall === 'right' ? w : l
+    const maxInset = Math.max(0.5, otherDim * 0.6 - 1)
+    const depth = notch.depth >= 0 ? Math.min(notch.depth, 8) : Math.max(notch.depth, -maxInset)
+    return { wall: notch.wall, offset, width, depth }
+  }
+
+  // Per-wall description of "which world axis runs perpendicular to this wall, which way is
+  // outward, and which axis runs along it" — lets the notch/outline/clamp code treat all four
+  // walls with the same formulas instead of one-off branches per wall.
+  _notchAxes(wall) {
+    const { w, l } = this.room
+    switch (wall) {
+      case 'back': return { perp: 'z', perpSign: -1, wallCoord: -l / 2, lateral: 'x', lateralOrigin: -w / 2 }
+      case 'front': return { perp: 'z', perpSign: 1, wallCoord: l / 2, lateral: 'x', lateralOrigin: -w / 2 }
+      case 'left': return { perp: 'x', perpSign: -1, wallCoord: -w / 2, lateral: 'z', lateralOrigin: -l / 2 }
+      default: return { perp: 'x', perpSign: 1, wallCoord: w / 2, lateral: 'z', lateralOrigin: -l / 2 }
+    }
+  }
+
+  // The room's floor/wall footprint as an ordered polygon (world x/z), walked back(BL→BR) →
+  // right(BR→FR) → front(FR→FL) → left(FL→BL, wrapping). A plain rectangle is just the 4
+  // corners; a notch splices 4 extra points into whichever wall's edge it sits on, in the
+  // direction that edge is already being walked, forming the L-shaped cutout or bump.
+  _roomOutline() {
+    const { w, l } = this.room
+    const BL = [-w / 2, -l / 2], BR = [w / 2, -l / 2], FR = [w / 2, l / 2], FL = [-w / 2, l / 2]
+    const notch = this._clampedNotch()
+    if (!notch) return [BL, BR, FR, FL]
+
+    const axes = this._notchAxes(notch.wall)
+    const half = notch.width / 2
+    const latCenter = axes.lateralOrigin + notch.offset
+    const a0 = latCenter - half
+    const a1 = latCenter + half
+    const boundary = axes.wallCoord + axes.perpSign * notch.depth
+
+    if (notch.wall === 'back') return [BL, [a0, -l / 2], [a0, boundary], [a1, boundary], [a1, -l / 2], BR, FR, FL]
+    if (notch.wall === 'right') return [BL, BR, [w / 2, a0], [boundary, a0], [boundary, a1], [w / 2, a1], FR, FL]
+    if (notch.wall === 'front') return [BL, BR, FR, [a1, l / 2], [a1, boundary], [a0, boundary], [a0, l / 2], FL]
+    return [BL, BR, FR, FL, [-w / 2, a1], [boundary, a1], [boundary, a0], [-w / 2, a0]] // left
+  }
+
   buildRoom() {
     this.roomGroup.clear()
     const { w, l, h } = this.room
+    const outline = this._roomOutline()
 
+    // Local shape coords are (x, -z) — after the same rotation.x = -Math.PI/2 used to lay the
+    // old plain-rectangle floor flat, that maps back to world (x, 0, z), so a plain rectangle
+    // produces byte-identical geometry to the previous PlaneGeometry(w, l).
+    const shape = new THREE.Shape()
+    outline.forEach(([x, z], i) => (i === 0 ? shape.moveTo(x, -z) : shape.lineTo(x, -z)))
+    shape.closePath()
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, l),
+      new THREE.ShapeGeometry(shape),
       new THREE.MeshStandardMaterial({ color: 0xd7be99, side: THREE.DoubleSide, roughness: 0.9 })
     )
     floor.rotation.x = -Math.PI / 2
@@ -171,13 +247,19 @@ export class RoomEngine {
       line.rotation.copy(mesh.rotation)
       this.roomGroup.add(line)
     }
-    // All four walls, so doors/windows can go on any side — front/right are fainter (lower
-    // opacity) since they're most often the ones behind the default camera angle, between the
-    // viewer and the room.
-    addWall(w, h, 0, -l / 2, 0) // back
-    addWall(l, h, -w / 2, 0, Math.PI / 2) // left
-    addWall(w, h, 0, l / 2, 0) // front
-    addWall(l, h, w / 2, 0, Math.PI / 2) // right
+    // Walls follow the room's outline polygon edge by edge — a plain rectangle produces exactly
+    // the original 4 wall segments (back/left/front/right, matching the old fixed calls); a
+    // notch/bump-out adds extra short segments around the cutout.
+    for (let i = 0; i < outline.length; i++) {
+      const [x0, z0] = outline[i]
+      const [x1, z1] = outline[(i + 1) % outline.length]
+      const dx = x1 - x0
+      const dz = z1 - z0
+      const segWidth = Math.hypot(dx, dz)
+      if (segWidth < 0.01) continue
+      const rotY = Math.abs(dz) > Math.abs(dx) ? Math.PI / 2 : 0
+      addWall(segWidth, h, (x0 + x1) / 2, (z0 + z1) / 2, rotY)
+    }
 
     this.fitCamera()
     this._repositionAllFeatures()
@@ -247,20 +329,29 @@ export class RoomEngine {
           if (cat.modelRotationY) gltf.scene.rotation.y = cat.modelRotationY
           if (cat.tintMaterial) this._tintModel(gltf.scene, cat.color)
           const group = new THREE.Group()
-          this._fitModelToDims(gltf.scene, cat.dims)
+          // primaryModelFitDims lets the visible primary model be fit to its own proportions
+          // (e.g. the bunk bed's bottom frame, a fraction of the bed's overall height) separately
+          // from cat.dims, which stays the item's true overall footprint/height everywhere else
+          // (room clamping, the selection panel, stacking) — falls back to cat.dims for every
+          // other item, unchanged from before.
+          this._fitModelToDims(gltf.scene, cat.primaryModelFitDims || cat.dims)
           group.add(gltf.scene)
 
-          // stackedModelUrl renders a second model (e.g. the mattress) fused onto this one as a
-          // single placeable item — sized to its own real dims and set on top of this model's
-          // fitted height, rather than a second flat box overlapping it at floor level.
+          // stackedModelUrl renders a second model (e.g. a fused mattress, or the bunk bed's top
+          // frame) onto this one as a single placeable item — sized to its own real dims and set
+          // on top at stackedYOffset, rather than a second flat box overlapping it at floor level.
           if (cat.stackedModelUrl) {
             try {
               const stackedGltf = await this._loadGltf(cat.stackedModelUrl)
+              if (cat.stackedModelRotationY) stackedGltf.scene.rotation.y = cat.stackedModelRotationY
               if (cat.stackedColor) this._tintModel(stackedGltf.scene, cat.stackedColor)
               this._fitModelToDims(stackedGltf.scene, cat.stackedDims)
               const stackY = cat.stackedYOffset != null ? cat.stackedYOffset : cat.dims[2] - cat.stackedDims[2]
               stackedGltf.scene.position.y += stackY
               group.add(stackedGltf.scene)
+              // Referenced by setBedHeight() to move a fused-on mattress (e.g. colgate-bed) when
+              // the bed's height preset changes.
+              group.userData.stackedObj = stackedGltf.scene
             } catch (err) {
               console.warn(`Stacked model failed to load for "${cat.name}".`, err)
             }
@@ -293,12 +384,68 @@ export class RoomEngine {
     return swapped ? [d, w] : [w, d]
   }
 
+  // Base case: clamp to the room's bounding rectangle, same as always. When a notch is present,
+  // that's refined afterward — for an inset, pushed back out of the carved-out area; for a
+  // bump-out, allowed to extend further out into it. Since the room is always "rectangle ± one
+  // axis-aligned rectangle," this stays simple axis math rather than general polygon containment.
   _clampItemToRoom(mesh) {
     const [w, d] = this._footprint(mesh)
-    const halfW = this.room.w / 2 - w / 2
-    const halfL = this.room.l / 2 - d / 2
-    mesh.position.x = Math.max(-halfW, Math.min(halfW, mesh.position.x))
-    mesh.position.z = Math.max(-halfL, Math.min(halfL, mesh.position.z))
+    const hw = w / 2, hd = d / 2
+    const rawX = mesh.position.x, rawZ = mesh.position.z
+    const halfW = this.room.w / 2 - hw
+    const halfL = this.room.l / 2 - hd
+    const pos = {
+      x: Math.max(-halfW, Math.min(halfW, rawX)),
+      z: Math.max(-halfL, Math.min(halfL, rawZ)),
+    }
+
+    const notch = this._clampedNotch()
+    if (notch) {
+      const axes = this._notchAxes(notch.wall)
+      const half = notch.width / 2
+      const latCenter = axes.lateralOrigin + notch.offset
+      const latMin = latCenter - half
+      const latMax = latCenter + half
+      const perpHalf = axes.perp === 'x' ? hw : hd
+      const latHalf = axes.perp === 'x' ? hd : hw
+      const boundary = axes.wallCoord + axes.perpSign * notch.depth
+      const raw = { x: rawX, z: rawZ }
+
+      if (notch.depth > 0) {
+        // Bump-out: if the item's footprint fits within the notch's lateral span, let it slide
+        // out past the original wall line, up to the bump's outer edge.
+        const rawLat = raw[axes.lateral]
+        if (rawLat - latHalf >= latMin && rawLat + latHalf <= latMax) {
+          const wallLimit = axes.wallCoord - axes.perpSign * perpHalf
+          const extendedLimit = boundary - axes.perpSign * perpHalf
+          const rawPerp = raw[axes.perp]
+          pos[axes.perp] = axes.perpSign < 0
+            ? Math.max(extendedLimit, Math.min(wallLimit, rawPerp))
+            : Math.min(extendedLimit, Math.max(wallLimit, rawPerp))
+          pos[axes.lateral] = Math.max(latMin + latHalf, Math.min(latMax - latHalf, rawLat))
+        }
+      } else if (notch.depth < 0) {
+        // Inset: if the (already wall-clamped) footprint overlaps the carved-out rectangle,
+        // push it back out along whichever axis needs the smaller nudge.
+        const overlapsLateral = pos[axes.lateral] + latHalf > latMin && pos[axes.lateral] - latHalf < latMax
+        const intrudesPerp = axes.perpSign < 0
+          ? pos[axes.perp] - perpHalf < boundary
+          : pos[axes.perp] + perpHalf > boundary
+        if (overlapsLateral && intrudesPerp) {
+          const perpPushTo = boundary + axes.perpSign * perpHalf
+          const perpPush = Math.abs(perpPushTo - pos[axes.perp])
+          const latLow = latMin - latHalf
+          const latHigh = latMax + latHalf
+          const latPushLow = Math.abs(latLow - pos[axes.lateral])
+          const latPushHigh = Math.abs(latHigh - pos[axes.lateral])
+          if (perpPush <= Math.min(latPushLow, latPushHigh)) pos[axes.perp] = perpPushTo
+          else pos[axes.lateral] = latPushLow < latPushHigh ? latLow : latHigh
+        }
+      }
+    }
+
+    mesh.position.x = pos.x
+    mesh.position.z = pos.z
   }
 
   // Keeps a stacked item's footprint within the item it's resting on, the same way
@@ -354,7 +501,7 @@ export class RoomEngine {
     mesh.userData.uid = uid
     mesh.userData.catalogId = cat.id
     this.itemsGroup.add(mesh)
-    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null })
+    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard' })
     this._clampItemToRoom(mesh)
     this._emitCart()
     return uid
@@ -366,19 +513,36 @@ export class RoomEngine {
     if (idx === -1) return
     this.itemsGroup.remove(this.placedItems[idx].mesh)
     this.placedItems.splice(idx, 1)
-    // Anything resting on the removed item falls back to the floor rather than floating in
-    // place or disappearing along with it.
-    let selectedAffected = false
-    this.placedItems.forEach((p) => {
-      if (p.stackedOnUid === uid) {
-        p.mesh.position.y = 0
-        p.stackedOnUid = null
-        if (this.selected && this.selected.uid === p.uid) selectedAffected = true
-      }
-    })
+    // Anything resting on the removed item — directly, or several layers up a bedding stack —
+    // falls back to the floor rather than floating in place or disappearing along with it.
+    const affected = this._collectDescendantUids(uid)
+    this._dropDescendants(uid)
+    const selectedAffected = this.selected != null && affected.has(this.selected.uid)
     if (this.selected && this.selected.uid === uid) this.deselectItem()
     else if (selectedAffected) this._emitSelection()
     this._emitCart()
+  }
+
+  // Every item (direct or indirect) currently resting on top of uid, as a set of uids.
+  _collectDescendantUids(uid, acc = new Set()) {
+    this.placedItems.forEach((p) => {
+      if (p.stackedOnUid === uid) {
+        acc.add(p.uid)
+        this._collectDescendantUids(p.uid, acc)
+      }
+    })
+    return acc
+  }
+
+  // Sends every item currently stacked on uid (and transitively, anything stacked on those) back
+  // down to the floor — used when uid itself is removed or picked up to drag, since the surface
+  // they were resting on is gone/moving. Mirrors _collectDescendantUids's walk but mutates.
+  _dropDescendants(uid) {
+    this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
+      child.mesh.position.y = 0
+      child.stackedOnUid = null
+      this._dropDescendants(child.uid)
+    })
   }
 
   clearAll() {
@@ -424,7 +588,7 @@ export class RoomEngine {
       return
     }
     const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
-    this.onSelectionChange({ uid: this.selected.uid, cat, stackedOnUid: this.selected.stackedOnUid })
+    this.onSelectionChange({ uid: this.selected.uid, cat, stackedOnUid: this.selected.stackedOnUid, bedHeightLevel: this.selected.bedHeightLevel })
   }
 
   // ---------- Stacking one item on top of another (e.g. a TV on a table) ----------
@@ -451,28 +615,84 @@ export class RoomEngine {
     }
   }
 
+  // What Y an item sitting on top of `placedItem` should rest at. Normally that's just the top
+  // of its own bounding box (dims[2]) — but a bed with bedHeights (see catalog.js) has its real
+  // sleeping surface well below the top of its frame/headboard, at whichever height preset is
+  // currently selected, so stacking directly onto a bed frame (e.g. a mattress topper) lands at
+  // the actual mattress height instead of floating at headboard height.
+  _topSurfaceY(placedItem) {
+    const cat = ALL_ITEMS.find((c) => c.id === placedItem.catalogId)
+    if (cat && cat.bedHeights) {
+      const level = placedItem.bedHeightLevel || 'standard'
+      return placedItem.mesh.position.y + cat.bedHeights[level]
+    }
+    return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2]
+  }
+
+  // Stacking is arbitrary-depth (a topper, then a sheet set, then a comforter, then a pillow can
+  // all layer onto one bed frame via repeated "Put on top of…") rather than the single-level cap
+  // this used to have — the Y math already generalizes (targetTopY is computed off whatever's
+  // currently on top of the target), so the only real addition is the cycle guard below.
   stackItemOn(sourceUid, targetUid) {
     if (sourceUid === targetUid) return
     const source = this.placedItems.find((p) => p.uid === sourceUid)
     const target = this.placedItems.find((p) => p.uid === targetUid)
     if (!source || !target) return
-    if (target.stackedOnUid != null) return // no stacking two levels deep
-    const targetTopY = target.mesh.position.y + target.mesh.userData.dims[2]
-    source.mesh.position.y = targetTopY
+    // Refuse to stack an item onto one of its own descendants (would create a cycle).
+    let ancestor = target
+    while (ancestor) {
+      if (ancestor.uid === sourceUid) return
+      ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
+    }
+    source.mesh.position.y = this._topSurfaceY(target)
     source.mesh.position.x = target.mesh.position.x
     source.mesh.position.z = target.mesh.position.z
     source.stackedOnUid = targetUid
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
 
+  // Repositions everything directly stacked on uid to sit at its current top surface (and
+  // recurses so a whole multi-layer bedding stack rides along together) — used after something
+  // moves the base item's effective top without a drag (bed height changes, loading a save).
+  _restackAbove(uid) {
+    const parent = this.placedItems.find((p) => p.uid === uid)
+    if (!parent) return
+    const topY = this._topSurfaceY(parent)
+    this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
+      child.mesh.position.y = topY
+      child.mesh.position.x = parent.mesh.position.x
+      child.mesh.position.z = parent.mesh.position.z
+      this._restackAbove(child.uid)
+    })
+  }
+
   // Picks the item back up off whatever it was resting on and sets it back down on the floor at
   // its current x/z — the inverse of stackItemOn(). The only way an item comes back down; simply
   // dragging it around while stacked keeps it up there (see the pointermove handler below).
+  // Anything stacked on top of it rides back down too, via _restackAbove.
   unstackItem(uid) {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item || item.stackedOnUid == null) return
     item.mesh.position.y = 0
     item.stackedOnUid = null
+    this._restackAbove(uid)
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
+  }
+
+  // Bed height presets (Low/Standard/Lofted) — see catalog.js's bedHeights. Moves the bed's own
+  // fused mattress (colgate-bed's stackedModelUrl model, tracked as mesh.userData.stackedObj) if
+  // it has one, and cascades the change to anything resting on the bed (a loose bedding stack on
+  // a bare frame) via _restackAbove.
+  setBedHeight(uid, level) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (!cat || !cat.bedHeights || cat.bedHeights[level] == null) return
+    item.bedHeightLevel = level
+    if (item.mesh.userData.stackedObj) {
+      item.mesh.userData.stackedObj.position.y = cat.bedHeights[level]
+    }
+    this._restackAbove(uid)
     if (this.selected && this.selected.uid === uid) this._emitSelection()
   }
 
@@ -497,6 +717,7 @@ export class RoomEngine {
         z: p.mesh.position.z,
         rotY: p.mesh.rotation.y,
         stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
+        bedHeightLevel: p.bedHeightLevel,
       })),
       features: this.wallFeatures.map((f) => ({
         type: f.type,
@@ -557,8 +778,24 @@ export class RoomEngine {
       this._emitCart()
     } else {
       data.items.forEach((it, i) => {
+        // A catalogId from an older save can point at an item that's since been retired (e.g. a
+        // discontinued placeholder) — addItemAt silently no-ops for an unknown id without ever
+        // calling onRegistered, which would otherwise stall `remaining` forever and break
+        // stacking resolution for the *whole* layout, not just the missing item. Resolve
+        // synchronously here instead so a retired item is just skipped.
+        if (!ALL_ITEMS.find((c) => c.id === it.catalogId)) {
+          uidsByIndex[i] = null
+          remaining -= 1
+          if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
+          return
+        }
         this.addItemAt(it.catalogId, it.x, it.z, it.rotY, (uid) => {
           uidsByIndex[i] = uid
+          // Only bother repositioning when it differs from the freshly-registered default
+          // ('standard') — this also runs setBedHeight's cascade to anything already stacked on
+          // it, though nothing will be yet; _resolveLoadedStacking below re-stacks using
+          // _topSurfaceY, which already reads the level set here.
+          if (it.bedHeightLevel && it.bedHeightLevel !== 'standard') this.setBedHeight(uid, it.bedHeightLevel)
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
         })
@@ -609,7 +846,30 @@ export class RoomEngine {
   _clampFeatureOffset(wall, width, offset) {
     const { length } = this._wallConfig(wall)
     const half = Math.min(width / 2, length / 2)
-    return Math.max(half, Math.min(length - half, offset))
+    let clamped = Math.max(half, Math.min(length - half, offset))
+
+    // A door/window still only ever names one of the 4 original walls (a notch never adds a 5th
+    // named wall) — but if that wall has a notch cut into or out of it, keep the feature off the
+    // cutout's span so it doesn't end up floating over open air. Notch `offset`/`width` already
+    // use the exact same "distance along the wall from its start corner" convention as feature
+    // offsets, so the forbidden span is just [notch.offset ± notch.width/2] directly.
+    const notch = this._clampedNotch()
+    if (notch && notch.wall === wall) {
+      const nHalf = notch.width / 2
+      const forbidLow = notch.offset - nHalf - half
+      const forbidHigh = notch.offset + nHalf + half
+      if (clamped > forbidLow && clamped < forbidHigh) {
+        const leftFits = forbidLow >= half
+        const rightFits = forbidHigh <= length - half
+        const distLeft = Math.abs(clamped - forbidLow)
+        const distRight = Math.abs(forbidHigh - clamped)
+        if (leftFits && (!rightFits || distLeft <= distRight)) clamped = forbidLow
+        else if (rightFits) clamped = forbidHigh
+        // else: neither flat segment is wide enough for this feature — leave it centered on the
+        // clamp as a last resort; _clampedNotch()'s own margins make this vanishingly rare.
+      }
+    }
+    return clamped
   }
 
   _buildFeatureMesh(feature) {
@@ -855,15 +1115,10 @@ export class RoomEngine {
         // whatever it's resting on, clamped to that item's footprint instead of the room's walls
         // (see the pointermove handler and _clampStackedItem below). Only the explicit "Place on
         // floor" button (unstackItem) sends it back down — dragging alone never does. Anything
-        // resting on *this* item still falls to the floor when this item itself gets picked up,
-        // though — the surface it was on is about to move out from under it, and following it in
-        // real time isn't supported.
-        this.placedItems.forEach((p) => {
-          if (p.stackedOnUid === item.uid) {
-            p.mesh.position.y = 0
-            p.stackedOnUid = null
-          }
-        })
+        // resting on *this* item — directly, or several layers up a bedding stack — still falls
+        // to the floor when this item itself gets picked up, though: the surface it was on is
+        // about to move out from under it, and following it in real time isn't supported.
+        this._dropDescendants(item.uid)
         this.selectItem(item.uid)
         const floorPt = getFloorPoint()
         this.dragOffset.set(item.mesh.position.x - floorPt.x, 0, item.mesh.position.z - floorPt.z)
