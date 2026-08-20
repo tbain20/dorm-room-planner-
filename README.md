@@ -87,9 +87,12 @@ public/
 - Packing checklist tab, seeded from Tyler's full ~150-item list on first visit, grouped/
   collapsible like the Catalog tab, with a "hide packed" toggle — see "Packing checklist tab"
   below. Code-reviewed but not yet tested against a live signed-in session (see that section).
-- "Goes well with" suggestions when you select a placed item (bed, desk, chair, wardrobe, TV so
-  far) — one-click add a related item to the room or the checklist. See "'Goes well with' popup"
-  below.
+- "Goes well with" suggestions when you select a placed item — now on all 44 catalog items, not
+  just a handful. See "'Goes well with' popup" below and "Item dimensions, stacking, and
+  checklist/suggestions fixes" for the expansion.
+- A "📏 Dimensions" button on the selection panel (width/depth/height, feet+inches), and stacking
+  one item on top of another (e.g. a TV on a desk) via "⬆ Put on top of…" — see "Item dimensions,
+  stacking, and checklist/suggestions fixes" below.
 - Shopping list with retailer links — currently plain search-result links. Affiliate tagging
   hook is in `catalog.js` (`AFFILIATE_TAGS`), just needs your real IDs once approved.
 - Touch: pinch-to-zoom, `touch-action: none` on the canvas, and a stacked mobile layout below
@@ -865,6 +868,71 @@ and conflict handling). The brief's own recommendation — start with the simple
 build this at all — still stands, but it's a genuine product decision (is this valuable enough to
 build now, given B1–B5 is already a large batch?) rather than something to default into. Worth its
 own short conversation before a session is spent on it either way.
+
+## Item dimensions, stacking, and checklist/suggestions fixes
+
+Three smaller, unrelated additions requested together — a dimensions button, stacking furniture
+on furniture (a TV on a table), and two checklist/catalog bugs (categories stuck at just Bedding,
+and "goes well with" suggestions only existing on a handful of items).
+
+- **Dimensions button**: selection panel already showed dims as a small inline line, easy to miss
+  — now there's also a dedicated "📏 Dimensions" button next to Rotate that toggles a detail box
+  showing width/depth/height in both the standard furniture-listing format (`3'5"`) and the raw
+  decimal feet already used elsewhere in the app (`formatFeetInches()` in `App.jsx`).
+- **Stacking one item on another** (e.g. a TV on a desk): deliberately button-driven, not
+  drag-based — the engine's drag model is floor-plane only (no vertical axis), so dragging
+  something up onto a surface would need real collision/surface detection to work reliably, and
+  the brief explicitly offered a button as an acceptable alternative. Select the item, click "⬆ Put
+  on top of…", then click any other placed item in the 3D view to complete it (or click the same
+  button again, or click empty floor, to cancel). Single-level only — an item that already has
+  something stacked on it can't itself become a target, so there's no risk of a physically dubious
+  three-item tower.
+  - **Picking an item up always sets it back on the floor**: dragging a stacked item off to
+    somewhere else automatically un-stacks it first (dragging is floor-plane movement, so a
+    "floating" item mid-drag would look broken) — re-stacking afterward is a deliberate action via
+    the button, not a side effect of nudging something.
+  - **Picking up the *base* drops whatever's resting on it**: start dragging the desk out from
+    under the TV, and the TV falls back to the floor in place rather than floating in mid-air or
+    silently teleporting along with the desk. Deleting a base item does the same for anything that
+    was stacked on it.
+  - **Persists through save/load**: `getState()` records stacking by *array position*
+    (`stackedOnIndex`), not the live uid — uids are freshly re-minted every time a layout loads
+    (several models load in parallel and don't necessarily finish in the order they started), so a
+    saved raw uid wouldn't mean anything on the next load. `loadState()` waits for every item in
+    the layout to finish loading, then resolves each `stackedOnIndex` back into a real stacking
+    relationship via `stackItemOn()`.
+  - **Verified live**: added a desk and a TV, called the actual `stackItemOn()`/`unstackItem()`
+    engine methods directly and confirmed the math (TV's Y lands exactly at the desk's height, X/Z
+    match the desk's position). Then verified the *real* UI path end to end with actual clicks
+    (not synthetic events — raw `dispatchEvent` `PointerEvent`s can't satisfy this browser's
+    `setPointerCapture`, confirmed via a `NotFoundError` in the console when I first tried that
+    route, so I switched to genuine click-tool clicks at camera-projected screen coordinates
+    instead): select TV → "Put on top of…" → click the desk → TV visually lands on the desk,
+    selection panel switches to "⬇ Place on floor". Clicked a real (non-stacked-item) point on the
+    desk while the TV was stacked and confirmed the TV visibly dropped to the floor at that exact
+    moment, matching the "picking up the base drops its contents" design. Round-tripped a stacked
+    layout through `getState()` → `loadState()` and confirmed the relationship survives with a
+    freshly re-minted uid.
+- **Checklist "only shows Bedding" — the real bug, not a missing feature**: `checklistItems.js`
+  already had all 11 categories fully populated; the bug was in `listChecklistItems()` in
+  `storage.js`, which only ever seeded `DEFAULT_CHECKLIST_ITEMS` once, on an account's very first
+  visit with zero rows. An account that first opened the Checklist tab back when that file only
+  covered a couple of categories got stuck there forever — later categories added to the file
+  never reached an existing account. Fixed to backfill per-category instead of once-globally: on
+  every load, any category the user has *literally zero rows in* gets seeded from
+  `DEFAULT_CHECKLIST_ITEMS`; a category they've already seen (even if they deleted every item down
+  to zero) is left alone, so this can never resurrect something someone deliberately removed —
+  only fills in categories that genuinely never existed for that account. **Needs you to test
+  signed in** — same auth limitation as every other checklist-touching change in this app (email
+  confirmation + no inbox access here).
+- **"Goes well with" suggestions on every item**: previously only ~8 of 44 catalog items had
+  `relatedIds` (a deliberately sparse starter set from when the feature first shipped). Every
+  catalog item — purchasable and Colgate-provided alike — now has 1-5 suggestions, picked for what
+  plausibly pairs with it in a real room (a dresser suggests a mirror, a mini fridge suggests a
+  microwave and a snack cart, a rug suggests a throw pillow, etc.), referencing either another
+  placeable catalog item or a `chk:`-prefixed checklist item. Wrote a quick Node script against the
+  actual `resolveRelatedItems()` function to confirm every single `relatedIds` entry across the
+  whole catalog resolves to something real — zero broken references, zero items still empty.
 
 ## Furniture sourcing (catalog variety pass)
 

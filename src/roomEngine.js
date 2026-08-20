@@ -21,17 +21,21 @@ const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
 export class RoomEngine {
-  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange }) {
+  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange }) {
     this.container = container
     this.onCartChange = onCartChange || (() => {})
     this.onSelectionChange = onSelectionChange || (() => {})
     this.onFeatureSelectionChange = onFeatureSelectionChange || (() => {})
+    this.onStackPickModeChange = onStackPickModeChange || (() => {})
 
     this.room = { w: 12, l: 14, h: 9 }
-    this.placedItems = [] // { mesh, catalogId, uid }
+    this.placedItems = [] // { mesh, catalogId, uid, stackedOnUid }
     this.selected = null
     this.selectionHelper = null
     this.uidCounter = 1
+    // uid of the item currently waiting for a "click another item to place it on top of" pick —
+    // null when no stacking pick is in progress. See startStackPick()/stackItemOn() below.
+    this.stackPickSourceUid = null
 
     this.wallFeatures = [] // { id, type: 'door'|'window', wall, offset, width, height, mesh }
     this.featureIdCounter = 1
@@ -249,14 +253,18 @@ export class RoomEngine {
     })
   }
 
-  addItemAt(catId, x, z, rotY) {
+  // onRegistered, if given, fires with the freshly-assigned uid once the (possibly async, for a
+  // glTF model) load finishes and the item actually lands in placedItems — used by loadState()
+  // below to know each restored item's uid so it can resolve stackedOnIndex references afterward.
+  addItemAt(catId, x, z, rotY, onRegistered) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
     this._loadItemMesh(cat, (mesh) => {
       mesh.position.x = x
       mesh.position.z = z
       mesh.rotation.y = rotY || 0
-      this._registerItem(mesh, cat)
+      const uid = this._registerItem(mesh, cat)
+      if (onRegistered) onRegistered(uid)
     })
   }
 
@@ -265,17 +273,30 @@ export class RoomEngine {
     mesh.userData.uid = uid
     mesh.userData.catalogId = cat.id
     this.itemsGroup.add(mesh)
-    this.placedItems.push({ mesh, catalogId: cat.id, uid })
+    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null })
     this._clampItemToRoom(mesh)
     this._emitCart()
+    return uid
   }
 
   removeItem(uid) {
+    this._cancelStackPickIfActive()
     const idx = this.placedItems.findIndex((p) => p.uid === uid)
     if (idx === -1) return
     this.itemsGroup.remove(this.placedItems[idx].mesh)
     this.placedItems.splice(idx, 1)
+    // Anything resting on the removed item falls back to the floor rather than floating in
+    // place or disappearing along with it.
+    let selectedAffected = false
+    this.placedItems.forEach((p) => {
+      if (p.stackedOnUid === uid) {
+        p.mesh.position.y = 0
+        p.stackedOnUid = null
+        if (this.selected && this.selected.uid === p.uid) selectedAffected = true
+      }
+    })
     if (this.selected && this.selected.uid === uid) this.deselectItem()
+    else if (selectedAffected) this._emitSelection()
     this._emitCart()
   }
 
@@ -291,6 +312,7 @@ export class RoomEngine {
   }
 
   selectItem(uid) {
+    this._cancelStackPickIfActive()
     this.deselectFeature()
     this.deselectItem()
     const item = this.placedItems.find((p) => p.uid === uid)
@@ -298,17 +320,78 @@ export class RoomEngine {
     this.selected = item
     this.selectionHelper = new THREE.BoxHelper(item.mesh, 0xc1502e)
     this.itemsGroup.add(this.selectionHelper)
-    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
-    this.onSelectionChange({ uid, cat })
+    this._emitSelection()
   }
 
   deselectItem() {
+    this._cancelStackPickIfActive()
     if (this.selectionHelper) {
       this.itemsGroup.remove(this.selectionHelper)
       this.selectionHelper = null
     }
     this.selected = null
     this.onSelectionChange(null)
+  }
+
+  // Re-reports the selected item's current state to React — needed after selecting it fresh, and
+  // again after stackItemOn()/unstackItem() mutate an already-selected item's stackedOnUid, so the
+  // selection panel's "Put on top of…" / "Place on floor" button stays in sync with reality.
+  _emitSelection() {
+    if (!this.selected) {
+      this.onSelectionChange(null)
+      return
+    }
+    const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
+    this.onSelectionChange({ uid: this.selected.uid, cat, stackedOnUid: this.selected.stackedOnUid })
+  }
+
+  // ---------- Stacking one item on top of another (e.g. a TV on a table) ----------
+  // Deliberately not drag-based — the engine's drag model is floor-plane only (no vertical axis),
+  // so "drag it up onto the table" would need real collision/surface detection to work reliably.
+  // A two-step pick flow (click "Put on top of…", then click the target item in the 3D view) is
+  // much simpler to get right and was explicitly offered as an acceptable alternative. Single-
+  // level only — an item that already has something stacked on it can't itself become a target,
+  // avoiding the complexity (and physically dubious result) of towers three items tall.
+  startStackPick(uid) {
+    if (!this.placedItems.find((p) => p.uid === uid)) return
+    this.stackPickSourceUid = uid
+    this.onStackPickModeChange(uid)
+  }
+
+  cancelStackPick() {
+    this._cancelStackPickIfActive()
+  }
+
+  _cancelStackPickIfActive() {
+    if (this.stackPickSourceUid != null) {
+      this.stackPickSourceUid = null
+      this.onStackPickModeChange(null)
+    }
+  }
+
+  stackItemOn(sourceUid, targetUid) {
+    if (sourceUid === targetUid) return
+    const source = this.placedItems.find((p) => p.uid === sourceUid)
+    const target = this.placedItems.find((p) => p.uid === targetUid)
+    if (!source || !target) return
+    if (target.stackedOnUid != null) return // no stacking two levels deep
+    const targetTopY = target.mesh.position.y + target.mesh.userData.dims[2]
+    source.mesh.position.y = targetTopY
+    source.mesh.position.x = target.mesh.position.x
+    source.mesh.position.z = target.mesh.position.z
+    source.stackedOnUid = targetUid
+    if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
+  }
+
+  // Picks the item back up off whatever it was resting on and sets it back down on the floor at
+  // its current x/z — the inverse of stackItemOn(). Also what a plain drag does automatically to
+  // a stacked item the moment you start moving it (see the pointerdown handler below).
+  unstackItem(uid) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item || item.stackedOnUid == null) return
+    item.mesh.position.y = 0
+    item.stackedOnUid = null
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
   }
 
   _emitCart() {
@@ -321,6 +404,9 @@ export class RoomEngine {
   }
 
   getState() {
+    // stackedOnIndex records *array position*, not uid — uids are freshly re-minted every time a
+    // layout loads (see loadState below), so a raw uid saved now wouldn't mean anything on the
+    // next load. Position within this same items array is stable across a save/load round trip.
     return {
       room: { ...this.room },
       items: this.placedItems.map((p) => ({
@@ -328,6 +414,7 @@ export class RoomEngine {
         x: p.mesh.position.x,
         z: p.mesh.position.z,
         rotY: p.mesh.rotation.y,
+        stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
       })),
       features: this.wallFeatures.map((f) => ({
         type: f.type,
@@ -377,8 +464,39 @@ export class RoomEngine {
     this.clearAll()
     this.room = { ...data.room }
     this.buildRoom()
-    data.items.forEach((it) => this.addItemAt(it.catalogId, it.x, it.z, it.rotY))
+    // Each item's glTF model loads async, and several load in parallel — the order they finish
+    // and get a uid assigned in has nothing to do with their order in data.items. uidsByIndex
+    // tracks "data.items[i] became placedItems uid ___" so stacking (recorded by array position
+    // at save time — see getState() above) can be resolved once every item has actually landed,
+    // regardless of load order.
+    const uidsByIndex = new Array(data.items.length)
+    let remaining = data.items.length
+    if (remaining === 0) {
+      this._emitCart()
+    } else {
+      data.items.forEach((it, i) => {
+        this.addItemAt(it.catalogId, it.x, it.z, it.rotY, (uid) => {
+          uidsByIndex[i] = uid
+          remaining -= 1
+          if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
+        })
+      })
+    }
     ;(data.features || []).forEach((f) => this.addFeatureAt(f.type, f.wall, f.offset, f.width, f.height))
+  }
+
+  _resolveLoadedStacking(savedItems, uidsByIndex) {
+    savedItems.forEach((it, i) => {
+      if (it.stackedOnIndex == null) return
+      const childUid = uidsByIndex[i]
+      const parentUid = uidsByIndex[it.stackedOnIndex]
+      // A referenced parent item can be missing if its own model failed to load entirely (the
+      // box-placeholder fallback still registers, so this is a defensive check, not an expected
+      // path) — skip rather than throw, leaving that one item resting on the floor instead.
+      if (childUid == null || parentUid == null) return
+      this.stackItemOn(childUid, parentUid)
+    })
+    this._emitCart()
   }
 
   // ---------- Wall features (doors & windows) ----------
@@ -544,6 +662,7 @@ export class RoomEngine {
   }
 
   selectFeature(id) {
+    this._cancelStackPickIfActive()
     this.deselectItem()
     this.deselectFeature()
     const feature = this.wallFeatures.find((f) => f.id === id)
@@ -626,24 +745,53 @@ export class RoomEngine {
       const itemMeshes = this.placedItems.map((p) => p.mesh)
       const featureMeshes = this.wallFeatures.map((f) => f.mesh)
       const hits = this.raycaster.intersectObjects([...itemMeshes, ...featureMeshes], true)
+      let item = null
+      let feature = null
       if (hits.length) {
         let hitMesh = hits[0].object
         while (hitMesh.parent && !this.placedItems.find((p) => p.mesh === hitMesh) && !this.wallFeatures.find((f) => f.mesh === hitMesh)) {
           hitMesh = hitMesh.parent
         }
-        const item = this.placedItems.find((p) => p.mesh === hitMesh)
-        const feature = this.wallFeatures.find((f) => f.mesh === hitMesh)
-        if (item) {
-          this.mode = 'drag-item'
-          this.selectItem(item.uid)
-          const floorPt = getFloorPoint()
-          this.dragOffset.set(hitMesh.position.x - floorPt.x, 0, hitMesh.position.z - floorPt.z)
-        } else if (feature) {
-          this.mode = 'drag-feature'
-          this.selectFeature(feature.id)
-          const floorPt = getFloorPoint()
-          this.dragOffset.x = feature.offset - offsetForFeature(feature, floorPt)
+        item = this.placedItems.find((p) => p.mesh === hitMesh)
+        feature = this.wallFeatures.find((f) => f.mesh === hitMesh)
+      }
+
+      // Stacking pick in progress: this click always resolves it (onto whatever item was hit, or
+      // cancels if nothing valid was) rather than falling through to a normal select/drag/orbit —
+      // otherwise a miss-click would silently leave the pick active with no visible feedback.
+      if (this.stackPickSourceUid != null) {
+        const sourceUid = this.stackPickSourceUid
+        this.stackPickSourceUid = null
+        this.onStackPickModeChange(null)
+        if (item && item.uid !== sourceUid) this.stackItemOn(sourceUid, item.uid)
+        return
+      }
+
+      if (item) {
+        this.mode = 'drag-item'
+        // Picking this item up to drag it: dragging is floor-plane only, so if it was resting on
+        // something, it comes back down to the floor (re-stacking is a deliberate action via the
+        // "Put on top of…" button, not an accident of nudging it sideways). Anything that was
+        // itself resting on this item falls to the floor too, since the surface it was on is
+        // about to move out from under it.
+        if (item.stackedOnUid != null) {
+          item.mesh.position.y = 0
+          item.stackedOnUid = null
         }
+        this.placedItems.forEach((p) => {
+          if (p.stackedOnUid === item.uid) {
+            p.mesh.position.y = 0
+            p.stackedOnUid = null
+          }
+        })
+        this.selectItem(item.uid)
+        const floorPt = getFloorPoint()
+        this.dragOffset.set(item.mesh.position.x - floorPt.x, 0, item.mesh.position.z - floorPt.z)
+      } else if (feature) {
+        this.mode = 'drag-feature'
+        this.selectFeature(feature.id)
+        const floorPt = getFloorPoint()
+        this.dragOffset.x = feature.offset - offsetForFeature(feature, floorPt)
       } else {
         this.mode = 'orbit'
         this.deselectItem()

@@ -629,9 +629,14 @@ export async function getPublicProfile(userId) {
   }
 }
 
-// Returns the signed-in user's packing checklist, seeding it from DEFAULT_CHECKLIST_ITEMS on
-// their very first visit (i.e. whenever they have zero rows yet). Later visits just return
-// whatever they've got — including any items they've since deleted or added.
+// Returns the signed-in user's packing checklist, seeding it from DEFAULT_CHECKLIST_ITEMS the
+// first time a given *category* shows up (not just once ever, on the very first load) — so an
+// account seeded back when checklistItems.js only covered a couple of categories automatically
+// backfills whichever ones were added to that file since, instead of staying stuck at whatever
+// existed the day the tab was first opened. Only ever adds items from a category the user has
+// literally zero rows in yet — a category they've already seen (even down to zero rows because
+// they deleted every default item in it) is left alone, so this never resurrects something
+// someone deliberately removed.
 export async function listChecklistItems() {
   const client = requireClient()
   const user = await requireUser(client)
@@ -644,9 +649,12 @@ export async function listChecklistItems() {
 
   const { data, error } = await select()
   if (error) throw error
-  if (data.length > 0) return data
 
-  const seedRows = DEFAULT_CHECKLIST_ITEMS.map((item) => ({
+  const existingCategories = new Set(data.map((row) => row.category))
+  const missing = DEFAULT_CHECKLIST_ITEMS.filter((item) => !existingCategories.has(item.category))
+  if (missing.length === 0) return data
+
+  const seedRows = missing.map((item) => ({
     user_id: user.id,
     label: item.label,
     category: item.category,

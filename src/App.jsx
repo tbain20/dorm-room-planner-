@@ -26,6 +26,16 @@ const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
 // room_type is stored as free text (see migration 006) but the app only ever writes one of these.
 const ROOM_TYPES = ['single', 'double', 'triple']
 
+// catalog dims are decimal feet (e.g. 3.4) — fine for the 3D math, not how anyone actually reads
+// furniture dimensions. Formats as feet'inches" (e.g. "3'5""), the standard furniture-listing
+// format, for the selection panel's Dimensions button.
+function formatFeetInches(ft) {
+  const totalInches = Math.round(ft * 12)
+  const feet = Math.floor(totalInches / 12)
+  const inches = totalInches % 12
+  return inches === 0 ? `${feet}'` : `${feet}'${inches}"`
+}
+
 // Real thumbnail rendered from the item's model when one exists; falls back to the flat color
 // swatch (plus a category icon, so it's not just a blank chip) for box-placeholder items or if
 // the image 404s — some future catalog item might get a modelUrl before anyone regenerates
@@ -180,6 +190,11 @@ export default function App() {
   const [selection, setSelection] = useState(null)
   const [featureSelection, setFeatureSelection] = useState(null)
   const [relatedNotice, setRelatedNotice] = useState('')
+  const [showDimensions, setShowDimensions] = useState(false)
+  // uid of the item currently waiting for a "click another item to place it on top of" pick, or
+  // null — mirrors the engine's own stackPickSourceUid (see roomEngine.js), reported back via the
+  // onStackPickModeChange callback so the selection panel can show the right button/hint.
+  const [stackPickForUid, setStackPickForUid] = useState(null)
   // Browse is the landing tab — the first thing anyone sees (signed in or not) is real layouts
   // from other students, not an empty room. "Catalog" is one click away for starting from scratch.
   const [tab, setTab] = useState('browse')
@@ -247,6 +262,7 @@ export default function App() {
       onCartChange: setCart,
       onSelectionChange: setSelection,
       onFeatureSelectionChange: setFeatureSelection,
+      onStackPickModeChange: setStackPickForUid,
     })
     engineRef.current = engine
     return () => engine.destroy()
@@ -266,6 +282,7 @@ export default function App() {
 
   useEffect(() => {
     setRelatedNotice('')
+    setShowDimensions(false)
   }, [selection])
 
   useEffect(() => {
@@ -490,6 +507,13 @@ export default function App() {
 
   function handleAddRelatedToRoom(catalogId) {
     engineRef.current.addItem(catalogId)
+  }
+
+  // Same button toggles "start picking" / "cancel picking" — clicking it again while already
+  // picking for this same item cancels, rather than needing a separate Cancel control.
+  function handleToggleStackPick(uid) {
+    if (stackPickForUid === uid) engineRef.current.cancelStackPick()
+    else engineRef.current.startStackPick(uid)
   }
 
   async function handleAddRelatedToChecklist(related) {
@@ -835,7 +859,60 @@ export default function App() {
               >
                 ⟳ Rotate 90°
               </button>
+              <button
+                style={{
+                  background: showDimensions ? 'var(--accent)' : 'var(--paper-shadow)',
+                  color: showDimensions ? '#fff' : 'var(--ink-soft)',
+                  flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer',
+                }}
+                onClick={() => setShowDimensions((v) => !v)}
+              >
+                📏 Dimensions
+              </button>
             </div>
+            {showDimensions && (
+              <div style={{ background: 'var(--paper-shadow)', borderRadius: 8, padding: 10, marginBottom: 6, fontSize: 11.5, color: 'var(--ink)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--ink-soft)' }}>Width</span>
+                  <span>{formatFeetInches(selection.cat.dims[0])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[0]}')</span></span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--ink-soft)' }}>Depth</span>
+                  <span>{formatFeetInches(selection.cat.dims[1])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[1]}')</span></span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--ink-soft)' }}>Height</span>
+                  <span>{formatFeetInches(selection.cat.dims[2])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[2]}')</span></span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              {selection.stackedOnUid != null ? (
+                <button
+                  style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
+                  onClick={() => engineRef.current.unstackItem(selection.uid)}
+                >
+                  ⬇ Place on floor
+                </button>
+              ) : (
+                <button
+                  style={{
+                    background: stackPickForUid === selection.uid ? 'var(--accent)' : 'var(--paper-shadow)',
+                    color: stackPickForUid === selection.uid ? '#fff' : 'var(--ink-soft)',
+                    flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer',
+                  }}
+                  onClick={() => handleToggleStackPick(selection.uid)}
+                >
+                  {stackPickForUid === selection.uid ? 'Cancel picking…' : '⬆ Put on top of…'}
+                </button>
+              )}
+            </div>
+            {stackPickForUid === selection.uid && (
+              <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
+                Click another item in the room to place {selection.cat.name} on top of it.
+              </div>
+            )}
             <button onClick={() => engineRef.current.removeItem(selection.uid)}>Remove item</button>
 
             {relatedItems.length > 0 && (
