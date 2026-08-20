@@ -210,17 +210,62 @@ export class RoomEngine {
     object3d.position.y -= box2.min.y
   }
 
+  // Some of Tyler's own Blender exports (public/models/colgate*.glb) came through with no
+  // material color at all — every one of them is a flat 50% gray with no texture. tintColor
+  // repaints every material on the loaded scene to the catalog item's real-world color (the same
+  // hex already used for the box-placeholder fallback) so the model actually looks like the wood
+  // tone in Colgate's product photos instead of gray plastic.
+  _tintModel(object3d, colorHex) {
+    const tint = new THREE.Color(colorHex)
+    object3d.traverse((o) => {
+      if (!o.isMesh || !o.material) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      mats.forEach((m) => { if (m.color) m.color.copy(tint) })
+    })
+  }
+
+  _loadGltf(url) {
+    return new Promise((resolve, reject) => {
+      this.gltfLoader.load(url, resolve, undefined, reject)
+    })
+  }
+
   _loadItemMesh(cat, onReady) {
     if (cat.modelUrl) {
       this.gltfLoader.load(
         cat.modelUrl,
-        (gltf) => {
+        async (gltf) => {
           if (cat.hideNodes) {
             gltf.scene.traverse((o) => { if (cat.hideNodes.includes(o.name)) o.visible = false })
           }
+          // modelRotationY corrects models authored with their axes rotated 90° from the
+          // catalog's [width, depth, height] convention — e.g. ColgateBed.glb's headboard/
+          // footboard rail panels came in spanning the model's long axis instead of its short
+          // one. Applying the rotation before _fitModelToDims (which measures the object's
+          // current world-space bounding box) is what makes the non-uniform width/depth scale
+          // land on the right axis.
+          if (cat.modelRotationY) gltf.scene.rotation.y = cat.modelRotationY
+          if (cat.tintMaterial) this._tintModel(gltf.scene, cat.color)
           const group = new THREE.Group()
           this._fitModelToDims(gltf.scene, cat.dims)
           group.add(gltf.scene)
+
+          // stackedModelUrl renders a second model (e.g. the mattress) fused onto this one as a
+          // single placeable item — sized to its own real dims and set on top of this model's
+          // fitted height, rather than a second flat box overlapping it at floor level.
+          if (cat.stackedModelUrl) {
+            try {
+              const stackedGltf = await this._loadGltf(cat.stackedModelUrl)
+              if (cat.stackedColor) this._tintModel(stackedGltf.scene, cat.stackedColor)
+              this._fitModelToDims(stackedGltf.scene, cat.stackedDims)
+              const stackY = cat.stackedYOffset != null ? cat.stackedYOffset : cat.dims[2] - cat.stackedDims[2]
+              stackedGltf.scene.position.y += stackY
+              group.add(stackedGltf.scene)
+            } catch (err) {
+              console.warn(`Stacked model failed to load for "${cat.name}".`, err)
+            }
+          }
+
           group.userData.dims = cat.dims
           onReady(group)
         },

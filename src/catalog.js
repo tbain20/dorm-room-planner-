@@ -98,8 +98,10 @@ export const CATALOG = [
   // Same real item/model as Colgate's provided "Stackable Chest" (see PROVIDED_CATALOG below) —
   // this is the purchasable version, for a student who wants a second one or whose room didn't
   // come with one. Unlike the provided furniture, this one has a price and counts toward the
-  // shopping list, since it's genuinely something you'd buy.
-  { id: 'stackable-chest', name: 'Stackable Chest', price: 79, retailer: 'IKEA', dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
+  // shopping list, since it's genuinely something you'd buy. tintMaterial: true because
+  // colgateChest.glb (like the rest of Tyler's Colgate models) came out of Blender as flat gray
+  // with no material color — see the note above PROVIDED_CATALOG.
+  { id: 'stackable-chest', name: 'Stackable Chest', price: 79, retailer: 'IKEA', dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateChest.glb', tintMaterial: true, relatedIds: ['dresser'] },
   { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
   { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'chk:command-hooks'] },
   { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb', relatedIds: ['wardrobe'] },
@@ -162,41 +164,50 @@ export const CATALOG = [
 // desk, taller 3-drawer chests) are skipped for v1 — these are the standard-room dimensions,
 // verified against the PDF's own numbers.
 //
-// modelUrl picks are the closest free CC0 shape matches from Kenney's Furniture Kit, chosen by
-// rendering several candidates and comparing them side-by-side against the PDF's product photos
-// — not just grabbed by name. Notably chair.glb (a plain 4-leg wood chair) replaced an office-
-// chair-with-wheels model that looked nothing like Colgate's actual solid-wood desk chair. The
-// one open gap: the PDF's bed is a bare metal-frame/wood-end style with the mattress sold
-// separately, but no bare-frame twin bed exists in this kit — bedSingle.glb (a bed with a built-
-// in upholstered look) is the closest available proportions-wise, not a great shape match. A
-// real fix would need actual 3D modeling (Blender) or licensed assets, out of scope here.
+// modelUrl points at Tyler's own Blender models (public/models/colgate*.glb, ColgateBed.glb
+// capitalized differently from the rest since that's how the file was delivered) — real,
+// purpose-built matches for each item rather than the closest free CC0 stand-in from Kenney's
+// kit. These replaced the earlier Kenney placeholders (bedFrameBare.glb's surgically-edited
+// headboard, chair.glb, desk.glb, bookcaseClosedDoors.glb) everywhere in this list.
+//
+// Two fixups every one of these models needed once actually placed in a room:
+// - tintMaterial: true — every colgate*.glb exported from Blender with a flat 50% gray material
+//   and no texture, so they all rendered as gray plastic instead of the PDF's light oak. The
+//   engine now repaints the model's material to the item's own `color` (see _tintModel in
+//   roomEngine.js) — same beige (#c9a876) already used for the box-placeholder fallback.
+// - modelRotationY (bed only) — ColgateBed.glb's headboard/footboard rail panels came in aligned
+//   to the model's long axis instead of its short one, so non-uniform scale-to-dims stretched the
+//   rail panel across the bed's long side instead of the head/foot ends. A 90° pre-rotation before
+//   fitting swaps which local axis lands on width vs. depth.
 //
 // The Stackable Chest is deliberately NOT in this list — see 'stackable-chest' in CATALOG above.
 // Colgate doesn't guarantee every room gets one (the PDF's own wording is about variation between
 // rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
 // treated as purchasable.
 export const PROVIDED_CATALOG = [
-  // bedFrameBare.glb is a hand-edited copy of Kenney's bedSingle.glb (still CC0 — a derivative of
-  // a public-domain asset) with the headboard triangles surgically removed (18 of 52 in the
-  // "wood" primitive, isolated by z-position + height — see the python script in this feature's
-  // session if you need to redo this for another model). Colgate's real bed frame is a bare
-  // metal-frame/low-rail style with no headboard, and hideNodes strips the two remaining baked-in
-  // decorations (blue mattress cover, pillow) so the frame reads as genuinely empty — the
-  // mattress is a separate item below, and the student's own bedding goes on top of that.
-  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bedFrameBare.glb', hideNodes: ['cover', 'pillow'], relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
-  { id: 'colgate-mattress', name: 'Twin XL Mattress', modelNo: null, dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, category: 'Provided', isProvided: true, relatedIds: ['chk:mattress-protector', 'chk:fitted-sheets-2-3-sets', 'chk:pillows', 'chk:comforter'] },
-  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/desk.glb', relatedIds: ['lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
-  { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/chair.glb', relatedIds: ['colgate-desk'] },
-  { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
+  // The mattress (Twin XL Mattress, colgateMattress.glb, real dims [6.67, 3.08, 0.5]) isn't a
+  // separate catalog entry anymore — Tyler wanted the bed to read as one piece rather than two
+  // items a student could accidentally separate or delete independently, so it's fused on via
+  // stackedModelUrl/stackedDims/stackedColor: the engine loads it as a second model, sizes it to
+  // its own real dims, and sets it on top at stackedYOffset (see _loadItemMesh).
+  // stackedYOffset (1.0ft) is NOT "frame height minus mattress height" — ColgateBed.glb's tall
+  // corner posts/rails reach the full 3.0ft dims height, but the actual slat surface the mattress
+  // rests on sits much lower. Found by parsing the glb's POSITION accessor directly (no separate
+  // "slats" node to target — it's one merged mesh) and histogramming vertex Y values: ~41% of all
+  // 334k vertices cluster in a thin band around y=0.23-0.25 (of a 0-0.826 local height range) —
+  // an unmistakable flat plateau, i.e. the slat base — versus ~1000 vertices per bin everywhere
+  // else (the thin corner posts). That local band scales to ~0.9-1.1ft of world height once
+  // stretched to the 3.0ft dims target; 1.0ft is the middle of that, confirmed visually.
+  { id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/colgateMattress.glb', stackedDims: [6.67, 3.08, 0.5], stackedColor: 0xd8cbb0, stackedYOffset: 1.0, relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'] },
+  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, relatedIds: ['lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
+  { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateChair.glb', tintMaterial: true, relatedIds: ['colgate-desk'] },
+  { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateWardrobe.glb', tintMaterial: true, relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
 ]
 
 // Default positions for the "Add Colgate furniture" one-click action — against the back wall
 // (bed) and the two side walls (desk/chair, wardrobe), scaled to whatever the current room
 // dimensions are. Not meant to be clever, just non-overlapping and roughly plausible; the engine's
-// normal wall-clamping still applies as a safety net for small rooms. The mattress is deliberately
-// left out of auto-placement — the bed frame model already renders bedding on top of it, so a
-// second flat box at floor level would just overlap it. It's still in the catalog above so it's
-// there if you want to place or inspect it separately.
+// normal wall-clamping still applies as a safety net for small rooms.
 export function colgateDefaultLayout(room) {
   const byId = Object.fromEntries(PROVIDED_CATALOG.map((c) => [c.id, c]))
   const margin = 0.3

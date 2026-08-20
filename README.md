@@ -259,11 +259,13 @@ as `PROVIDED_CATALOG`, a separate array from the purchasable `CATALOG` — each 
     `bedSingle.glb` (which has a built-in upholstered/bedding look) is used as the closest
     available proportions-wise — not a strong shape match. Fixing this for real would need actual
     3D modeling (Blender) or a licensed asset.
-- **The mattress is deliberately not auto-placed.** The bed frame model already renders bedding
-  on top of it, and the engine has no concept of stacking one item on another (everything sits
-  at floor level) — a separate flat box at floor level would just overlap/clip through the bed
-  frame. The mattress is still in `PROVIDED_CATALOG` so the data matches the source list and it's
-  there if you want to place or inspect it manually.
+- **The mattress is fused into the bed frame, not a separate item.** `colgate-mattress` was a real
+  `PROVIDED_CATALOG` entry through the first pass of real-model wiring, but wasn't reachable from
+  the Catalog tab either way (`Provided` isn't in `CATEGORY_ORDER`, so nothing in that category
+  ever showed up for manual browsing/placing) and Tyler wanted the bed to read — and behave — as
+  one piece rather than two items a student could separate or delete independently. It's now
+  loaded as a second model stacked onto `colgate-bed` via `stackedModelUrl`; see "Real models,
+  replacing the Kenney placeholders" below for how that stacking works.
 - **Stackable Chest is *not* part of the default set.** Colgate doesn't guarantee every room gets
   one, so it isn't auto-placed as "provided" — instead it's a normal purchasable `CATALOG` entry
   (`stackable-chest`, $79, same real dims/model as before) that shows up in the Furniture &
@@ -310,6 +312,78 @@ as `PROVIDED_CATALOG`, a separate array from the purchasable `CATALOG` — each 
     the first two). Confirmed via direct engine calls that the wardrobe's clamp boundary now
     exactly matches `room.w/2 - depth/2` instead of the old (wrong) `room.w/2 - height/2`, and
     confirmed visually that it now sits flush against the wall.
+- **Real models, replacing the Kenney placeholders (2026-08-20)**: Tyler modeled all six items
+  himself in Blender — bed, mattress, desk, chair, wardrobe, and the Stackable Chest — closing the
+  "Known gap" above. `colgate-bed` now points at `ColgateBed.glb` (a genuine bare frame, so the
+  `hideNodes: ['cover', 'pillow']` workaround for the old `bedSingle.glb` derivative was removed —
+  nothing to hide anymore), and `colgate-desk`/`colgate-chair`/`colgate-wardrobe` swap `desk.glb`/
+  `chair.glb`/`bookcaseClosedDoors.glb` for `colgateDesk.glb`/`colgateChair.glb`/
+  `colgateWardrobe.glb`. The Stackable Chest (`stackable-chest` in `CATALOG` — still purchasable,
+  not auto-placed, see above) moved from `cabinetBedDrawer.glb` to `colgateChest.glb` too, same
+  real item as always. `desk.glb` itself was restored from git after being deleted alongside
+  `chair.glb` — it's still used by the unrelated purchasable `desk` ("Compact Desk") entry, so
+  deleting it would've broken that item; `chair.glb` had no other reference and was left deleted.
+  dims/positions/behavior are unchanged — the engine auto-scales whatever model it's given to fit
+  `dims`, so swapping `modelUrl` alone is enough.
+  - **Not yet done**: thumbnails. `public/thumbnails/` has no `colgate-*`/`stackable-chest` PNGs
+    generated against the new models yet, so those catalog rows still fall back to the color-swatch
+    thumbnail until `generateAllThumbnails()` is re-run in a browser session (see "Real catalog
+    thumbnails" below).
+  - **Worth a look**: the six new files are large — 9-22MB apiece, ~110MB total, versus a few
+    hundred KB for the Kenney placeholders they replaced. Untouched here since re-exporting/
+    compressing someone else's Blender output wasn't part of this pass, but likely worth a Draco/
+    texture-compression pass before this ships broadly, given how much heavier it makes every
+    Colgate-flagged room and the Stackable Chest catalog entry to load.
+  - **Follow-up fixes (after Tyler tried the real models live)**:
+    - **Every model was flat gray.** All six `colgate*.glb` files came out of Blender with a
+      `baseColorFactor` of `[0.5, 0.5, 0.5, 1]` and no texture/image at all (confirmed by reading
+      each file's embedded glTF JSON directly) — not a lighting issue, the material itself carries
+      no color. Added `tintMaterial: true` to the five wood pieces (bed, desk, chair, wardrobe,
+      chest) plus a `stackedColor` for the mattress; `_tintModel()` in `roomEngine.js` traverses
+      the loaded scene's meshes and overwrites each material's `.color` with the item's real hex
+      (`#c9a876` light oak for the wood pieces, `#d8cbb0` for the mattress) right after load. This
+      is opt-in per catalog item, not global — most of the existing catalog's Kenney models already
+      have correct baked-in colors/textures and would look worse forcibly flattened to their
+      swatch hex.
+    - **Bed frame was rotated 90° off.** `ColgateBed.glb`'s decorative rail panel (the vertical
+      wood slats between two horizontal bars) came in spanning the model's long axis; since
+      `_fitModelToDims` scales non-uniformly per axis to hit the catalog's `[width, depth,
+      height]` exactly, that stretched the slatted panel across the bed's long side instead of
+      sitting at the head/foot ends where it belongs, and squashed the plain mattress-support
+      slats (correctly on the short axis in the model) down to fit the long dimension. Added
+      `modelRotationY: Math.PI / 2` — applied to the loaded scene before `_fitModelToDims` measures
+      its bounding box — so the model's own long/short axes land on the right world dims. Verified
+      visually: the slatted rail panel now sits at the bed's short (head/foot) ends.
+    - **Mattress merged into the bed as one piece.** Was a second `PROVIDED_CATALOG` entry
+      (`colgate-mattress`) that was never actually placeable through the UI anyway (see the
+      Colgate-provided-furniture section above), so instead of fixing its reachability it's now
+      loaded automatically as part of `colgate-bed` — `_loadItemMesh` in `roomEngine.js` loads
+      `stackedModelUrl` as a second glTF, tints it with `stackedColor`, fits it to its own real
+      `stackedDims` (`[6.67, 3.08, 0.5]`, narrower than the 7.0×3.08 frame so it sits inside the
+      rails with a plausible margin), and positions it at `stackedYOffset` feet up from the floor
+      before grouping both into the single mesh the rest of the engine treats as one placed item
+      (one selection, one drag, one delete).
+    - **First attempt at the mattress height was wrong — Tyler caught a visible gap between the
+      mattress and the frame's actual base.** The initial version set `stackedYOffset` to
+      `dims[2] - stackedDims[2]` (2.5ft), i.e. flush with the *top of the frame's full fitted
+      bounding box* — but that top is the tall corner posts/rails (the bed frame reads more like a
+      guard-rail style, per the rail-orientation fix above), not the slat surface a mattress
+      actually rests on, so the mattress floated visibly above the slats with open frame showing
+      underneath. There's no separate "slats" node to target (`ColgateBed.glb` is one merged mesh —
+      334,743 vertices, confirmed via the same manual JSON+BIN accessor parsing used to inspect the
+      material colors below), so found the real slat height by histogramming the mesh's raw
+      `POSITION` accessor Y-values directly: ~41% of all vertices (136,594 of them) cluster in a
+      thin band around local y≈0.23–0.25 out of a 0–0.826 height range — an unmistakable flat
+      plateau (the slat base) against a background of ~1,000 vertices/bin everywhere else (the thin
+      corner posts). That band scales to roughly 0.9–1.1ft once stretched to the bed's 3.0ft dims
+      target. Set `stackedYOffset: 1.0` and confirmed visually (zoomed screenshots from two angles)
+      that the mattress now sits flush on the frame with no gap.
+    - **Verified live**: reloaded, clicked "Add Colgate furniture," and confirmed via
+      `read_network_requests` that all four default `.glb` files return 200 with zero console
+      errors; separately added the Stackable Chest from the catalog and confirmed its `.glb` loads
+      too. Screenshotted and zoomed into the bed to confirm the rail panel sits at the short ends
+      post-rotation, and that all five wood pieces plus the mattress render in their real colors
+      instead of gray.
 
 ## Expanded catalog
 
