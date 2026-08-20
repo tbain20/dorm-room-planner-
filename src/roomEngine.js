@@ -283,7 +283,20 @@ export class RoomEngine {
     const box = new THREE.Box3().setFromObject(object3d)
     const size = new THREE.Vector3()
     box.getSize(size)
-    object3d.scale.set(size.x > 0 ? w / size.x : 1, size.y > 0 ? h / size.y : 1, size.z > 0 ? d / size.z : 1)
+    // THREE composes an object's world transform as position * rotation * scale — scale always
+    // multiplies the model's own *local* axes, before rotation reorients them. If modelRotationY
+    // (see catalog.js) already rotated this object 90°/270° before we get here, the box above was
+    // measured in that ROTATED frame, so size.x/size.z have already swapped relative to the
+    // model's raw local X/Z. Naively doing scale.x = w/size.x would then scale local X (which
+    // rotation maps to world Z) by a ratio meant for world X — the model comes out stretched onto
+    // the wrong axis. Swapping which ratio drives which local axis undoes that: scale.x needs to
+    // land on world Z (so use d/size.z), and scale.z needs to land on world X (so use w/size.x).
+    const swapped = Math.abs(Math.round(object3d.rotation.y / (Math.PI / 2))) % 2 === 1
+    const scaleForX = size.x > 0 ? w / size.x : 1 // ratio that lands a local axis on world X
+    const scaleForZ = size.z > 0 ? d / size.z : 1 // ratio that lands a local axis on world Z
+    // Unrotated: local X *is* world X, so scale.x gets the X-ratio directly. Rotated 90°: local X
+    // maps to world Z instead, so scale.x needs the Z-ratio (and scale.z needs the X-ratio).
+    object3d.scale.set(swapped ? scaleForZ : scaleForX, size.y > 0 ? h / size.y : 1, swapped ? scaleForX : scaleForZ)
     const box2 = new THREE.Box3().setFromObject(object3d)
     const center = new THREE.Vector3()
     box2.getCenter(center)
@@ -349,9 +362,6 @@ export class RoomEngine {
               const stackY = cat.stackedYOffset != null ? cat.stackedYOffset : cat.dims[2] - cat.stackedDims[2]
               stackedGltf.scene.position.y += stackY
               group.add(stackedGltf.scene)
-              // Referenced by setBedHeight() to move a fused-on mattress (e.g. colgate-bed) when
-              // the bed's height preset changes.
-              group.userData.stackedObj = stackedGltf.scene
             } catch (err) {
               console.warn(`Stacked model failed to load for "${cat.name}".`, err)
             }
@@ -501,7 +511,9 @@ export class RoomEngine {
     mesh.userData.uid = uid
     mesh.userData.catalogId = cat.id
     this.itemsGroup.add(mesh)
-    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard' })
+    // 'low' (0 riser) is the default because it's the frame's unmodified floor position — a
+    // freshly-placed bed should look exactly like the raw model, not silently start elevated.
+    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'low' })
     this._clampItemToRoom(mesh)
     this._emitCart()
     return uid
@@ -616,15 +628,16 @@ export class RoomEngine {
   }
 
   // What Y an item sitting on top of `placedItem` should rest at. Normally that's just the top
-  // of its own bounding box (dims[2]) — but a bed with bedHeights (see catalog.js) has its real
-  // sleeping surface well below the top of its frame/headboard, at whichever height preset is
-  // currently selected, so stacking directly onto a bed frame (e.g. a mattress topper) lands at
-  // the actual mattress height instead of floating at headboard height.
+  // of its own bounding box (dims[2]) — but a bed with mattressSurfaceY (see catalog.js) has its
+  // real sleeping surface well below the top of its frame/headboard, at a fixed local height
+  // within the frame, so stacking directly onto a bed frame (e.g. a mattress topper) lands at the
+  // actual mattress height instead of floating at headboard height. mesh.position.y itself already
+  // accounts for the bed's current riser level (see setBedHeight) since it's the whole frame's own
+  // Y, not something layered on top of it.
   _topSurfaceY(placedItem) {
     const cat = ALL_ITEMS.find((c) => c.id === placedItem.catalogId)
-    if (cat && cat.bedHeights) {
-      const level = placedItem.bedHeightLevel || 'standard'
-      return placedItem.mesh.position.y + cat.bedHeights[level]
+    if (cat && cat.mattressSurfaceY != null) {
+      return placedItem.mesh.position.y + cat.mattressSurfaceY
     }
     return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2]
   }
@@ -680,18 +693,19 @@ export class RoomEngine {
   }
 
   // Bed height presets (Low/Standard/Lofted) — see catalog.js's bedHeights. Moves the bed's own
-  // fused mattress (colgate-bed's stackedModelUrl model, tracked as mesh.userData.stackedObj) if
-  // it has one, and cascades the change to anything resting on the bed (a loose bedding stack on
-  // a bare frame) via _restackAbove.
+  // mesh.position.y (the whole frame — legs, rails, and any fused mattress, since the mattress is
+  // a child positioned relative to this group's transform) rather than just the mattress, so the
+  // frame rises with it instead of leaving a static frame under a floating mattress. Cascades the
+  // change to anything resting on the bed (a loose bedding stack on a bare frame) via
+  // _restackAbove, using mattressSurfaceY (a fixed local offset, unaffected by the riser) via
+  // _topSurfaceY.
   setBedHeight(uid, level) {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat || !cat.bedHeights || cat.bedHeights[level] == null) return
     item.bedHeightLevel = level
-    if (item.mesh.userData.stackedObj) {
-      item.mesh.userData.stackedObj.position.y = cat.bedHeights[level]
-    }
+    item.mesh.position.y = cat.bedHeights[level]
     this._restackAbove(uid)
     if (this.selected && this.selected.uid === uid) this._emitSelection()
   }
@@ -791,11 +805,12 @@ export class RoomEngine {
         }
         this.addItemAt(it.catalogId, it.x, it.z, it.rotY, (uid) => {
           uidsByIndex[i] = uid
-          // Only bother repositioning when it differs from the freshly-registered default
-          // ('standard') — this also runs setBedHeight's cascade to anything already stacked on
-          // it, though nothing will be yet; _resolveLoadedStacking below re-stacks using
-          // _topSurfaceY, which already reads the level set here.
-          if (it.bedHeightLevel && it.bedHeightLevel !== 'standard') this.setBedHeight(uid, it.bedHeightLevel)
+          // Only bother repositioning when it differs from the freshly-registered default ('low',
+          // 0 riser — the frame's unmodified floor position) — this also runs setBedHeight's
+          // cascade to anything already stacked on it, though nothing will be yet;
+          // _resolveLoadedStacking below re-stacks using _topSurfaceY, which already reads the
+          // level set here.
+          if (it.bedHeightLevel && it.bedHeightLevel !== 'low') this.setBedHeight(uid, it.bedHeightLevel)
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
         })
