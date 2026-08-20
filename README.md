@@ -887,14 +887,26 @@ and "goes well with" suggestions only existing on a handful of items).
   button again, or click empty floor, to cancel). Single-level only — an item that already has
   something stacked on it can't itself become a target, so there's no risk of a physically dubious
   three-item tower.
-  - **Picking an item up always sets it back on the floor**: dragging a stacked item off to
-    somewhere else automatically un-stacks it first (dragging is floor-plane movement, so a
-    "floating" item mid-drag would look broken) — re-stacking afterward is a deliberate action via
-    the button, not a side effect of nudging something.
-  - **Picking up the *base* drops whatever's resting on it**: start dragging the desk out from
-    under the TV, and the TV falls back to the floor in place rather than floating in mid-air or
-    silently teleporting along with the desk. Deleting a base item does the same for anything that
-    was stacked on it.
+  - **Dragging a stacked item keeps it stacked**: it slides around on top of whatever it's
+    resting on, clamped to *that item's* footprint (`_clampStackedItem()`) instead of the room's
+    walls — same idea as the existing room-boundary clamp, just measured against the base instead
+    of the walls, so a TV can slide around on a desk but not off the edge of it. Rotating a stacked
+    item re-clamps against the base the same way. If the item on top is bigger than its base along
+    some axis (a big TV on a small side table), there's no room to slide on that axis — it's pinned
+    to the base's center there instead of allowing an out-of-bounds position. The **only** way an
+    item comes back down to the floor is the explicit "Place on floor" button (`unstackItem()`) —
+    an earlier version of this feature dropped it automatically the moment you dragged it, which
+    Tyler caught and asked to change; this replaced that behavior entirely, it isn't a toggle.
+  - **Picking up the *base* still drops whatever's resting on it**: start dragging the desk out
+    from under the TV, and the TV falls back to the floor in place rather than floating in mid-air
+    or (unsupported) following the desk in real time. Deleting a base item does the same for
+    anything that was stacked on it. This part is unchanged from the first pass — only dragging the
+    *topper itself* changed.
+  - **Room resize re-syncs stacked items to their base**: resizing the room clamps un-stacked
+    items to the new walls first, then re-centers every stacked item on its base's (possibly just
+    moved) position and re-clamps it to the base's footprint — otherwise a resize could clamp a
+    desk one way and leave its TV clamped independently to the old room bounds, drifting the two
+    apart.
   - **Persists through save/load**: `getState()` records stacking by *array position*
     (`stackedOnIndex`), not the live uid — uids are freshly re-minted every time a layout loads
     (several models load in parallel and don't necessarily finish in the order they started), so a
@@ -903,16 +915,18 @@ and "goes well with" suggestions only existing on a handful of items).
     relationship via `stackItemOn()`.
   - **Verified live**: added a desk and a TV, called the actual `stackItemOn()`/`unstackItem()`
     engine methods directly and confirmed the math (TV's Y lands exactly at the desk's height, X/Z
-    match the desk's position). Then verified the *real* UI path end to end with actual clicks
-    (not synthetic events — raw `dispatchEvent` `PointerEvent`s can't satisfy this browser's
+    match the desk's position). Verified the *real* UI path end to end with actual clicks (not
+    synthetic events — raw `dispatchEvent` `PointerEvent`s can't satisfy this browser's
     `setPointerCapture`, confirmed via a `NotFoundError` in the console when I first tried that
-    route, so I switched to genuine click-tool clicks at camera-projected screen coordinates
+    route, so I used genuine click-tool clicks/drags at camera-projected screen coordinates
     instead): select TV → "Put on top of…" → click the desk → TV visually lands on the desk,
-    selection panel switches to "⬇ Place on floor". Clicked a real (non-stacked-item) point on the
-    desk while the TV was stacked and confirmed the TV visibly dropped to the floor at that exact
-    moment, matching the "picking up the base drops its contents" design. Round-tripped a stacked
-    layout through `getState()` → `loadState()` and confirmed the relationship survives with a
-    freshly re-minted uid.
+    selection panel switches to "⬇ Place on floor". After Tyler's correction, re-verified by
+    dragging the stacked TV toward and past the desk's edge with a real click-drag — it stopped
+    exactly at the computed boundary (`deskX + (deskWidth-tvWidth)/2`, confirmed against the actual
+    numbers, not just visually) and stayed elevated/stacked the whole time, then confirmed "Place
+    on floor" still drops it correctly afterward. Also re-confirmed picking up the *desk* still
+    drops the TV to the floor, and round-tripped a stacked layout through `getState()` →
+    `loadState()`, confirming the relationship survives with a freshly re-minted uid.
 - **Checklist "only shows Bedding" — the real bug, not a missing feature**: `checklistItems.js`
   already had all 11 categories fully populated; the bug was in `listChecklistItems()` in
   `storage.js`, which only ever seeded `DEFAULT_CHECKLIST_ITEMS` once, on an account's very first

@@ -126,7 +126,17 @@ export class RoomEngine {
   setRoomDims(w, l, h) {
     this.room = { w, l, h }
     this.buildRoom()
-    this.placedItems.forEach((p) => this._clampItemToRoom(p.mesh))
+    // Un-stacked items first — a stacked item's own clamp depends on its base's (possibly
+    // just-moved) position, and stacking order isn't the same as placedItems array order (you
+    // can place the base after the item that ends up on top of it).
+    this.placedItems.filter((p) => p.stackedOnUid == null).forEach((p) => this._clampItemToRoom(p.mesh))
+    this.placedItems.filter((p) => p.stackedOnUid != null).forEach((p) => {
+      const base = this.placedItems.find((q) => q.uid === p.stackedOnUid)
+      if (!base) return
+      p.mesh.position.x = base.mesh.position.x
+      p.mesh.position.z = base.mesh.position.z
+      this._clampStackedItem(p.mesh, p.stackedOnUid)
+    })
   }
 
   buildRoom() {
@@ -225,20 +235,46 @@ export class RoomEngine {
     }
   }
 
-  _clampItemToRoom(mesh) {
-    // dims is [width, depth, height] — only the first two matter for floor clamping. (A previous
-    // version of this destructure skipped depth and grabbed height by mistake, which meant any
-    // tall rotated item — e.g. a 6'-tall wardrobe with a 2.08' depth — got clamped as if its
-    // footprint were 6' deep, leaving it stuck several feet short of the wall it was dragged
-    // toward instead of sitting flush against it.)
+  // dims is [width, depth, height] — only the first two matter for floor footprint. Accounts for
+  // 90°-ish rotation swapping which axis is "width" vs. "depth" in world space. (A previous
+  // version of the room clamp skipped depth and grabbed height by mistake, which meant any tall
+  // rotated item — e.g. a 6'-tall wardrobe with a 2.08' depth — got clamped as if its footprint
+  // were 6' deep, leaving it stuck several feet short of the wall it was dragged toward instead
+  // of sitting flush against it.)
+  _footprint(mesh) {
     let [w, d] = mesh.userData.dims
     const rotDeg = (((mesh.rotation.y * 180) / Math.PI) % 360 + 360) % 360
     const swapped = (rotDeg > 45 && rotDeg < 135) || (rotDeg > 225 && rotDeg < 315)
-    if (swapped) [w, d] = [d, w]
+    return swapped ? [d, w] : [w, d]
+  }
+
+  _clampItemToRoom(mesh) {
+    const [w, d] = this._footprint(mesh)
     const halfW = this.room.w / 2 - w / 2
     const halfL = this.room.l / 2 - d / 2
     mesh.position.x = Math.max(-halfW, Math.min(halfW, mesh.position.x))
     mesh.position.z = Math.max(-halfL, Math.min(halfL, mesh.position.z))
+  }
+
+  // Keeps a stacked item's footprint within the item it's resting on, the same way
+  // _clampItemToRoom keeps a floor item within the room's walls — you can slide a TV around on a
+  // desk, but not off the edge of it. If the item on top is bigger than its base along some axis
+  // (a big TV on a small side table), there's no room to slide on that axis at all — pinned to the
+  // base's center there rather than producing an inverted (min > max) range. Doesn't account for
+  // the base and topper being rotated *relative to each other* (true oriented-box overlap) — both
+  // are just treated as room-axis-aligned boxes, which covers every real case in this app since
+  // nothing here is ever rotated off a 90° step.
+  _clampStackedItem(mesh, baseUid) {
+    const base = this.placedItems.find((p) => p.uid === baseUid)
+    if (!base) return
+    const [cw, cd] = this._footprint(mesh)
+    const [bw, bd] = this._footprint(base.mesh)
+    const halfDiffW = Math.max(0, (bw - cw) / 2)
+    const halfDiffD = Math.max(0, (bd - cd) / 2)
+    const baseX = base.mesh.position.x
+    const baseZ = base.mesh.position.z
+    mesh.position.x = Math.max(baseX - halfDiffW, Math.min(baseX + halfDiffW, mesh.position.x))
+    mesh.position.z = Math.max(baseZ - halfDiffD, Math.min(baseZ + halfDiffD, mesh.position.z))
   }
 
   addItem(catId) {
@@ -308,7 +344,8 @@ export class RoomEngine {
   rotateSelected(deltaRad = Math.PI / 2) {
     if (!this.selected) return
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
-    this._clampItemToRoom(this.selected.mesh)
+    if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
+    else this._clampItemToRoom(this.selected.mesh)
   }
 
   selectItem(uid) {
@@ -384,8 +421,8 @@ export class RoomEngine {
   }
 
   // Picks the item back up off whatever it was resting on and sets it back down on the floor at
-  // its current x/z — the inverse of stackItemOn(). Also what a plain drag does automatically to
-  // a stacked item the moment you start moving it (see the pointerdown handler below).
+  // its current x/z — the inverse of stackItemOn(). The only way an item comes back down; simply
+  // dragging it around while stacked keeps it up there (see the pointermove handler below).
   unstackItem(uid) {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item || item.stackedOnUid == null) return
@@ -769,15 +806,13 @@ export class RoomEngine {
 
       if (item) {
         this.mode = 'drag-item'
-        // Picking this item up to drag it: dragging is floor-plane only, so if it was resting on
-        // something, it comes back down to the floor (re-stacking is a deliberate action via the
-        // "Put on top of…" button, not an accident of nudging it sideways). Anything that was
-        // itself resting on this item falls to the floor too, since the surface it was on is
-        // about to move out from under it.
-        if (item.stackedOnUid != null) {
-          item.mesh.position.y = 0
-          item.stackedOnUid = null
-        }
+        // Dragging a stacked item keeps it stacked and elevated — it slides around on top of
+        // whatever it's resting on, clamped to that item's footprint instead of the room's walls
+        // (see the pointermove handler and _clampStackedItem below). Only the explicit "Place on
+        // floor" button (unstackItem) sends it back down — dragging alone never does. Anything
+        // resting on *this* item still falls to the floor when this item itself gets picked up,
+        // though — the surface it was on is about to move out from under it, and following it in
+        // real time isn't supported.
         this.placedItems.forEach((p) => {
           if (p.stackedOnUid === item.uid) {
             p.mesh.position.y = 0
@@ -823,7 +858,8 @@ export class RoomEngine {
         const floorPt = getFloorPoint()
         this.selected.mesh.position.x = floorPt.x + this.dragOffset.x
         this.selected.mesh.position.z = floorPt.z + this.dragOffset.z
-        this._clampItemToRoom(this.selected.mesh)
+        if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
+        else this._clampItemToRoom(this.selected.mesh)
       } else if (this.mode === 'drag-feature' && this.selectedFeature) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
