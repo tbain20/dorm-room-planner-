@@ -120,15 +120,24 @@ export const CATALOG = [
   // bed models, scaled to their own dims — same modelRotationY/tintMaterial treatment colgate-bed
   // below already uses. The twin ('bed' above) is deliberately left as bedSingle.glb — it's the
   // one frame that's already Colgate-accurate in spirit as a plain purchasable twin.
-  { id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [4.5, 6.4, 2.2], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedHeights: BED_RISER_HEIGHTS, mattressSurfaceY: 1.1, relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'] },
+  //
+  // dims are listed [long axis, short axis, height] here — width > depth — matching colgate-bed's
+  // own convention below, NOT the usual width < depth convention every other item (including
+  // plain 'bed' above) uses. That's not cosmetic: modelRotationY always lands ColgateBed.glb's
+  // headboard/footboard rails on world X (a fixed fact of the model + rotation, independent of
+  // dims/scale — see _fitModelToDims), so dims[0] has to be the long head-to-foot measurement or
+  // the rails end up on the long sides of the bed instead of the head/foot ends.
+  { id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedHeights: BED_RISER_HEIGHTS, mattressSurfaceY: 1.1, relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'] },
   // Rendered as two Colgate frames stacked (bottom bunk's own frame, then a second copy fused on
   // top via the same stackedModelUrl mechanism colgate-bed uses for its mattress) rather than one
   // model stretched to the full 5.5' height — a single stretched frame would just look like one
   // oversized, distorted bed rather than an actual bunk. primaryModelFitDims sizes the bottom
   // frame to its own real proportions instead of the item's full dims (see _loadItemMesh in
   // roomEngine.js); dims stays the true overall footprint/height for room clamping and stacking.
-  // No bedHeights — real Colgate bunks are a fixed configuration, no peg adjustment.
-  { id: 'bed-bunk', name: 'Bunk Bed Frame', price: 349, retailer: 'Amazon', dims: [3.4, 6.5, 5.5], primaryModelFitDims: [3.4, 6.5, 2.75], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/ColgateBed.glb', stackedModelRotationY: Math.PI / 2, stackedDims: [3.4, 6.5, 2.75], stackedYOffset: 2.75, stackedColor: 0x8a6b4f, relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'] },
+  // Same long-axis-first convention as bed-full above (and same reason) for dims,
+  // primaryModelFitDims, and stackedDims alike, since both the primary and stacked model go
+  // through the same rotated fit. No bedHeights — real Colgate bunks are a fixed configuration.
+  { id: 'bed-bunk', name: 'Bunk Bed Frame', price: 349, retailer: 'Amazon', dims: [6.5, 3.4, 5.5], primaryModelFitDims: [6.5, 3.4, 2.75], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true, stackedModelUrl: '/models/ColgateBed.glb', stackedModelRotationY: Math.PI / 2, stackedDims: [6.5, 3.4, 2.75], stackedYOffset: 2.75, stackedColor: 0x8a6b4f, relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'] },
   { id: 'underbed-bins', name: 'Under-Bed Storage Bins (2)', price: 24, retailer: 'Target', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed'] },
   { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb', relatedIds: ['bed', 'desk-lamp'] },
