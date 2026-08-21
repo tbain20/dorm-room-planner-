@@ -326,6 +326,15 @@ export class RoomEngine {
           // (room clamping, the selection panel, stacking) — falls back to cat.dims for every
           // other item, unchanged from before.
           this._fitModelToDims(gltf.scene, cat.primaryModelFitDims || cat.dims)
+          // floorNudge (real-world feet) is a per-item stopgap for a source model whose contact
+          // points aren't all quite level (see catalog.js) — _fitModelToDims floor-aligns to the
+          // model's single lowest vertex, so if that vertex belongs to one outlier leg/post, every
+          // other leg ends up floating just above the floor with a visible gap underneath it.
+          // Nudging the whole model down instead makes the *worst* leg the one that's flush and
+          // sinks the rest slightly into the floor — invisible rather than floating, since the
+          // opaque floor occludes anything below y=0 and the camera can never see under it (phi is
+          // clamped well above straight-down in _initInteraction).
+          if (cat.floorNudge) gltf.scene.position.y -= cat.floorNudge
           group.add(gltf.scene)
 
           // extraModels fuses additional models onto this one as a single placeable item — e.g. a

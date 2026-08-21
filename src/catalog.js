@@ -136,9 +136,21 @@ export const CATALOG = [
   // boards already spread along local X — confirmed by histogramming its vertex positions (almost
   // all mass sits at the two extremes of local X with a dead gap in between, i.e. the two boards),
   // so it needs no modelRotationY at all.
+  //
+  // floorNudge is a stopgap for a real imprecision in colgateHeadboard.glb itself (not something
+  // dims/rotation can fix): its four corner-post bottoms aren't quite coplanar — measured by
+  // finding each post's own lowest vertex, the worst is ~0.094 raw units above the model's true
+  // lowest point (~4" once scaled to a 3ft frame), which is what a normal floor-align picks as
+  // y=0 — so the other three posts would float above the floor by varying amounts, most visibly
+  // making the headboard end look tilted/short-legged. Nudging the whole model down by that same
+  // ~0.094-raw-unit gap (scaled to this item's own height) instead makes the *worst* post the one
+  // that's flush and sinks the rest slightly into the floor, which is invisible rather than
+  // floating (the opaque floor occludes anything below y=0, and the camera can never see under
+  // it). The real fix is leveling those four post bottoms in Blender and re-exporting — this is
+  // just damage control until that happens.
   {
     id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true, floorNudge: 0.25,
     bedHeights: FULL_BED_HEIGHTS,
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
@@ -294,7 +306,7 @@ export const PROVIDED_CATALOG = [
   // kept as 'standard' so existing saved layouts render at the same height as before this split.
   {
     id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876,
-    category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true,
+    category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true, floorNudge: 0.35,
     bedHeights: COLGATE_BED_HEIGHTS,
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
