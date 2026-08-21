@@ -1001,8 +1001,8 @@ export default function App() {
                       onClick={() => engineRef.current.setBedHeight(selection.uid, level)}
                       style={{
                         flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
-                        background: (selection.bedHeightLevel || 'low') === level ? 'var(--accent)' : 'var(--paper-shadow)',
-                        color: (selection.bedHeightLevel || 'low') === level ? '#fff' : 'var(--ink-soft)',
+                        background: (selection.bedHeightLevel || 'standard') === level ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: (selection.bedHeightLevel || 'standard') === level ? '#fff' : 'var(--ink-soft)',
                       }}
                     >
                       {level}

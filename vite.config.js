@@ -38,5 +38,9 @@ export default defineConfig({
   plugins: [react(), saveThumbnailPlugin()],
   // Otherwise Vite's watcher notices new files landing in public/thumbnails/ (written by the
   // plugin above) and force-reloads the page mid-generation, killing window.__thumbs.
+  // Trade-off: since the dir is unwatched, Vite's static server never learns a *brand-new*
+  // filename exists there until it restarts — a thumbnail for a catalog id that didn't have one
+  // before will 404 (silently falling through to the SPA shell) until you restart `vite dev`.
+  // Re-generating an *existing* thumbnail (same filename, new content) doesn't have this problem.
   server: { watch: { ignored: ['**/public/thumbnails/**'] } },
 })
