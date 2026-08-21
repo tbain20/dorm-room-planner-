@@ -137,6 +137,18 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 }
 .add-btn:hover{background:var(--accent-dark);}
 
+.cat-group{cursor:default; align-items:flex-start;}
+.cat-group:hover{background:none;}
+.tier-options{display:flex; gap:6px; margin-top:7px;}
+.tier-btn{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+  background:var(--paper-shadow); border:1px solid transparent; border-radius:var(--radius-sm);
+  padding:6px 4px; cursor:pointer; transition:background 0.15s ease, border-color 0.15s ease;
+}
+.tier-btn:hover{background:var(--accent-soft); border-color:var(--accent);}
+.tier-name{font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-soft);}
+.tier-price{font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--ink);}
+
 #sidebar-header{padding:18px 14px 2px 14px;}
 #sidebar-header h2{
   margin:0; font-family:var(--font-serif); font-size:17px; font-weight:650;

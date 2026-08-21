@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, retailerLink, thumbnailUrl, resolveRelatedItems } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, thumbnailUrl, resolveRelatedItems } from './catalog.js'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile,
@@ -55,6 +55,42 @@ function CatalogThumb({ cat }) {
   return (
     <div className="swatch" style={{ background: swatchColor }}>
       <span className="swatch-icon">{CATEGORY_ICONS[cat.category] || '📦'}</span>
+    </div>
+  )
+}
+
+const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
+
+// One catalog card for a tiered conceptual item (e.g. "Mattress Topper") — a shared thumbnail
+// and dims up top, then a small budget/moderate/premium option per tier. Each option adds that
+// specific tier's real product to the room on click, same as clicking a plain cat-item row does.
+function TierGroupCard({ group, onAdd }) {
+  const base = group.tiers[0]
+  return (
+    <div className="cat-item cat-group">
+      <CatalogThumb cat={base} />
+      <div className="cat-info">
+        <div className="name">{group.groupLabel}</div>
+        <div className="meta">
+          {base.dims[0]}' × {base.dims[1]}' × {base.dims[2]}'
+        </div>
+        <div className="tier-options">
+          {group.tiers.map((tier) => (
+            <button
+              key={tier.id}
+              className="tier-btn"
+              title={tier.name}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAdd(tier.id)
+              }}
+            >
+              <span className="tier-name">{TIER_LABELS[tier.tier] || tier.tier}</span>
+              <span className="tier-price">${tier.price}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -388,13 +424,24 @@ export default function App() {
   const relatedItems = selection ? resolveRelatedItems(selection.cat) : []
 
   // category -> subcategory -> items, in CATEGORY_ORDER's display order. Items with no
-  // subcategory group under 'General' (rendered without its own label).
+  // subcategory group under 'General' (rendered without its own label). Tiered items (those
+  // sharing a `groupId` — see catalog.js's note on the CATALOG export) collapse into one
+  // { isGroup: true, tiers } entry at the position of their first tier in CATALOG, so the browse
+  // list shows one card with a budget/moderate/premium picker instead of 3 separate rows.
   const groupedCatalog = {}
+  const seenGroupIds = new Set()
   for (const item of CATALOG) {
     const sub = item.subcategory || 'General'
     groupedCatalog[item.category] ??= {}
     groupedCatalog[item.category][sub] ??= []
-    groupedCatalog[item.category][sub].push(item)
+    if (item.groupId) {
+      if (seenGroupIds.has(item.groupId)) continue
+      seenGroupIds.add(item.groupId)
+      const tiers = CATALOG.filter((c) => c.groupId === item.groupId)
+      groupedCatalog[item.category][sub].push({ isGroup: true, groupId: item.groupId, groupLabel: item.groupLabel, tiers })
+    } else {
+      groupedCatalog[item.category][sub].push(item)
+    }
   }
 
   function toggleCategory(category) {
@@ -1172,19 +1219,23 @@ export default function App() {
                     Object.entries(subcats).map(([subcategory, items]) => (
                       <div key={subcategory}>
                         {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
-                        {items.map((cat) => (
-                          <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
-                            <CatalogThumb cat={cat} />
-                            <div className="cat-info">
-                              <div className="name">{cat.name}</div>
-                              <div className="meta">
-                                {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                        {items.map((cat) =>
+                          cat.isGroup ? (
+                            <TierGroupCard key={cat.groupId} group={cat} onAdd={(id) => engineRef.current.addItem(id)} />
+                          ) : (
+                            <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
+                              <CatalogThumb cat={cat} />
+                              <div className="cat-info">
+                                <div className="name">{cat.name}</div>
+                                <div className="meta">
+                                  {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                                </div>
                               </div>
+                              <div className="cat-price">${cat.price}</div>
+                              <button className="add-btn">+</button>
                             </div>
-                            <div className="cat-price">${cat.price}</div>
-                            <button className="add-btn">+</button>
-                          </div>
-                        ))}
+                          )
+                        )}
                       </div>
                     ))}
                 </div>
@@ -1974,7 +2025,7 @@ export default function App() {
                     <span className="rstore">{it.cat.retailer}</span>
                   </div>
                   <div>
-                    <a href={retailerLink(it.cat.retailer, it.cat.name)} target="_blank" rel="noopener noreferrer">
+                    <a href={catalogItemLink(it.cat)} target="_blank" rel="noopener noreferrer">
                       ${it.cat.price} ↗
                     </a>
                   </div>

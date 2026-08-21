@@ -21,6 +21,24 @@ import { DEFAULT_CHECKLIST_ITEMS } from './checklistItems.js'
 // icons). A few existing items predate that taxonomy and were retagged into it; a few categories
 // in the taxonomy (School Supplies, Bathroom) have zero placeable items — everything in those is
 // checklist-only — so they never show up here.
+//
+// Tiered items (curated-research pass, see curated-research-FINAL.md): a conceptual item that
+// research turned up real budget/moderate/premium picks for (e.g. "Mattress Topper") is 3 separate
+// CATALOG entries sharing one `groupId` and a `tier` of 'budget'/'moderate'/'premium', instead of
+// one generic entry. groupLabel is the conceptual name shown as the group header in the catalog UI
+// (App.jsx groups by groupId and renders a 3-way tier picker — see groupedCatalog there); `name` on
+// each entry is the real product name for that tier. The pre-existing single id for each concept
+// was kept as the id of its 'moderate' tier (not reassigned to a new id) specifically so old saved
+// layouts, and every other item's relatedIds pointing at that id, keep resolving to a real, sane
+// item with no migration needed — only budget/premium got new `${groupId}-budget`/`-premium` ids.
+// All three tiers of a group reuse the same dims/color/modelUrl — real per-tier dimensions weren't
+// researched, and the instruction was to keep the existing generic 3D models rather than source new
+// ones to match specific real products. `productUrl` is null on every researched entry — the
+// research explicitly did not fabricate retailer URLs (see the doc); pasting in each item's real,
+// current product URL is a manual follow-up. `rating`/`reviewCount` are set only where the research
+// doc gave a specific number. Where the doc named a product but not a price (a handful of the
+// Laundry Hamper/Microwave/Electric Kettle picks), the price below is a reasonable market estimate,
+// not sourced — flagged here so it gets double-checked alongside the productUrl pass.
 export const CATEGORY_ORDER = [
   'Bedding',
   'Furniture & Organization',
@@ -103,11 +121,28 @@ export const CATALOG = [
   // thin placeholder boxes sized to a twin mattress footprint, except the pillow, which reuses the
   // existing pillow.glb (distinct catalog entry from Decor's 'throw-pillow' — same model,
   // different price/category/relatedIds).
-  { id: 'mattress-topper', name: 'Mattress Topper', price: 49, retailer: 'Amazon', dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
-  { id: 'mattress-protector', name: 'Mattress Protector', price: 25, retailer: 'Amazon', dims: [3.3, 6.3, 0.15], color: 0xf2efe6, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-topper', 'sheet-set', 'bed-full', 'colgate-bed'] },
-  { id: 'sheet-set', name: 'Sheet Set (Fitted + Flat)', price: 29, retailer: 'Target', dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', name: 'Comforter', price: 45, retailer: 'Target', dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow', name: 'Pillow', price: 15, retailer: 'Amazon', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  // Mattress Topper — ✅ fully researched (see curated-research-FINAL.md).
+  { id: 'mattress-topper-budget', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'budget', name: 'Serta ThermaGel 2" Mattress Topper', price: 65, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  { id: 'mattress-topper', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'moderate', name: 'ViscoSoft Select 3" Mattress Topper', price: 136, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  { id: 'mattress-topper-premium', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'premium', name: 'Tempur-Pedic 3" Supreme Mattress Topper', price: 269, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  // Mattress Protector — ⚠️ reasonable pick, not tiered (research: budget/moderate are
+  // "effectively interchangeable" in this category, no real premium tier) — single entry.
+  { id: 'mattress-protector', name: 'SafeRest Waterproof Mattress Protector', price: 25, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.15], color: 0xf2efe6, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-topper', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  // Twin XL Sheets — ✅ fully researched. Retailer switched Target → Amazon for all three tiers:
+  // the researched products (Amazon Basics/Mellanni/LuxClub) are all primarily Amazon listings.
+  { id: 'sheet-set-budget', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'budget', name: 'Amazon Basics Microfiber Sheet Set', price: 23, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  { id: 'sheet-set', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'moderate', name: 'Mellanni Microfiber Sheet Set', price: 35, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  { id: 'sheet-set-premium', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'premium', name: 'LuxClub Bamboo Viscose Sheet Set', price: 34, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  // Comforter — ✅ fully researched. Retailer switched Target → Amazon, same reasoning as sheets.
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: null, dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: null, dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'ViscoSoft Reversible Comforter', price: 70, retailer: 'Amazon', productUrl: null, dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
+  // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
+  // normalizing to a per-pillow rate.
+  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: null, dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Snuggle-Pedic Shredded Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: null, dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic Pillow', price: 65, retailer: 'Amazon', productUrl: null, dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   { id: 'pillowcase-set', name: 'Pillowcase Set', price: 12, retailer: 'Target', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
 
   // ---- Furniture & Organization ----
@@ -176,7 +211,13 @@ export const CATALOG = [
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'],
   },
-  { id: 'underbed-bins', name: 'Under-Bed Storage Bins (2)', price: 24, retailer: 'Target', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
+  // Storage Bins — ✅ fully researched. Mapped onto the existing under-bed-bins slot as the
+  // closest match to the research's generic "Storage Bins" category; premium ($30) is cheaper
+  // than moderate ($84) because that's genuinely what the research turned up (a rolling cart vs.
+  // a modular drawer set aren't directly comparable on price) — left as-is rather than reordered.
+  { id: 'underbed-bins-budget', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'budget', name: 'Amazon Basics Collapsible Fabric Storage Bins (6-Pack)', price: 14, retailer: 'Amazon', productUrl: null, dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
+  { id: 'underbed-bins', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'moderate', name: 'Sterilite 3-Drawer Rolling Cart', price: 84, retailer: 'Target', productUrl: null, dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
+  { id: 'underbed-bins-premium', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'premium', name: 'IRIS Modular Drawer System (4-Pack)', price: 30, retailer: 'Amazon', productUrl: null, dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
   { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb', relatedIds: ['bed-full', 'desk-lamp'] },
   { id: 'dresser', name: 'Dresser', price: 129, retailer: 'IKEA', dims: [2.6, 2.0, 2.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/kitchenCabinetDrawer.glb', relatedIds: ['mirror'] },
@@ -190,7 +231,12 @@ export const CATALOG = [
   { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
   { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'chk:command-hooks'] },
   { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb', relatedIds: ['wardrobe'] },
-  { id: 'hamper', name: 'Laundry Hamper', price: 19, retailer: 'Target', dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
+  // Laundry Hamper — ✅ fully researched, though the doc didn't list prices for any of the three
+  // picks — the prices below are market estimates, not sourced (see the note at the top of this
+  // file); double-check them along with productUrl.
+  { id: 'hamper-budget', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'budget', name: 'Handy Laundry Collapsible Mesh Pop-Up Hamper (2-Pack)', price: 16, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
+  { id: 'hamper', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'moderate', name: 'Sterilite Ultra Wheeled Hamper', price: 32, retailer: 'Target', productUrl: null, rating: 4.5, reviewCount: 11300, dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
+  { id: 'hamper-premium', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'premium', name: 'Backpack-Style Laundry Hamper (Adjustable Straps)', price: 35, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
   { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', relatedIds: ['chair', 'lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
   { id: 'desk-corner', name: 'Corner Desk', price: 149, retailer: 'IKEA', dims: [4.5, 4.5, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/deskCorner.glb', relatedIds: ['chair', 'lamp', 'shelf'] },
   { id: 'chair', name: 'Desk Chair', price: 79, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0x3a3a3a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairDesk.glb', relatedIds: ['desk'] },
@@ -203,7 +249,10 @@ export const CATALOG = [
   { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Target', dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb', relatedIds: ['throw-pillow', 'rug'] },
   { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   { id: 'lamp-square', name: 'Square Floor Lamp', price: 39, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampSquareFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
-  { id: 'desk-lamp', name: 'Desk Lamp', price: 19, retailer: 'Amazon', dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundTable.glb', relatedIds: ['desk', 'nightstand'] },
+  // Desk Lamp — ✅ fully researched.
+  { id: 'desk-lamp-budget', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'budget', name: 'IKEA NÄVLINGE LED Clamp Lamp', price: 19, retailer: 'IKEA', productUrl: null, dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundTable.glb', relatedIds: ['desk', 'nightstand'] },
+  { id: 'desk-lamp', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'moderate', name: 'USB-Charging LED Desk Lamp (Adjustable Color Temp)', price: 30, retailer: 'Amazon', productUrl: null, dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundTable.glb', relatedIds: ['desk', 'nightstand'] },
+  { id: 'desk-lamp-premium', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'premium', name: 'Govee Smart Desk Lamp w/ Speaker', price: 55, retailer: 'Amazon', productUrl: null, dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundTable.glb', relatedIds: ['desk', 'nightstand'] },
   // Seating: no non-desk-chair option existed before this — a bean bag already lived under
   // Optional Luxury Items, but nothing here covered "an actual chair or small sofa to sit in
   // that isn't at the desk."
@@ -212,10 +261,21 @@ export const CATALOG = [
   { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Best Buy', dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', relatedIds: ['chk:streaming-device', 'chk:gaming-console', 'chk:bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
-  { id: 'fridge', name: 'Mini Fridge', price: 139, retailer: 'Best Buy', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
-  { id: 'microwave', name: 'Microwave', price: 79, retailer: 'Best Buy', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  // Mini Fridge — ✅ fully researched.
+  { id: 'fridge-budget', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'budget', name: 'Galanz 3.1 Cu. Ft. Mini Fridge', price: 110, retailer: 'Best Buy', productUrl: null, dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'moderate', name: 'Midea 3.1 Cu. Ft. Double Door Mini Fridge', price: 150, retailer: 'Best Buy', productUrl: null, dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge-premium', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'premium', name: 'Danby Designer 4.4 Cu. Ft. Mini Fridge', price: 220, retailer: 'Best Buy', productUrl: null, dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
+  // Microwave — ✅ fully researched category, but the doc didn't list prices for any of the three
+  // picks — estimates, not sourced (see note at top of file).
+  { id: 'microwave-budget', groupId: 'microwave', groupLabel: 'Microwave', tier: 'budget', name: 'Basic 700W Compact Microwave', price: 60, retailer: 'Best Buy', productUrl: null, dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'microwave', groupId: 'microwave', groupLabel: 'Microwave', tier: 'moderate', name: 'Danby 700W Dorm-Specific Microwave', price: 80, retailer: 'Best Buy', productUrl: null, dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'microwave-premium', groupId: 'microwave', groupLabel: 'Microwave', tier: 'premium', name: 'Drew Barrymore "Beautiful" Sensor Microwave', price: 100, retailer: 'Target', productUrl: null, dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
   { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Target', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['electric-kettle', 'fridge'] },
-  { id: 'electric-kettle', name: 'Electric Kettle', price: 25, retailer: 'Amazon', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
+  // Electric Kettle — ✅ fully researched category, but the doc didn't list prices for any of the
+  // three picks — estimates, not sourced (see note at top of file).
+  { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: null, dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'moderate', name: 'Cosori 1.7L Borosilicate Glass Electric Kettle', price: 30, retailer: 'Amazon', productUrl: null, dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Chefman Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: null, dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
 
   // ---- Cleaning Supplies ----
   { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] },
@@ -226,13 +286,20 @@ export const CATALOG = [
   { id: 'ironing-board', name: 'Ironing Board', price: 30, retailer: 'Amazon', dims: [4.0, 1.1, 2.9], color: 0xd8d8d8, category: 'Laundry', subcategory: 'Optional', relatedIds: ['chk:iron'] },
 
   // ---- Sleep & Comfort ----
-  { id: 'fan', name: 'Fan', price: 25, retailer: 'Target', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['chk:humidifier'] },
+  // Fan — ⚠️ reasonable pick, not tiered (research flags this as a commodity category where a
+  // deep roundup wouldn't change the answer) — single entry, renamed to the researched "moderate"
+  // pick since it's the most broadly useful of the three options mentioned.
+  { id: 'fan', name: 'Tower Fan (Multi-Speed, Remote)', price: 35, retailer: 'Amazon', productUrl: null, dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['chk:humidifier'] },
 
   // ---- Entertainment ----
   { id: 'instrument', name: 'Musical Instrument', price: 199, retailer: 'Amazon', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['shelf'] },
 
   // ---- Decor ----
-  { id: 'rug', name: 'Area Rug 5x3', price: 49, retailer: 'Amazon', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', relatedIds: ['throw-pillow', 'plant'] },
+  // Area Rug — ✅ fully researched (rectangular 5x3 only — rug-round/rug-square below are shape
+  // variants the research didn't cover, left as single entries).
+  { id: 'rug-budget', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'budget', name: 'OLANLY Washable Shaggy Rug 5x3', price: 30, retailer: 'Amazon', productUrl: null, dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', relatedIds: ['throw-pillow', 'plant'] },
+  { id: 'rug', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'moderate', name: 'Soalmost Washable Vintage Rug 5x3', price: 42, retailer: 'Amazon', productUrl: null, dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', relatedIds: ['throw-pillow', 'plant'] },
+  { id: 'rug-premium', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'premium', name: 'Nourison Rug 5x3 (OEKO-TEX Certified)', price: 65, retailer: 'Amazon', productUrl: null, dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', relatedIds: ['throw-pillow', 'plant'] },
   { id: 'rug-round', name: 'Round Rug', price: 39, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRound.glb', relatedIds: ['throw-pillow'] },
   { id: 'rug-square', name: 'Square Rug', price: 45, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugSquare.glb', relatedIds: ['throw-pillow'] },
   { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
@@ -246,7 +313,10 @@ export const CATALOG = [
   { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['mirror'] },
 
   // ---- Optional Luxury Items ----
-  { id: 'beanbag', name: 'Bean Bag Chair', price: 69, retailer: 'Amazon', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
+  // Bean Bag Chair — ✅ fully researched.
+  { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'Basic Classic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: null, dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
+  { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Big Joe Dorm Bean Bag Chair (Drink Holder + Pocket)', price: 80, retailer: 'Amazon', productUrl: null, dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
+  { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: null, dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['bev-cooler', 'fridge'] },
   { id: 'bev-cooler', name: 'Beverage Cooler', price: 89, retailer: 'Best Buy', dims: [1.6, 1.6, 2.6], color: 0xe4e4e4, category: 'Optional Luxury Items', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['snack-cart'] },
 ]
@@ -365,4 +435,18 @@ export function retailerLink(retailer, itemName) {
   const tag = AFFILIATE_TAGS[retailer]
   if (tag) url += (url.includes('?') ? '&' : '?') + `tag=${encodeURIComponent(tag)}`
   return url
+}
+
+// Buy-button link for a cart item: the real product URL once Tyler has pasted one in (see the
+// `productUrl` note at the top of this file), falling back to a retailer search link otherwise.
+// Same AFFILIATE_TAGS map as retailerLink applies to a real productUrl too, so filling in
+// AFFILIATE_TAGS once affiliate approval comes through starts tagging both kinds of link with no
+// further code changes needed.
+export function catalogItemLink(cat) {
+  if (cat.productUrl) {
+    const tag = AFFILIATE_TAGS[cat.retailer]
+    if (!tag) return cat.productUrl
+    return cat.productUrl + (cat.productUrl.includes('?') ? '&' : '?') + `tag=${encodeURIComponent(tag)}`
+  }
+  return retailerLink(cat.retailer, cat.name)
 }
