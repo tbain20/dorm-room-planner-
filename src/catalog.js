@@ -119,22 +119,31 @@ export const CATALOG = [
   // standard dorm frame, but plenty of this app's users aren't in a dorm at all (apartment,
   // off-campus) — see the "not every user is a Colgate student" note on the Colgate section below.
   //
-  // Both render as the real Colgate bed frame (ColgateBed.glb) — same modelRotationY/tintMaterial
-  // treatment, and the same color, as colgate-bed below, plus a fused mattress via extraModels
-  // (same mechanism colgate-bed's mattress uses) so neither looks like a bare frame.
+  // Both render as the real Colgate bed pieces — same tintMaterial treatment and color as
+  // colgate-bed below. colgateHeadboard.glb (the head/footboard + posts only, no base) is the
+  // primary model, needs no rotation — see the "which axis is long" note below. The slat base +
+  // mattress fuse on via extraModels' movesWithHeight (same mechanism colgate-bed uses — see
+  // _loadItemMesh/setBedHeight in roomEngine.js) so both slide together to whichever height preset
+  // is selected, sliding on the headboard/footboard posts rather than a frame that moves with them.
   //
   // dims are listed [long axis, short axis, height] here — width > depth — matching colgate-bed's
   // own convention below, NOT the usual width < depth convention most other items use. That's not
-  // cosmetic: modelRotationY always lands ColgateBed.glb's headboard/footboard rails on world X (a
-  // fixed fact of the model + rotation, independent of dims/scale — see _fitModelToDims), so
-  // dims[0] has to be the long head-to-foot measurement or the rails end up on the long sides of
-  // the bed instead of the head/foot ends. Every extraModels entry that reuses ColgateBed.glb
-  // needs the same convention for its own dims for the same reason.
+  // cosmetic: colgateSlat.glb (like the old merged ColgateBed.glb, which colgateSlat was carved out
+  // of) needs its 90° rotation to land its slats running the right way — a fixed fact of the model
+  // + rotation, independent of dims/scale (see _fitModelToDims) — so dims[0] has to be the long
+  // head-to-foot measurement or the slats end up running lengthwise instead of across the bed.
+  // colgateHeadboard.glb, unlike colgateSlat/the old merged frame, was exported with its head/foot
+  // boards already spread along local X — confirmed by histogramming its vertex positions (almost
+  // all mass sits at the two extremes of local X with a dead gap in between, i.e. the two boards),
+  // so it needs no modelRotationY at all.
   {
     id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true,
     bedHeights: FULL_BED_HEIGHTS,
-    extraModels: [{ modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0xd8cbb0, yOffset: FULL_BED_HEIGHTS.standard, isMattress: true }],
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
+    ],
     relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'],
   },
   // Rendered as two Colgate frames stacked (bottom bunk's own frame, then a second copy fused on
@@ -150,8 +159,8 @@ export const CATALOG = [
     category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
     extraModels: [
       { modelUrl: '/models/ColgateBed.glb', dims: [6.5, 3.4, 2.75], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 2.75 }, // top bunk's own frame
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9, isMattress: true }, // bottom bunk mattress
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 3.65, isMattress: true }, // top bunk mattress
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9 }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 3.65 }, // top bunk mattress — fixed, same reason
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'],
   },
@@ -248,37 +257,49 @@ export const CATALOG = [
 //   and no texture, so they all rendered as gray plastic instead of the PDF's light oak. The
 //   engine now repaints the model's material to the item's own `color` (see _tintModel in
 //   roomEngine.js) — same beige (#c9a876) already used for the box-placeholder fallback.
-// - modelRotationY (bed only) — ColgateBed.glb's headboard/footboard rail panels came in aligned
-//   to the model's long axis instead of its short one, so non-uniform scale-to-dims stretched the
-//   rail panel across the bed's long side instead of the head/foot ends. A 90° pre-rotation before
-//   fitting swaps which local axis lands on width vs. depth.
+// - modelRotationY (bed-shaped models only — ColgateBed.glb, colgateSlat.glb) — their
+//   headboard/footboard rail or slat geometry came in aligned to the model's long axis instead of
+//   its short one, so non-uniform scale-to-dims stretched them across the bed's long side instead
+//   of running the right way. A 90° pre-rotation before fitting swaps which local axis lands on
+//   width vs. depth. colgateHeadboard.glb (colgate-bed/bed-full's primary model, carved out of
+//   ColgateBed.glb into just the head/footboard + posts) needs no such rotation — it was exported
+//   with its head/foot boards already spread along local X, confirmed by histogramming its vertex
+//   positions (almost all mass at the two extremes with a dead gap between, i.e. the two boards).
 //
 // The Stackable Chest is deliberately NOT in this list — see 'stackable-chest' in CATALOG above.
 // Colgate doesn't guarantee every room gets one (the PDF's own wording is about variation between
 // rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
 // treated as purchasable.
 export const PROVIDED_CATALOG = [
-  // The mattress (Twin XL Mattress, colgateMattress.glb, real dims [6.67, 3.08, 0.5]) isn't a
-  // separate catalog entry — Tyler wanted the bed to read as one piece rather than two items a
-  // student could accidentally separate or delete independently, so it's fused on via extraModels
-  // (see _loadItemMesh): the engine loads it as a second model, sizes it to its own real dims, and
-  // sets it at yOffset within the group. isMattress: true additionally tracks it in
-  // group.userData.mattressObjs so setBedHeight() can slide it to a different peg — the frame
-  // itself (legs, posts, rails) never moves; the mattress is the only thing that adjusts.
-  // yOffset (1.0ft, COLGATE_BED_HEIGHTS.standard) is NOT "frame height minus mattress height" —
-  // ColgateBed.glb's tall corner posts/rails reach the full 3.0ft dims height, but the actual slat
-  // surface the mattress rests on sits much lower. Found by parsing the glb's POSITION accessor
-  // directly (no separate "slats" node to target — it's one merged mesh) and histogramming vertex
-  // Y values: ~41% of all 334k vertices cluster in a thin band around y=0.23-0.25 (of a 0-0.826
-  // local height range) — an unmistakable flat plateau, i.e. the slat base — versus ~1000 vertices
-  // per bin everywhere else (the thin corner posts). That local band scales to ~0.9-1.1ft of world
-  // height once stretched to the 3.0ft dims target; 1.0ft is the middle of that, confirmed
-  // visually — kept as COLGATE_BED_HEIGHTS.standard so existing saved layouts render unchanged.
+  // Originally one merged frame model (ColgateBed.glb, still used by bed-bunk above) with a fused
+  // mattress on top — but that model bakes the slat base into the same mesh as the head/footboard
+  // and posts (no separate "slats" node to hide — confirmed by parsing its POSITION accessor and
+  // histogramming vertex Y values: no gap separating a "slats" cluster from everything else), so
+  // there was no way to move just the mattress+base and leave the posts alone, or to hide the base
+  // entirely. Tyler split the model in Blender into two pieces instead: colgateHeadboard.glb
+  // (head/footboard + corner posts, no base — the primary model, stays put) and colgateSlat.glb
+  // (just the slat base). The slat and the mattress both fuse on via extraModels'
+  // movesWithHeight: true (see _loadItemMesh/setBedHeight in roomEngine.js), each keeping its own
+  // stackOffset above the current height preset — the mattress's stackOffset equals the slat's own
+  // thickness (0.25ft) so it always sits right on top of the slat, and the pair slides together as
+  // a unit to whichever peg is selected while the headboard/footboard posts stay exactly where
+  // they are, matching a real adjustable frame.
+  //
+  // bedHeights (COLGATE_BED_HEIGHTS) is the slat's own base Y at each peg — 'standard' (1.0ft) is
+  // NOT "frame height minus mattress height", it's where the old merged model's slat surface
+  // actually sat: ColgateBed.glb's tall corner posts/rails reach the full 3.0ft dims height, but
+  // histogramming its vertices found ~41% of all 334k clustered in a thin flat band around
+  // y=0.23-0.25 (of a 0-0.826 local height range) — the slat plateau — which scales to ~0.9-1.1ft
+  // of world height at the 3.0ft dims target; 1.0ft is the middle of that, confirmed visually, and
+  // kept as 'standard' so existing saved layouts render at the same height as before this split.
   {
     id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876,
-    category: 'Provided', isProvided: true, modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
+    category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true,
     bedHeights: COLGATE_BED_HEIGHTS,
-    extraModels: [{ modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, yOffset: COLGATE_BED_HEIGHTS.standard, isMattress: true }],
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
+    ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'],
   },
   { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, relatedIds: ['lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },

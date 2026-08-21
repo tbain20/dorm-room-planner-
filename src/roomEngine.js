@@ -153,20 +153,21 @@ export class RoomEngine {
     })
   }
 
-  // Clamps a raw notch spec (whatever the UI last set) to something geometrically sane: enough
-  // flat wall left on either side of the cutout to still read as a wall, and a depth that can't
-  // turn the floor polygon self-intersecting (an inset can't eat more than ~60% of the room's
-  // other dimension; a bump-out is capped at a generous but finite size).
+  // Clamps a raw notch spec (whatever the UI last set) to something geometrically sane: a depth
+  // that can't turn the floor polygon self-intersecting (an inset can't eat more than ~60% of the
+  // room's other dimension; a bump-out is capped at a generous but finite size). Width/offset are
+  // NOT forced to leave flat wall on both sides — width can go all the way up to the wall's full
+  // length and offset can push either edge flush into a corner, so "push this whole wall back" or
+  // an L-shaped step flush against one side wall (but not the other) are both expressible, not
+  // just a centered island cutout.
   _clampedNotch() {
     const notch = this.room.notch
     if (!notch) return null
     const { w, l } = this.room
     const wallLen = notch.wall === 'left' || notch.wall === 'right' ? l : w
-    const margin = 0.5
-    const maxWidth = Math.max(1, wallLen - margin * 2)
-    const width = Math.max(1, Math.min(maxWidth, notch.width))
+    const width = Math.max(1, Math.min(wallLen, notch.width))
     const half = width / 2
-    const offset = Math.max(margin + half, Math.min(wallLen - margin - half, notch.offset))
+    const offset = Math.max(half, Math.min(wallLen - half, notch.offset))
     const otherDim = notch.wall === 'left' || notch.wall === 'right' ? w : l
     const maxInset = Math.max(0.5, otherDim * 0.6 - 1)
     const depth = notch.depth >= 0 ? Math.min(notch.depth, 8) : Math.max(notch.depth, -maxInset)
@@ -328,21 +329,34 @@ export class RoomEngine {
           group.add(gltf.scene)
 
           // extraModels fuses additional models onto this one as a single placeable item — e.g. a
-          // bed's mattress, or the bunk bed's top frame — each sized to its own real dims and set
-          // at its own fixed yOffset, rather than a second flat box overlapping it at floor level.
-          // Entries flagged isMattress are tracked in group.userData.mattressObjs so setBedHeight()
-          // can slide just the mattress to a different peg without moving the frame around it.
+          // bed's slat base + mattress, or the bunk bed's top frame — each sized to its own real
+          // dims, rather than a second flat box overlapping it at floor level. Two positioning
+          // modes:
+          // - Plain yOffset: a fixed absolute Y within the group (the bunk's second frame, a
+          //   non-adjustable bed's fixed mattress).
+          // - movesWithHeight + stackOffset: for beds with bedHeights (see catalog.js) — this
+          //   piece's Y tracks the bed's current height preset instead of a fixed spot, so setting
+          //   the bed to "Lofted" slides it (and anything else in the same movable stack, like a
+          //   mattress fused stackOffset above its slat) up together — the headboard/footboard
+          //   posts stay right where they are, matching how a real adjustable frame works. Tracked
+          //   in group.userData.movableObjs for setBedHeight() to reach later.
           if (cat.extraModels) {
-            group.userData.mattressObjs = []
+            group.userData.movableObjs = []
             for (const extra of cat.extraModels) {
               try {
                 const extraGltf = await this._loadGltf(extra.modelUrl)
                 if (extra.rotationY) extraGltf.scene.rotation.y = extra.rotationY
                 if (extra.color) this._tintModel(extraGltf.scene, extra.color)
                 this._fitModelToDims(extraGltf.scene, extra.dims)
-                extraGltf.scene.position.y += extra.yOffset
+                if (extra.movesWithHeight) {
+                  const stackOffset = extra.stackOffset || 0
+                  const standardY = (cat.bedHeights ? cat.bedHeights.standard : 0) + stackOffset
+                  extraGltf.scene.position.y += standardY
+                  group.userData.movableObjs.push({ obj: extraGltf.scene, stackOffset, thickness: extra.dims[2] })
+                } else {
+                  extraGltf.scene.position.y += extra.yOffset
+                }
                 group.add(extraGltf.scene)
-                if (extra.isMattress) group.userData.mattressObjs.push({ obj: extraGltf.scene, thickness: extra.dims[2] })
               } catch (err) {
                 console.warn(`Extra model failed to load for "${cat.name}".`, err)
               }
@@ -620,9 +634,11 @@ export class RoomEngine {
     const cat = ALL_ITEMS.find((c) => c.id === placedItem.catalogId)
     if (cat && cat.bedHeights) {
       const level = placedItem.bedHeightLevel || 'standard'
-      const mattressObjs = placedItem.mesh.userData.mattressObjs || []
-      const thickness = mattressObjs.length ? mattressObjs[0].thickness : 0
-      return placedItem.mesh.position.y + cat.bedHeights[level] + thickness
+      const movable = placedItem.mesh.userData.movableObjs || []
+      // The topmost movable piece's own top (stackOffset + its thickness) — e.g. the mattress
+      // fused on top of the slat, not the slat itself — regardless of how many pieces are stacked.
+      const topOffset = movable.reduce((max, m) => Math.max(max, m.stackOffset + m.thickness), 0)
+      return placedItem.mesh.position.y + cat.bedHeights[level] + topOffset
     }
     return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2]
   }
@@ -678,18 +694,21 @@ export class RoomEngine {
   }
 
   // Bed height presets (Low/Standard/Lofted) — see catalog.js's bedHeights. Moves only the bed's
-  // fused mattress (group.userData.mattressObjs, set up in _loadItemMesh from extraModels) to a
-  // different peg — the frame itself (legs, posts, rails) never moves, matching how a real
-  // adjustable frame works: you slide the mattress/rails to a higher peg, the posts stay grounded.
-  // Cascades the change to anything resting on top of the mattress (a topper, say) via
-  // _restackAbove, which reads the new position straight back out through _topSurfaceY.
+  // movable pieces (group.userData.movableObjs, set up in _loadItemMesh from extraModels'
+  // movesWithHeight entries — the slat base and the mattress fused on top of it) to a different
+  // peg, each keeping its own stackOffset above that peg so the mattress stays sitting on the
+  // slat rather than the two overlapping. The headboard/footboard (the primary model) never
+  // moves, matching how a real adjustable frame works: you slide the slats/mattress to a higher
+  // peg, the posts stay grounded. Cascades the change to anything resting on top of the mattress
+  // (a topper, say) via _restackAbove, which reads the new position straight back out through
+  // _topSurfaceY.
   setBedHeight(uid, level) {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat || !cat.bedHeights || cat.bedHeights[level] == null) return
     item.bedHeightLevel = level
-    ;(item.mesh.userData.mattressObjs || []).forEach((m) => { m.obj.position.y = cat.bedHeights[level] })
+    ;(item.mesh.userData.movableObjs || []).forEach((m) => { m.obj.position.y = cat.bedHeights[level] + m.stackOffset })
     this._restackAbove(uid)
     if (this.selected && this.selected.uid === uid) this._emitSelection()
   }

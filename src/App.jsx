@@ -908,7 +908,7 @@ export default function App() {
                     <div className="dim-row">
                       <label>Width</label>
                       <input
-                        type="number" value={room.notch.width} min={1} max={Math.max(1, (room.notch.wall === 'left' || room.notch.wall === 'right' ? room.l : room.w) - 1)} step={0.5}
+                        type="number" value={room.notch.width} min={1} max={room.notch.wall === 'left' || room.notch.wall === 'right' ? room.l : room.w} step={0.5}
                         onChange={(e) => handleNotchChange({ width: parseFloat(e.target.value) || room.notch.width })}
                       />
                       <span className="unit">ft</span>
