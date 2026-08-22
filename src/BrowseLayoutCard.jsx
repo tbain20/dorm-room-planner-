@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { layoutShopSummary } from './catalog.js'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
+import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 
 // One card in the masonry gallery (see BrowsePage.jsx). Image-dominant by design — name,
 // creator, and the shop-summary line are hidden until hover (or always-on in a compact caption
@@ -24,7 +25,7 @@ export default function BrowseLayoutCard({
         {layout.thumbnailUrl && !imgFailed ? (
           <img src={layout.thumbnailUrl} alt={layout.name} loading="lazy" onError={() => setImgFailed(true)} />
         ) : (
-          <div className="gallery-card-media-fallback">🏠</div>
+          <div className="gallery-card-media-fallback"><RoomFallbackIcon size={40} /></div>
         )}
         <div className="gallery-card-overlay">
           <div className="gallery-card-actions">

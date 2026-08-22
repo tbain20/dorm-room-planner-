@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { getPublicBoardById } from './storage.js'
+import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 
 // The standalone page a shared /boards/:id link opens to — a public board is just a named
 // collection of a student's saved layouts (see the Part B boards session) with is_public flipped
@@ -93,7 +94,7 @@ function BoardLayoutCard({ layout }) {
         {layout.thumbnailUrl && !imgFailed ? (
           <img src={layout.thumbnailUrl} alt={layout.name} loading="lazy" onError={() => setImgFailed(true)} />
         ) : (
-          <div className="gallery-card-media-fallback">🏠</div>
+          <div className="gallery-card-media-fallback"><RoomFallbackIcon size={40} /></div>
         )}
       </div>
       <div className="gallery-card-caption-mobile" style={{ display: 'block' }}>
