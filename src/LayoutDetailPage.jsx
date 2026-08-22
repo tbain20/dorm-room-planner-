@@ -8,6 +8,7 @@ import {
 } from './storage.js'
 import { resolveLayoutCatalogItems, catalogItemLink } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
+import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 
 // The standalone page a shared /layouts/:id link opens to — a static render (thumbnail + info),
 // not a live 3D view. Spinning up a second RoomEngine instance just for this page would mean
@@ -183,8 +184,8 @@ export default function LayoutDetailPage() {
       {layout.thumbnailUrl ? (
         <img src={layout.thumbnailUrl} alt={layout.name} style={{ width: '100%', borderRadius: 12, marginBottom: 20 }} />
       ) : (
-        <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--paper-shadow)', borderRadius: 12, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
-          🏠
+        <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--paper-shadow)', borderRadius: 12, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <RoomFallbackIcon size={64} />
         </div>
       )}
 

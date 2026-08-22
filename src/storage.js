@@ -577,13 +577,22 @@ export async function listSavedLayouts() {
 export async function listMyBoardsWithLayouts() {
   const client = requireClient()
   const user = await requireUser(client)
-  const { data, error } = await client
+  const boardColumns = 'id, name, is_public, created_at, board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
+  let { data, error } = await client
     .from('boards')
-    .select(
-      'id, name, is_public, created_at, board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
-    )
+    .select(boardColumns)
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
+  if (error && error.code === '42703') {
+    // migration 012 (boards.is_public) hasn't been run on this project yet — fall back to
+    // the pre-012 column set so basic board listing keeps working; public-board features just
+    // won't be available until the migration is applied.
+    ;({ data, error } = await client
+      .from('boards')
+      .select(boardColumns.replace('id, name, is_public, created_at', 'id, name, created_at'))
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true }))
+  }
   if (error) throw error
   return data.map((board) => ({
     id: board.id,
@@ -618,12 +627,16 @@ export async function createBoard(name) {
   const user = await requireUser(client)
   const clean = name.trim()
   if (!clean) throw new Error('Board name required')
-  const { data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, is_public, created_at').single()
+  let { data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, is_public, created_at').single()
+  if (error && error.code === '42703') {
+    // migration 012 (boards.is_public) hasn't been run yet — same fallback as listMyBoardsWithLayouts.
+    ;({ data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, created_at').single())
+  }
   if (error) {
     if (error.code === '23505') throw new Error(`You already have a board named "${clean}"`)
     throw error
   }
-  return { id: data.id, name: data.name, isPublic: data.is_public, createdAt: new Date(data.created_at).getTime(), layouts: [] }
+  return { id: data.id, name: data.name, isPublic: data.is_public ?? false, createdAt: new Date(data.created_at).getTime(), layouts: [] }
 }
 
 // Owner-only, same as renameBoard — RLS's "Users can rename their own boards" update policy
