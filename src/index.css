@@ -147,6 +147,8 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 }
 .tier-btn:hover{background:var(--accent-soft); border-color:var(--accent);}
 .tier-name{font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; color:var(--ink-soft);}
+.tier-product-name{font-size:9.5px; color:var(--ink-soft); text-align:center; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+.tier-rating{font-size:9px; color:var(--sage); font-weight:600;}
 .tier-price{font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--ink);}
 
 #sidebar-header{padding:18px 14px 2px 14px;}

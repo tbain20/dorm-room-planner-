@@ -86,6 +86,10 @@ function TierGroupCard({ group, onAdd }) {
               }}
             >
               <span className="tier-name">{TIER_LABELS[tier.tier] || tier.tier}</span>
+              <span className="tier-product-name">{tier.name}</span>
+              {tier.rating && (
+                <span className="tier-rating">★ {tier.rating}{tier.reviewCount ? ` (${tier.reviewCount.toLocaleString()})` : ''}</span>
+              )}
               <span className="tier-price">${tier.price}</span>
             </button>
           ))}
