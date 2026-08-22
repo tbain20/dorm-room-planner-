@@ -461,3 +461,31 @@ export function catalogItemLink(cat) {
   }
   return retailerLink(cat.retailer, cat.name)
 }
+
+// Combined id -> catalog entry lookup covering both purchasable (CATALOG) and Colgate-provided
+// (PROVIDED_CATALOG) items — the same superset roomEngine.js's own local ALL_ITEMS resolves a
+// saved layout's items against when loading it into the 3D scene.
+const ALL_CATALOG_ITEMS = [...CATALOG, ...PROVIDED_CATALOG]
+
+// Joins a saved layout's `items` array (placement records of the shape `{ catalogId, x, z, rotY,
+// ... }` — see roomEngine.js's getState) against the current catalog, the same lookup roomEngine
+// does when loading a layout into the 3D scene. Used to render that same data as a flat list
+// instead of 3D objects — see LayoutDetailPage's "Shop this room". Drops any catalogId that no
+// longer resolves (an item retired from the catalog since the layout was saved) rather than
+// showing a broken row — the same defensive skip roomEngine.loadState already does.
+export function resolveLayoutCatalogItems(items) {
+  if (!items) return []
+  return items.map((it) => ALL_CATALOG_ITEMS.find((c) => c.id === it.catalogId)).filter(Boolean)
+}
+
+// Shopping summary for a saved layout: how many of its items are actually purchasable (Colgate-
+// provided furniture has no price and isn't for sale — same exclusion App.jsx's purchasableCart/
+// receipt modal already makes) and what they'd cost. Powers the layout detail page's "Shop this
+// room" total and the lightweight "X items · starting at $Y" teaser on Browse cards.
+export function layoutShopSummary(items) {
+  const purchasable = resolveLayoutCatalogItems(items).filter((c) => !c.isProvided)
+  return {
+    count: purchasable.length,
+    total: purchasable.reduce((sum, c) => sum + c.price, 0),
+  }
+}

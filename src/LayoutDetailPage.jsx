@@ -6,6 +6,8 @@ import {
   saveLayoutBookmark, unsaveLayoutBookmark, listMySavedLayoutIds, copyLayout,
   listComments, addComment, deleteComment, submitReport,
 } from './storage.js'
+import { resolveLayoutCatalogItems, catalogItemLink } from './catalog.js'
+import CatalogThumb from './CatalogThumb.jsx'
 
 // The standalone page a shared /layouts/:id link opens to — a static render (thumbnail + info),
 // not a live 3D view. Spinning up a second RoomEngine instance just for this page would mean
@@ -197,6 +199,8 @@ export default function LayoutDetailPage() {
       {copyNotice && <div style={{ color: '#6b7a5e', fontSize: 12, marginBottom: 12, fontWeight: 600 }}>{copyNotice}</div>}
       {!session && <div style={{ color: '#8a8072', fontSize: 11.5, marginBottom: 20 }}>Sign in on the main app to like, save, copy, or comment.</div>}
 
+      <ShopThisRoom items={layout.items} />
+
       <h2 style={{ fontSize: 15, marginTop: 32, marginBottom: 10 }}>Comments {comments.length > 0 && `(${comments.length})`}</h2>
       {commentsError && <div style={{ color: '#b23a3a', fontSize: 12, marginBottom: 10 }}>{commentsError}</div>}
       {session && (
@@ -227,6 +231,67 @@ export default function LayoutDetailPage() {
             )}
           </div>
         ))
+      )}
+    </div>
+  )
+}
+
+// Every item actually placed in this layout, as a flat priced/linked list — the same catalog
+// join roomEngine uses to render a saved layout into the 3D scene, just rendered as rows instead
+// of meshes. Reads directly off the layout's own `items` array (already fetched with the rest of
+// the layout — no extra query), so this works for signed-out visitors exactly like the rest of
+// this page. Colgate-provided furniture still shows (dims matter for the "does this fit"
+// fit-check even for furniture you're not buying) but gets an "Included by Colgate" tag instead
+// of a Buy button, and is excluded from the total — same treatment the in-app shopping list
+// modal already gives it.
+function ShopThisRoom({ items }) {
+  const resolved = resolveLayoutCatalogItems(items)
+  const total = resolved.filter((c) => !c.isProvided).reduce((sum, c) => sum + c.price, 0)
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Shop this room</h2>
+      {resolved.length === 0 ? (
+        <div style={{ color: '#8a8072', fontSize: 13 }}>This room doesn't have any items yet.</div>
+      ) : (
+        <>
+          {resolved.map((cat, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #eee6d8' }}>
+              <CatalogThumb cat={cat} size={44} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#2b2620' }}>{cat.name}</div>
+                <div style={{ fontSize: 11, color: '#8a8072', marginTop: 2 }}>
+                  {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}'
+                  {cat.rating && ` · ★ ${cat.rating}${cat.reviewCount ? ` (${cat.reviewCount.toLocaleString()})` : ''}`}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {cat.isProvided ? (
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7a5e' }}>Included by Colgate</div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#2b2620', marginBottom: 5 }}>${cat.price}</div>
+                    <a
+                      href={catalogItemLink(cat)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: 10.5, fontWeight: 600, color: '#fff', background: '#b2542f', borderRadius: 999,
+                        padding: '4px 10px', textDecoration: 'none', display: 'inline-block', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Buy on {cat.retailer} ↗
+                    </a>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 14, fontSize: 14, fontWeight: 700, color: '#2b2620' }}>
+            <span>Estimated total</span>
+            <span>${total.toLocaleString()}</span>
+          </div>
+        </>
       )}
     </div>
   )

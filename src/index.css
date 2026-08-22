@@ -19,9 +19,14 @@
   --shadow-lift: 0 20px 50px rgba(37,29,20,0.18);
 }
 *{box-sizing:border-box;}
-html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font-sans);color:var(--ink);overflow:hidden;}
+html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font-sans);color:var(--ink);}
 
-#app{position:relative;width:100vw;height:100vh;display:flex;}
+/* overflow:hidden lives on #app (the fixed-viewport 3D editor), not html/body/#root — the editor
+   needs its own scroll clipped so canvas drag/zoom gestures don't scroll the page underneath it,
+   but LayoutDetailPage.jsx renders straight into #root with no #app wrapper and is a normal
+   taller-than-the-viewport content page (its "Shop this room" list + comments routinely exceed
+   one screen), so it needs the document to scroll like any other page. */
+#app{position:relative;width:100vw;height:100vh;display:flex;overflow:hidden;}
 
 #canvas-wrap{
   position:relative;flex:1;min-width:0;
@@ -226,8 +231,7 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 ::-webkit-scrollbar-thumb{background:var(--paper-shadow); border-radius:4px;}
 
 @media (max-width: 760px){
-  html,body,#root{overflow:auto;}
-  #app{flex-direction:column; width:100%; height:auto; min-height:100vh;}
+  #app{flex-direction:column; width:100%; height:auto; min-height:100vh; overflow:visible;}
   #canvas-wrap{height:52vh; flex:none;}
   #titleblock{min-width:0; padding:12px 14px; max-width:60vw;}
   #titleblock h1{font-size:15px;}

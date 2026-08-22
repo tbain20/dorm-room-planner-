@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, thumbnailUrl, resolveRelatedItems } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary } from './catalog.js'
+import CatalogThumb from './CatalogThumb.jsx'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile,
@@ -34,29 +35,6 @@ function formatFeetInches(ft) {
   const feet = Math.floor(totalInches / 12)
   const inches = totalInches % 12
   return inches === 0 ? `${feet}'` : `${feet}'${inches}"`
-}
-
-// Real thumbnail rendered from the item's model when one exists; falls back to the flat color
-// swatch (plus a category icon, so it's not just a blank chip) for box-placeholder items or if
-// the image 404s — some future catalog item might get a modelUrl before anyone regenerates
-// public/thumbnails/, and this shouldn't break the row when that happens.
-function CatalogThumb({ cat }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const swatchColor = `#${cat.color.toString(16).padStart(6, '0')}`
-  const url = thumbnailUrl(cat)
-
-  if (url && !imgFailed) {
-    return (
-      <div className="swatch" style={{ background: swatchColor, padding: 0 }}>
-        <img src={url} alt="" onError={() => setImgFailed(true)} className="swatch-img" />
-      </div>
-    )
-  }
-  return (
-    <div className="swatch" style={{ background: swatchColor }}>
-      <span className="swatch-icon">{CATEGORY_ICONS[cat.category] || '📦'}</span>
-    </div>
-  )
 }
 
 const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
@@ -119,6 +97,11 @@ function LayoutThumb({ url }) {
 // link if it's itself a remix. "My Layouts" gets its own row markup instead (publish toggle +
 // delete + remix count aren't relevant here, and copy/like/save aren't relevant there).
 function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onToggleLike, onToggleSave, onViewParent, onViewProfile, onReport, onShare }) {
+  // Lightweight shoppability teaser — the full priced/linked list lives on the layout detail
+  // page (see "Shop this room"); this is just a taste of it before clicking in. Only shown when
+  // the layout has at least one purchasable item, so a room built entirely from Colgate-provided
+  // furniture doesn't show a confusing "0 items · starting at $0".
+  const shopSummary = layoutShopSummary(layout.items)
   return (
     <div className="cart-row" style={{ alignItems: 'flex-start' }} onClick={onView} title="Click to view this layout in your room">
       <LayoutThumb url={layout.thumbnailUrl} />
@@ -130,6 +113,11 @@ function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onTog
           {layout.hall && ` · ${layout.hall}`}
           {layout.tags && layout.tags.length > 0 && ` · ${layout.tags.join(', ')}`}
         </span>
+        {shopSummary.count > 0 && (
+          <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 1 }}>
+            🛒 {shopSummary.count} item{shopSummary.count === 1 ? '' : 's'} to shop · starting at ${shopSummary.total.toLocaleString()}
+          </span>
+        )}
         {layout.authorId && (
           <span
             style={{ display: 'block', fontSize: 10, fontWeight: 600, marginTop: 2, cursor: 'pointer', color: layout.designerName ? 'var(--sage)' : 'var(--ink-soft)' }}
