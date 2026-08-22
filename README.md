@@ -199,7 +199,19 @@ have been added since you last ran one — all additive and safe to re-run:
     entirely (not just the collaboration feature). 014 rewrites those two policies to use
     SECURITY DEFINER helper functions instead, which fixes the recursion without changing what
     anyone is allowed to see or do.
-14. That's it — still no new env vars needed for any of these, including the OG preview
+14. New query → paste in
+    [`supabase/migrations/015_custom_items.sql`](supabase/migrations/015_custom_items.sql), run
+    it. Adds `custom_items` — needed for the "+ Add a custom item" button at the top of the
+    Catalog tab (CustomItemForm.jsx) to work at all, and for `/admin/custom-items`
+    (AdminCustomItemsPage.jsx, gated to Tyler's own account email) to have anything to show.
+    Without it, the button still renders but every submission errors inline in the modal.
+15. New query → paste in
+    [`supabase/migrations/016_custom_posters.sql`](supabase/migrations/016_custom_posters.sql),
+    run it. Adds the `custom-posters` storage bucket and a `custom_posters` table — needed for
+    "+ Upload your own poster" (in the Catalog tab's Decor section, PosterUploadForm.jsx) to work
+    at all. Same as 015: the button still renders and validates without it, every upload just
+    errors inline ("Bucket not found") instead of succeeding.
+16. That's it — still no new env vars needed for any of these, including the OG preview
     serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
     in your Vercel project).
 

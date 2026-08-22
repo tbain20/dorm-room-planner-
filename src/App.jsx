@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
+import CustomItemForm from './CustomItemForm.jsx'
+import PosterUploadForm from './PosterUploadForm.jsx'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, copyLayout, getMyProfile,
@@ -16,6 +18,8 @@ import {
   listMyBoardsWithLayouts, createBoard, renameBoard, deleteBoard, setBoardPublic, addLayoutToBoard, removeLayoutFromBoard,
   getLeaderboard, computeBadges,
   leaveLayoutCollaboration, removeCollaborator, saveSharedLayout, listSharedWithMe, getLayoutForEditing,
+  listMyCustomItems, createCustomItem, deleteCustomItem,
+  listMyCustomPosters, uploadCustomPoster, deleteCustomPoster,
 } from './storage.js'
 
 const REPORT_REASONS = ['Spam', 'Inappropriate', 'Other']
@@ -256,6 +260,10 @@ export default function App() {
   // null — mirrors the engine's own stackPickSourceUid (see roomEngine.js), reported back via the
   // onStackPickModeChange callback so the selection panel can show the right button/hint.
   const [stackPickForUid, setStackPickForUid] = useState(null)
+  // Measuring tool (Room Planner panel's Measure button) — mirrors the engine's own measureMode/
+  // measurePoints, reported back via onMeasureChange so the button/readout can reflect whether
+  // it's active and, once two points are placed, the live distance between them.
+  const [measureState, setMeasureState] = useState({ active: false, pointCount: 0, distanceFt: null })
   // Catalog is the landing tab — Browse moved out to its own /browse route (see BrowsePage.jsx),
   // so it's no longer a tab value here at all.
   const [tab, setTab] = useState('catalog')
@@ -264,6 +272,17 @@ export default function App() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [layoutsError, setLayoutsError] = useState('')
   const [myProfile, setMyProfile] = useState(null)
+  // Custom items (Session 1) — this user's own catalog.js's ALL_CATALOG_ITEMS registrations,
+  // mirrored here just so the Catalog tab's "My Custom Items" section has something to render/
+  // delete from without re-deriving it from the registry each time.
+  const [customItems, setCustomItems] = useState([])
+  const [customItemsError, setCustomItemsError] = useState('')
+  const [showCustomItemForm, setShowCustomItemForm] = useState(false)
+  // Custom posters (Session 5) — same registry pattern as custom items above, just uploaded
+  // artwork instead of a stand-in-model item. See catalog.js's buildCustomPosterCatalogItem.
+  const [customPosters, setCustomPosters] = useState([])
+  const [customPostersError, setCustomPostersError] = useState('')
+  const [showPosterUploadForm, setShowPosterUploadForm] = useState(false)
   // Still named "browse*" — now the error/notice surface for the Saved tab's "Saved from others"
   // actions (like/save/copy on a PublicLayoutRow there), which is the same handful of handlers
   // Browse used to share this state with before it moved to BrowsePage.jsx.
@@ -343,6 +362,7 @@ export default function App() {
       onSelectionChange: setSelection,
       onFeatureSelectionChange: setFeatureSelection,
       onStackPickModeChange: setStackPickForUid,
+      onMeasureChange: setMeasureState,
     })
     engineRef.current = engine
     return () => engine.destroy()
@@ -385,6 +405,10 @@ export default function App() {
   useEffect(() => {
     setRelatedNotice('')
     setShowDimensions(false)
+    // Keeps the engine's own 3D dimension-line overlay (see roomEngine.js's
+    // setShowDimensionOverlay) in sync with this reset — otherwise a newly selected item would
+    // inherit the previous item's overlay even though the 📏 Dimensions button visually shows off.
+    engineRef.current?.setShowDimensionOverlay(false)
     setPanelCollapsed(false)
   }, [selection])
 
@@ -420,6 +444,16 @@ export default function App() {
       setMyProfile(null)
       setLikedIds(new Set())
       setMySavedIds(new Set())
+      // Unregisters this user's custom items from the shared catalog.js lookup on sign-out, so a
+      // different user signing in afterward (same browser tab) can't still add/see them.
+      setCustomItems((prev) => {
+        prev.forEach((row) => unregisterCustomCatalogItem(`custom-${row.id}`))
+        return []
+      })
+      setCustomPosters((prev) => {
+        prev.forEach((row) => unregisterCustomCatalogItem(`poster-${row.id}`))
+        return []
+      })
       return
     }
     getMyProfile()
@@ -437,6 +471,21 @@ export default function App() {
     listMyLikedLayoutIds().then((ids) => setLikedIds(new Set(ids))).catch(() => {})
     listMySavedLayoutIds().then((ids) => setMySavedIds(new Set(ids))).catch(() => {})
     listMyFollowingIds().then((ids) => setFollowingIds(new Set(ids))).catch(() => {})
+    // Registered into catalog.js's live lookup as soon as they're fetched (not lazily when the
+    // Catalog tab is opened) so a custom item saved in a layout resolves correctly even if the
+    // user lands straight on the Cart/Saved tab.
+    listMyCustomItems()
+      .then((rows) => {
+        rows.forEach((row) => registerCustomCatalogItem(buildCustomCatalogItem(row)))
+        setCustomItems(rows)
+      })
+      .catch((err) => setCustomItemsError(err.message))
+    listMyCustomPosters()
+      .then((rows) => {
+        rows.forEach((row) => registerCustomCatalogItem(buildCustomPosterCatalogItem(row)))
+        setCustomPosters(rows)
+      })
+      .catch((err) => setCustomPostersError(err.message))
   }, [session])
 
   useEffect(() => {
@@ -641,6 +690,50 @@ export default function App() {
 
   function handleAddRelatedToRoom(catalogId) {
     engineRef.current.addItem(catalogId)
+  }
+
+  // Custom items (Session 1) — a user's own catalog entries. Creating one registers it into the
+  // live catalog lookup (see catalog.js's registerCustomCatalogItem) so it's immediately
+  // addable/draggable/on the shopping list, same as any real catalog item, with no page reload.
+  // handleCreateCustomItem's own try/catch (not here) is what surfaces an error into the form
+  // itself (see CustomItemForm.jsx) rather than a page-level error banner, since it's the one
+  // async action a still-open modal is waiting on.
+  async function handleCreateCustomItem(payload) {
+    const row = await createCustomItem(payload)
+    registerCustomCatalogItem(buildCustomCatalogItem(row))
+    setCustomItems((prev) => [...prev, row])
+    setShowCustomItemForm(false)
+  }
+
+  async function handleDeleteCustomItem(id) {
+    setCustomItemsError('')
+    try {
+      await deleteCustomItem(id)
+      unregisterCustomCatalogItem(`custom-${id}`)
+      setCustomItems((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      setCustomItemsError(err.message)
+    }
+  }
+
+  // Custom posters (Session 5) — same "register into the live catalog on create, unregister on
+  // delete" flow as custom items above.
+  async function handleUploadPoster(payload) {
+    const row = await uploadCustomPoster(payload)
+    registerCustomCatalogItem(buildCustomPosterCatalogItem(row))
+    setCustomPosters((prev) => [...prev, row])
+    setShowPosterUploadForm(false)
+  }
+
+  async function handleDeleteCustomPoster(id, imageUrl) {
+    setCustomPostersError('')
+    try {
+      await deleteCustomPoster(id, imageUrl)
+      unregisterCustomCatalogItem(`poster-${id}`)
+      setCustomPosters((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      setCustomPostersError(err.message)
+    }
   }
 
   // Same button toggles "start picking" / "cancel picking" — clicking it again while already
@@ -1132,6 +1225,30 @@ export default function App() {
               </div>
 
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="structure-btn"
+                    style={measureState.active ? { background: 'var(--accent)', color: '#fff' } : undefined}
+                    onClick={() => engineRef.current.setMeasureMode(!measureState.active)}
+                  >
+                    📐 {measureState.active ? 'Measuring…' : 'Measure'}
+                  </button>
+                  {measureState.pointCount > 0 && (
+                    <button className="structure-btn" onClick={() => engineRef.current.clearMeasurement()}>Clear</button>
+                  )}
+                </div>
+                {measureState.active && (
+                  <div className="sub" style={{ marginTop: 6, marginBottom: 0 }}>
+                    {measureState.distanceFt != null
+                      ? `${measureState.distanceFt.toFixed(1)}' between your two points. Click again to start a new measurement.`
+                      : measureState.pointCount === 1
+                        ? 'Click a second point to measure the distance.'
+                        : 'Click a point on the floor or on an item to start measuring.'}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
                 <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
                   Room shape
                 </div>
@@ -1215,7 +1332,11 @@ export default function App() {
           )}
         </div>
 
-        <div id="hint">Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate</div>
+        <div id="hint">
+          {measureState.active
+            ? 'Click two points to measure the distance between them · Click again to start over · Drag to orbit'
+            : 'Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate'}
+        </div>
 
         {selection && (
           <div id="selection-panel" className="visible">
@@ -1257,7 +1378,13 @@ export default function App() {
                   color: showDimensions ? '#fff' : 'var(--ink-soft)',
                   flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer',
                 }}
-                onClick={() => setShowDimensions((v) => !v)}
+                onClick={() =>
+                  setShowDimensions((v) => {
+                    const next = !v
+                    engineRef.current.setShowDimensionOverlay(next)
+                    return next
+                  })
+                }
               >
                 📏 Dimensions
               </button>
@@ -1468,6 +1595,44 @@ export default function App() {
                 Add Colgate furniture
               </button>
             </div>
+
+            {session && (
+              <div className="category-section">
+                <button className="custom-item-trigger" onClick={() => setShowCustomItemForm(true)}>
+                  + Add a custom item
+                </button>
+                {customItemsError && <div className="board-popover-error" style={{ marginBottom: 8 }}>{customItemsError}</div>}
+                {customItems.length > 0 && (
+                  <>
+                    <div className="category-header" style={{ cursor: 'default' }}>
+                      <span>🧩 My Custom Items</span>
+                      <span className="category-meta">{customItems.length}</span>
+                    </div>
+                    {customItems.map((row) => {
+                      const cat = buildCustomCatalogItem(row)
+                      return (
+                        <div key={row.id} className="cat-item custom-item-row" onClick={() => engineRef.current.addItem(cat.id)}>
+                          <CatalogThumb cat={cat} />
+                          <div className="cat-info">
+                            <div className="name">{cat.name}</div>
+                            <div className="meta">{cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}'</div>
+                          </div>
+                          <div className="cat-price">${cat.price}</div>
+                          <button
+                            className="remove-btn"
+                            title="Delete"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteCustomItem(row.id) }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
+              </div>
+            )}
+
             {CATEGORY_ORDER.filter((category) => groupedCatalog[category]).map((category) => {
               const subcats = groupedCatalog[category]
               const itemCount = Object.values(subcats).reduce((n, items) => n + items.length, 0)
@@ -1478,29 +1643,66 @@ export default function App() {
                     <span>{CATEGORY_ICONS[category]} {category}</span>
                     <span className="category-meta">{itemCount} {isOpen ? '−' : '+'}</span>
                   </button>
-                  {isOpen &&
-                    Object.entries(subcats).map(([subcategory, items]) => (
-                      <div key={subcategory}>
-                        {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
-                        {items.map((cat) =>
-                          cat.isGroup ? (
-                            <TierGroupCard key={cat.groupId} group={cat} onAdd={(id) => engineRef.current.addItem(id)} />
-                          ) : (
-                            <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
-                              <CatalogThumb cat={cat} />
-                              <div className="cat-info">
-                                <div className="name">{cat.name}</div>
-                                <div className="meta">
-                                  {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                  {isOpen && (
+                    <>
+                      {category === 'Decor' && session && (
+                        <div>
+                          <button className="custom-item-trigger" onClick={() => setShowPosterUploadForm(true)}>
+                            + Upload your own poster
+                          </button>
+                          {customPostersError && <div className="board-popover-error" style={{ marginBottom: 8 }}>{customPostersError}</div>}
+                          {customPosters.length > 0 && (
+                            <>
+                              <div className="subcategory-label">My Posters</div>
+                              {customPosters.map((row) => {
+                                const cat = buildCustomPosterCatalogItem(row)
+                                return (
+                                  <div key={row.id} className="cat-item custom-item-row" onClick={() => engineRef.current.addItem(cat.id)}>
+                                    <div className="swatch" style={{ padding: 0 }}>
+                                      <img src={row.image_url} alt="" className="swatch-img" />
+                                    </div>
+                                    <div className="cat-info">
+                                      <div className="name">{cat.name}</div>
+                                      <div className="meta">{row.width_in}" × {row.height_in}"</div>
+                                    </div>
+                                    <button
+                                      className="remove-btn"
+                                      title="Delete"
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteCustomPoster(row.id, row.image_url) }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {Object.entries(subcats).map(([subcategory, items]) => (
+                        <div key={subcategory}>
+                          {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
+                          {items.map((cat) =>
+                            cat.isGroup ? (
+                              <TierGroupCard key={cat.groupId} group={cat} onAdd={(id) => engineRef.current.addItem(id)} />
+                            ) : (
+                              <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
+                                <CatalogThumb cat={cat} />
+                                <div className="cat-info">
+                                  <div className="name">{cat.name}</div>
+                                  <div className="meta">
+                                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                                  </div>
                                 </div>
+                                <div className="cat-price">${cat.price}</div>
+                                <button className="add-btn" title="Add">+</button>
                               </div>
-                              <div className="cat-price">${cat.price}</div>
-                              <button className="add-btn" title="Add">+</button>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    ))}
+                            )
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )
             })}
@@ -2370,6 +2572,14 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showCustomItemForm && (
+        <CustomItemForm onCreate={handleCreateCustomItem} onClose={() => setShowCustomItemForm(false)} />
+      )}
+
+      {showPosterUploadForm && (
+        <PosterUploadForm onCreate={handleUploadPoster} onClose={() => setShowPosterUploadForm(false)} />
       )}
 
       {showReceipt && (

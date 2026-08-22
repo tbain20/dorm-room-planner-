@@ -78,7 +78,7 @@ export const CATEGORY_ICONS = {
 // color swatch + category icon only if the image genuinely fails to load (a 404, or a catalog
 // item added after the last `generateAllThumbnails()` run — see that file for how to regenerate).
 export function thumbnailUrl(cat) {
-  return `/thumbnails/${cat.id}.png`
+  return `/thumbnails/${cat.thumbnailSourceId || cat.id}.png`
 }
 
 // Every CATALOG item has a few relatedIds now (Tyler asked for "goes well with" suggestions on
@@ -486,10 +486,94 @@ export function catalogItemLink(cat) {
   return retailerLink(cat.retailer, cat.name)
 }
 
-// Combined id -> catalog entry lookup covering both purchasable (CATALOG) and Colgate-provided
-// (PROVIDED_CATALOG) items — the same superset roomEngine.js's own local ALL_ITEMS resolves a
-// saved layout's items against when loading it into the 3D scene.
-const ALL_CATALOG_ITEMS = [...CATALOG, ...PROVIDED_CATALOG]
+// Combined id -> catalog entry lookup covering purchasable (CATALOG), Colgate-provided
+// (PROVIDED_CATALOG), and any registered custom items (see registerCustomCatalogItem below) —
+// the same array roomEngine.js imports directly (as ALL_ITEMS) to resolve a saved layout's items
+// against when loading it into the 3D scene, so a custom item registered here is immediately
+// resolvable there too with no separate bookkeeping.
+export const ALL_CATALOG_ITEMS = [...CATALOG, ...PROVIDED_CATALOG]
+
+export function findCatalogItemById(id) {
+  return ALL_CATALOG_ITEMS.find((c) => c.id === id) || null
+}
+
+// Builds a catalog-shaped object (same field shape as any real CATALOG entry) from a custom_items
+// DB row (see storage.js's listMyCustomItems/createCustomItem) — visual properties (model, color,
+// any rotation/tint fixup it needs) come from the chosen stand-in catalog item, everything else
+// (name, dims, buy link) is the user's own. id is prefixed 'custom-' so it can never collide with
+// a real catalog id. price is required at creation (see CustomItemForm in App.jsx) so shopping-
+// list totals/receipt rendering need no null-handling anywhere else in the app.
+export function buildCustomCatalogItem(row) {
+  const standIn = findCatalogItemById(row.stand_in_catalog_id)
+  return {
+    id: `custom-${row.id}`,
+    customItemId: row.id,
+    name: row.name,
+    price: row.price,
+    retailer: 'Custom Item',
+    productUrl: row.product_url || null,
+    dims: [row.width, row.depth, row.height],
+    color: standIn?.color ?? 0x9c8a6b,
+    category: 'Furniture & Organization',
+    subcategory: 'My Items',
+    modelUrl: standIn?.modelUrl,
+    tintMaterial: standIn?.tintMaterial,
+    modelRotationY: standIn?.modelRotationY,
+    primaryModelFitDims: standIn?.primaryModelFitDims,
+    thumbnailSourceId: standIn?.id,
+    isCustom: true,
+    relatedIds: [],
+  }
+}
+
+// Splices a synthesized custom item into the live lookup array so add-to-room/shopping-list/
+// detail code (all of which resolve items by id against ALL_CATALOG_ITEMS) treats it exactly like
+// a real catalog entry. Idempotent — replaces an existing entry with the same id instead of
+// duplicating, so calling this again after a remount/refetch is safe.
+export function registerCustomCatalogItem(item) {
+  const idx = ALL_CATALOG_ITEMS.findIndex((c) => c.id === item.id)
+  if (idx >= 0) ALL_CATALOG_ITEMS[idx] = item
+  else ALL_CATALOG_ITEMS.push(item)
+}
+
+export function unregisterCustomCatalogItem(id) {
+  const idx = ALL_CATALOG_ITEMS.findIndex((c) => c.id === id)
+  if (idx >= 0) ALL_CATALOG_ITEMS.splice(idx, 1)
+}
+
+// Poster/artwork import (Session 5) — standard sold/framed sizes rather than free-form dimensions,
+// same simplification the real 'poster'/'poster-landscape' CATALOG entries above already made.
+// Values in inches (how these sizes are actually marketed) alongside the feet conversion the room
+// engine needs everywhere else.
+export const POSTER_SIZE_PRESETS = [
+  { label: '11" × 17"', widthIn: 11, heightIn: 17 },
+  { label: '18" × 24"', widthIn: 18, heightIn: 24 },
+  { label: '24" × 36"', widthIn: 24, heightIn: 36 },
+]
+
+// Builds a catalog-shaped object from a custom_posters DB row (see storage.js's
+// listMyCustomPosters/uploadCustomPoster) — same [width, depth, height] dims convention as the
+// real 'poster' entry above (a thin flat panel, depth is just a frame's worth of thickness), but
+// `posterImageUrl` in place of a modelUrl/color — roomEngine.js's _loadItemMesh checks for that
+// field first and builds a textured panel (the uploaded image on its two large faces, a plain
+// frame color on the thin edges) instead of loading a glTF model or a flat-color placeholder box.
+export function buildCustomPosterCatalogItem(row) {
+  return {
+    id: `poster-${row.id}`,
+    customPosterId: row.id,
+    name: row.name,
+    price: 0,
+    retailer: 'Your Upload',
+    productUrl: null,
+    dims: [row.width_in / 12, 0.05, row.height_in / 12],
+    color: 0xe8e0cf,
+    category: 'Decor',
+    subcategory: 'Wall',
+    posterImageUrl: row.image_url,
+    isCustomPoster: true,
+    relatedIds: [],
+  }
+}
 
 // Joins a saved layout's `items` array (placement records of the shape `{ catalogId, x, z, rotY,
 // ... }` — see roomEngine.js's getState) against the current catalog, the same lookup roomEngine

@@ -273,6 +273,59 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 .board-popover-new button:disabled{background:var(--paper-shadow); color:var(--ink-soft); cursor:default;}
 .board-popover-error{color:var(--danger); font-size:10.5px; margin-top:6px;}
 
+/* ---- Custom item entry (Catalog tab, App.jsx / CustomItemForm.jsx) ---- */
+.custom-item-trigger{
+  display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+  background:var(--paper); color:var(--accent); border:1px dashed var(--accent); border-radius:var(--radius-sm);
+  padding:10px; font-size:12px; font-weight:600; cursor:pointer; margin-bottom:10px; transition:background 0.15s ease;
+}
+.custom-item-trigger:hover{background:var(--accent-soft);}
+.custom-item-modal{
+  background:var(--paper); color:var(--ink); width:480px; max-width:92vw; max-height:86vh; overflow-y:auto;
+  padding:22px 24px; box-shadow:var(--shadow-lift); border-radius:var(--radius-md);
+}
+.custom-item-modal h2{margin:0 0 4px 0; font-family:var(--font-serif); font-size:18px; font-weight:650;}
+.custom-item-modal .rsub{margin-bottom:16px;}
+.custom-item-form{display:flex; flex-direction:column; gap:12px;}
+.custom-item-field{display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ink-soft); font-weight:600; flex:1; min-width:0;}
+.custom-item-field input{
+  width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--paper-shadow); border-radius:8px; font-size:12.5px;
+  font-family:var(--font-sans); color:var(--ink); font-weight:400;
+}
+.custom-item-field input:focus{outline:none; border-color:var(--accent);}
+.custom-item-dims-row{display:flex; gap:10px;}
+.custom-item-standin-label{font-size:11.5px; font-weight:600; color:var(--ink); margin-top:2px;}
+.custom-item-standin-scroll{max-height:220px; overflow-y:auto; border:1px solid var(--paper-shadow); border-radius:8px; padding:8px;}
+.custom-item-standin-grid{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px;}
+.custom-item-standin-option{
+  background:none; border:2px solid transparent; border-radius:9px; padding:3px; cursor:pointer; line-height:0;
+  transition:border-color 0.15s ease;
+}
+.custom-item-standin-option:hover{border-color:var(--accent-soft);}
+.custom-item-standin-option.selected{border-color:var(--accent);}
+.custom-item-actions{display:flex; gap:8px; margin-top:4px;}
+.custom-item-cancel{
+  background:var(--paper-shadow); color:var(--ink); border:none; border-radius:8px; padding:10px 16px;
+  font-size:12px; font-weight:600; cursor:pointer;
+}
+.custom-item-submit{
+  flex:1; background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px;
+  font-size:12px; font-weight:600; cursor:pointer; transition:background 0.15s ease;
+}
+.custom-item-submit:hover{background:var(--accent-dark);}
+.custom-item-submit:disabled{background:var(--paper-shadow); color:var(--ink-soft); cursor:default;}
+
+/* ---- Poster upload (Catalog tab / PosterUploadForm.jsx) ---- */
+.poster-size-row{display:flex; gap:8px;}
+.poster-size-option{
+  flex:1; background:var(--paper-shadow); border:2px solid transparent; border-radius:8px;
+  padding:9px 4px; font-size:12px; font-weight:600; color:var(--ink); cursor:pointer; transition:border-color 0.15s ease;
+}
+.poster-size-option:hover{border-color:var(--accent-soft);}
+.poster-size-option.selected{border-color:var(--accent); background:var(--accent-soft);}
+.poster-preview-wrap{display:flex; justify-content:center; background:var(--paper-shadow); border-radius:8px; padding:10px;}
+.poster-preview{max-width:100%; max-height:180px; border-radius:4px; box-shadow:var(--shadow-card);}
+
 /* ---- Skeleton loaders — shared pulse animation for any "content not in yet" placeholder block.
    Used by the Browse gallery grid (BrowseSkeletonCard in BrowsePage.jsx) and the layout detail
    page (LayoutDetailSkeleton in LayoutDetailPage.jsx) instead of a blank flash or bare "Loading…"

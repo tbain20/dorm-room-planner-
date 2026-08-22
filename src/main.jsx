@@ -6,6 +6,7 @@ import LayoutDetailPage from './LayoutDetailPage.jsx'
 import BrowsePage from './BrowsePage.jsx'
 import BoardDetailPage from './BoardDetailPage.jsx'
 import JoinLayoutPage from './JoinLayoutPage.jsx'
+import AdminCustomItemsPage from './AdminCustomItemsPage.jsx'
 import './index.css'
 import { Analytics } from '@vercel/analytics/react'
 // Attaches window.generateAllThumbnails() for regenerating catalog thumbnails — dev-only, see
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/layouts/:id" element={<LayoutDetailPage />} />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/boards/:id" element={<BoardDetailPage />} />
+        <Route path="/admin/custom-items" element={<AdminCustomItemsPage />} />
         <Route path="*" element={<App />} />
       </Routes>
     </BrowserRouter>

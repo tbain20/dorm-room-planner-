@@ -1034,3 +1034,131 @@ export async function deleteChecklistItem(id) {
   const { error } = await client.from('checklist_items').delete().eq('id', id).eq('user_id', user.id)
   if (error) throw error
 }
+
+// custom_items (migration 015) — a user's own catalog entries: their own name/dims/price/buy
+// link, paired with an existing catalog item as a purely visual stand-in. Personal to the user
+// who created them (RLS is owner-only, plus one broad-SELECT policy scoped to Tyler's own account
+// for the admin review table below). See catalog.js's buildCustomCatalogItem/
+// registerCustomCatalogItem for how a row here becomes a real, placeable catalog-shaped object.
+const CUSTOM_ITEM_COLUMNS = 'id, name, product_url, price, width, depth, height, stand_in_catalog_id, created_at'
+
+export async function listMyCustomItems() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('custom_items')
+    .select(CUSTOM_ITEM_COLUMNS)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function createCustomItem({ name, productUrl, price, width, depth, height, standInCatalogId }) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const clean = name.trim()
+  if (!clean) throw new Error('Item name required')
+  if (!standInCatalogId) throw new Error('Choose a stand-in model')
+  const { data, error } = await client
+    .from('custom_items')
+    .insert({
+      user_id: user.id,
+      name: clean,
+      product_url: productUrl?.trim() || null,
+      price: price || 0,
+      width,
+      depth,
+      height,
+      stand_in_catalog_id: standInCatalogId,
+    })
+    .select(CUSTOM_ITEM_COLUMNS)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteCustomItem(id) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('custom_items').delete().eq('id', id).eq('user_id', user.id)
+  if (error) throw error
+}
+
+// Tyler-only — every user's submitted custom items, oldest first for review, so he can turn real
+// product-gap signals into curated catalog entries over time. RLS's broad-SELECT policy (migration
+// 015) only matches his own account email, so this just comes back empty for anyone else who
+// happens to call it.
+export async function listAllCustomItemsForReview() {
+  const client = requireClient()
+  await requireUser(client)
+  const { data, error } = await client
+    .from('custom_items')
+    .select(`${CUSTOM_ITEM_COLUMNS}, user_id, profiles(display_name)`)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+// custom_posters (migration 016) — a user's own uploaded artwork, placed as a flat framed panel
+// sized to a standard poster preset. Same "personal, registered into the live catalog lookup"
+// pattern as custom_items (see catalog.js's buildCustomPosterCatalogItem/registerCustomCatalogItem)
+// — a synthesized entry uses `image_url` as a texture instead of a stand-in's 3D model.
+//
+// Path is user-id-prefixed (same as thumbnailPath in this file) so the custom-posters bucket's
+// storage RLS — which checks the first path segment against auth.uid() — allows the upload, and
+// suffixed with a random id so multiple posters from the same user never collide/overwrite.
+function posterPath(userId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  return `${userId}/${crypto.randomUUID()}.${ext}`
+}
+
+const CUSTOM_POSTER_COLUMNS = 'id, name, image_url, width_in, height_in, created_at'
+
+export async function listMyCustomPosters() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('custom_posters')
+    .select(CUSTOM_POSTER_COLUMNS)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function uploadCustomPoster({ file, name, widthIn, heightIn }) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const clean = name.trim()
+  if (!clean) throw new Error('Poster name required')
+  const path = posterPath(user.id, file)
+  const { error: uploadError } = await client.storage.from('custom-posters').upload(path, file, {
+    contentType: file.type || 'image/jpeg',
+  })
+  if (uploadError) throw uploadError
+  const imageUrl = client.storage.from('custom-posters').getPublicUrl(path).data.publicUrl
+  const { data, error } = await client
+    .from('custom_posters')
+    .insert({ user_id: user.id, name: clean, image_url: imageUrl, width_in: widthIn, height_in: heightIn })
+    .select(CUSTOM_POSTER_COLUMNS)
+    .single()
+  if (error) {
+    // Upload already landed in storage — clean it up rather than leaving an orphaned file behind
+    // now that the row it was meant to belong to failed to insert.
+    client.storage.from('custom-posters').remove([path]).catch(() => {})
+    throw error
+  }
+  return data
+}
+
+export async function deleteCustomPoster(id, imageUrl) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('custom_posters').delete().eq('id', id).eq('user_id', user.id)
+  if (error) throw error
+  // Best-effort — the path is user-id-prefixed in imageUrl, so this only ever removes the
+  // caller's own file (storage RLS would reject anyone else's regardless).
+  const path = imageUrl?.split('/custom-posters/')[1]
+  if (path) client.storage.from('custom-posters').remove([decodeURIComponent(path)]).catch(() => {})
+}

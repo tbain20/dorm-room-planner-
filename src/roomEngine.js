@@ -1,12 +1,14 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { CATALOG, PROVIDED_CATALOG } from './catalog.js'
+import { ALL_CATALOG_ITEMS as ALL_ITEMS } from './catalog.js'
 import { fitModelToDims, tintModel } from './modelFit.js'
 
-// The engine resolves items against both the purchasable catalog and Colgate-provided
-// furniture — it doesn't care which list an id came from, only App.jsx's shopping-list/total
-// logic needs to tell them apart (via each item's isProvided flag).
-const ALL_ITEMS = [...CATALOG, ...PROVIDED_CATALOG]
+// The engine resolves items against the same combined lookup catalog.js itself uses (purchasable
+// + Colgate-provided + any registered custom items, see registerCustomCatalogItem in catalog.js)
+// — it doesn't care which list an id came from, only App.jsx's shopping-list/total logic needs to
+// tell them apart (via each item's isProvided flag). Importing the live array (not building a
+// separate `[...CATALOG, ...PROVIDED_CATALOG]` copy here) means a custom item registered into
+// catalog.js's array is instantly resolvable here too, with no duplicate registration step.
 
 const DOOR_WIDTH = 3.0 // 36" — standard residence hall door, not user-adjustable
 const DOOR_HEIGHT = 6.67 // 80"
@@ -22,17 +24,33 @@ const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
 export class RoomEngine {
-  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange }) {
+  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange, onMeasureChange }) {
     this.container = container
     this.onCartChange = onCartChange || (() => {})
     this.onSelectionChange = onSelectionChange || (() => {})
     this.onFeatureSelectionChange = onFeatureSelectionChange || (() => {})
     this.onStackPickModeChange = onStackPickModeChange || (() => {})
+    this.onMeasureChange = onMeasureChange || (() => {})
+
+    // Measuring tool (see setMeasureMode/_placeMeasurePoint below) — independent of item
+    // selection, a click places a point on the floor or on whatever item surface was clicked;
+    // a second click completes the pair and shows the distance. measurePoints holds 0, 1, or 2
+    // THREE.Vector3 world points; a 3rd click starts a fresh pair rather than accumulating.
+    this.measureMode = false
+    this.measurePoints = []
+    this.measureOverlay = null
 
     this.room = { w: 12, l: 14, h: 9, notch: null }
     this.placedItems = [] // { mesh, catalogId, uid, stackedOnUid }
     this.selected = null
     this.selectionHelper = null
+    // 3D dimension-line overlay on the selected item (see _buildDimensionOverlay/
+    // _updateDimensionOverlay below) — separate from selectionHelper's BoxHelper outline.
+    // showDimensionOverlay is the persisted on/off state (App.jsx's 📏 Dimensions button, via
+    // setShowDimensionOverlay); dimensionOverlay is the live group of lines/labels, only present
+    // while both an item is selected and the overlay is toggled on.
+    this.showDimensionOverlay = false
+    this.dimensionOverlay = null
     this.uidCounter = 1
     // uid of the item currently waiting for a "click another item to place it on top of" pick —
     // null when no stacking pick is in progress. See startStackPick()/stackItemOn() below.
@@ -106,6 +124,14 @@ export class RoomEngine {
     this._raf = requestAnimationFrame(this._animate)
     if (this.selectionHelper) this.selectionHelper.update()
     if (this.featureSelectionHelper) this.featureSelectionHelper.update()
+    // Recomputed every frame (cheap — a handful of line points) rather than only on
+    // rotate/drag-end, so it tracks the item smoothly while it's being dragged. Deriving each
+    // line's length straight from selectionHelper's own live world-space box, rather than from
+    // the catalog item's declared dims[0]/[1]/[2], is what makes this automatically correct after
+    // a 90° rotation swaps which world axis width/depth sit on — no rotation-aware bookkeeping
+    // needed here at all.
+    if (this.dimensionOverlay) this._updateDimensionOverlay()
+    this._updateCollisions()
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -280,6 +306,33 @@ export class RoomEngine {
     return mesh
   }
 
+  // Custom uploaded poster/artwork (Session 5, see catalog.js's buildCustomPosterCatalogItem) —
+  // same thin-box shape as a real 'poster' catalog entry, but the two large faces (BoxGeometry's
+  // face-group order is [+X, -X, +Y, -Y, +Z, -Z]; depth is dims[1], the thin axis, which is Z —
+  // so indices 4/5 are the front/back faces users actually see) get the uploaded image as a
+  // texture instead of a flat color, and the four thin edge faces get a plain frame color.
+  // Loading the texture is async, but the mesh itself can be returned immediately — Three.js
+  // renders a material with no map yet as a flat color and picks the image up the moment
+  // TextureLoader's callback sets material.map + needsUpdate, no extra wiring needed here.
+  _buildPosterMesh(cat) {
+    const [w, d, h] = cat.dims
+    const geo = new THREE.BoxGeometry(w, h, d)
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x2b2118 })
+    const faceMat = new THREE.MeshStandardMaterial({ color: 0xe8e0cf })
+    new THREE.TextureLoader().load(cat.posterImageUrl, (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace
+      faceMat.map = texture
+      faceMat.color.set(0xffffff)
+      faceMat.needsUpdate = true
+    })
+    const mesh = new THREE.Mesh(geo, [frameMat, frameMat, frameMat, frameMat, faceMat, faceMat])
+    mesh.position.set(0, h / 2, 0)
+    const edges = new THREE.EdgesGeometry(geo)
+    mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x1b2a38 })))
+    mesh.userData.dims = [w, d, h]
+    return mesh
+  }
+
   // Shared with thumbnailRenderer.js (see modelFit.js) so the live 3D view and the dev-only
   // catalog thumbnail generator always agree on how a model gets fit to its dims — a second,
   // drifted copy of this logic previously mishandled a pre-applied rotation and would bake a
@@ -304,7 +357,9 @@ export class RoomEngine {
   }
 
   _loadItemMesh(cat, onReady) {
-    if (cat.modelUrl) {
+    if (cat.posterImageUrl) {
+      onReady(this._buildPosterMesh(cat))
+    } else if (cat.modelUrl) {
       this.gltfLoader.load(
         cat.modelUrl,
         async (gltf) => {
@@ -584,17 +639,313 @@ export class RoomEngine {
     this.selected = item
     this.selectionHelper = new THREE.BoxHelper(item.mesh, 0xc1502e)
     this.itemsGroup.add(this.selectionHelper)
+    if (this.showDimensionOverlay) this._buildDimensionOverlay()
     this._emitSelection()
   }
 
   deselectItem() {
     this._cancelStackPickIfActive()
+    this._removeDimensionOverlay()
     if (this.selectionHelper) {
       this.itemsGroup.remove(this.selectionHelper)
       this.selectionHelper = null
     }
     this.selected = null
     this.onSelectionChange(null)
+  }
+
+  // Called by App.jsx's 📏 Dimensions button (same toggle that already shows the text-panel
+  // width/depth/height list) — flips the 3D on-model dimension-line overlay for whichever item is
+  // currently selected. Persists across selections (this.showDimensionOverlay) so selectItem()
+  // above knows to build the overlay fresh for a newly selected item too, though App.jsx always
+  // resets it to false right after a new selection lands (matches the text panel's own reset), so
+  // in practice it stays scoped to one item at a time.
+  setShowDimensionOverlay(show) {
+    this.showDimensionOverlay = show
+    if (show && this.selected) this._buildDimensionOverlay()
+    else this._removeDimensionOverlay()
+  }
+
+  // Three disconnected line segments (main line + a tick mark at each end, architectural-
+  // dimension-line style) plus a billboarded text-sprite label per axis, positioned just outside
+  // the selected item's live world-space bounding box (selectionHelper's own THREE.Box3) — width
+  // offset out in front, depth offset out to the right, height at the far corner so none of the
+  // three cross each other. Text/geometry are rebuilt from scratch on select; after that,
+  // _updateDimensionOverlay (called every frame from _animate while this is non-null) repositions
+  // everything and only redraws a label's canvas texture when its rounded value actually changes.
+  _buildDimensionOverlay() {
+    this._removeDimensionOverlay()
+    if (!this.selected) return
+    const group = new THREE.Group()
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x251d14, transparent: true, opacity: 0.85, depthTest: false })
+    const widthLine = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat)
+    const depthLine = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat)
+    const heightLine = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat)
+    const widthLabel = this._createDimLabel()
+    const depthLabel = this._createDimLabel()
+    const heightLabel = this._createDimLabel()
+    group.renderOrder = 999
+    group.add(widthLine, depthLine, heightLine, widthLabel, depthLabel, heightLabel)
+    this.itemsGroup.add(group)
+    this.dimensionOverlay = { group, widthLine, depthLine, heightLine, widthLabel, depthLabel, heightLabel }
+    this._updateDimensionOverlay()
+  }
+
+  _removeDimensionOverlay() {
+    if (!this.dimensionOverlay) return
+    const { group, widthLine, depthLine, heightLine, widthLabel, depthLabel, heightLabel } = this.dimensionOverlay
+    this.itemsGroup.remove(group)
+    widthLine.geometry.dispose()
+    depthLine.geometry.dispose()
+    heightLine.geometry.dispose()
+    widthLine.material.dispose() // one shared LineBasicMaterial across all 3 lines
+    for (const label of [widthLabel, depthLabel, heightLabel]) {
+      label.material.map.dispose()
+      label.material.dispose()
+    }
+    this.dimensionOverlay = null
+  }
+
+  // Small canvas-texture billboard (a THREE.Sprite always faces the camera regardless of the
+  // item's own rotation, which is what keeps a rotated item's labels readable — see the
+  // "rotated footprint" note on _updateDimensionOverlay below). Fixed canvas size — dimension
+  // strings are always short ("3.9'") so there's no need to size the canvas to the text like
+  // CatalogThumb-style renders do elsewhere.
+  _createDimLabel() {
+    const canvas = document.createElement('canvas')
+    canvas.width = 220
+    canvas.height = 84
+    const ctx = canvas.getContext('2d')
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false })
+    const sprite = new THREE.Sprite(material)
+    sprite.scale.set(0.9, 0.9 * (canvas.height / canvas.width), 1)
+    sprite.renderOrder = 999
+    sprite.userData = { ctx, canvas, lastText: null }
+    return sprite
+  }
+
+  // No-op if the text hasn't changed since the last draw — during a drag, an item's dims don't
+  // change (only its position does), so this only actually repaints a label's canvas on select,
+  // after a 90° rotate swaps width/depth, or after a bed-height change, all of which naturally
+  // fall out of comparing against the live box each frame rather than needing their own hooks.
+  _setDimLabelText(sprite, text) {
+    if (sprite.userData.lastText === text) return
+    sprite.userData.lastText = text
+    const { ctx, canvas } = sprite.userData
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = 'rgba(250,246,236,0.95)'
+    ctx.strokeStyle = 'rgba(37,29,20,0.4)'
+    ctx.lineWidth = 3
+    ctx.fillRect(4, 4, canvas.width - 8, canvas.height - 8)
+    ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8)
+    ctx.fillStyle = '#251d14'
+    ctx.font = '600 40px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2)
+    sprite.material.map.needsUpdate = true
+  }
+
+  _setLineSegmentPoints(lineSegments, flatCoords) {
+    lineSegments.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(flatCoords), 3))
+    lineSegments.geometry.computeBoundingSphere()
+  }
+
+  // Recomputes the selected item's own live world-space Box3 (BoxHelper — used for
+  // selectionHelper's outline — computes the same thing internally each update() but doesn't
+  // expose it as a public property, so this does its own small setFromObject scan) rather than
+  // reading the catalog item's declared dims — for a 90°-rotated item this world-axis-aligned box
+  // already exactly matches its rotated footprint (width/depth simply swap which world axis they
+  // occupy), so each line's length and each label's text end up correct with no need to read the
+  // item's rotation directly.
+  _updateDimensionOverlay() {
+    if (!this.dimensionOverlay || !this.selected) return
+    const box = new THREE.Box3().setFromObject(this.selected.mesh)
+    if (box.isEmpty()) return
+    const OFFSET = 0.3 // feet — how far outside the item's own footprint each line sits
+    const TICK = 0.12 // feet — half-length of the perpendicular tick mark at each line's ends
+    const { widthLine, depthLine, heightLine, widthLabel, depthLabel, heightLabel } = this.dimensionOverlay
+    const { min, max } = box
+
+    // Width — spans world X, offset out in front of the item (+Z beyond its front face).
+    const wz = max.z + OFFSET
+    this._setLineSegmentPoints(widthLine, [
+      min.x, min.y, wz, max.x, min.y, wz,
+      min.x, min.y - TICK, wz, min.x, min.y + TICK, wz,
+      max.x, min.y - TICK, wz, max.x, min.y + TICK, wz,
+    ])
+    widthLabel.position.set((min.x + max.x) / 2, min.y, wz + 0.05)
+    this._setDimLabelText(widthLabel, `${(max.x - min.x).toFixed(1)}'`)
+
+    // Depth — spans world Z, offset out to the right of the item (+X beyond its right face).
+    const dx = max.x + OFFSET
+    this._setLineSegmentPoints(depthLine, [
+      dx, min.y, min.z, dx, min.y, max.z,
+      dx - TICK, min.y, min.z, dx + TICK, min.y, min.z,
+      dx - TICK, min.y, max.z, dx + TICK, min.y, max.z,
+    ])
+    depthLabel.position.set(dx + 0.05, min.y, (min.z + max.z) / 2)
+    this._setDimLabelText(depthLabel, `${(max.z - min.z).toFixed(1)}'`)
+
+    // Height — vertical, at the far corner (beyond the right face and beyond the back face) so it
+    // never crosses the width/depth lines above.
+    const hx = max.x + OFFSET
+    const hz = min.z - OFFSET
+    this._setLineSegmentPoints(heightLine, [
+      hx, min.y, hz, hx, max.y, hz,
+      hx - TICK, min.y, hz, hx + TICK, min.y, hz,
+      hx - TICK, max.y, hz, hx + TICK, max.y, hz,
+    ])
+    heightLabel.position.set(hx, (min.y + max.y) / 2, hz)
+    this._setDimLabelText(heightLabel, `${(max.y - min.y).toFixed(1)}'`)
+  }
+
+  // App.jsx's Measure button — independent of item selection, see the pointerdown/endPointer
+  // handlers above for how a plain click (not a drag) turns into a call to _placeMeasurePoint.
+  // Always starts from a clean slate, both entering and leaving the mode, so a stale marker/line
+  // from a previous session of measuring never lingers into the next one.
+  setMeasureMode(active) {
+    this.measureMode = active
+    this.measurePoints = []
+    this._removeMeasureOverlay()
+    if (active) {
+      this.deselectItem()
+      this.deselectFeature()
+    }
+    this._emitMeasure()
+  }
+
+  clearMeasurement() {
+    this.measurePoints = []
+    this._removeMeasureOverlay()
+    this._emitMeasure()
+  }
+
+  // Raycasts against placed items first so clicking directly on a piece of furniture measures
+  // to that exact surface point (its real height, not the floor beneath it) — falls back to the
+  // floor plane for anywhere else, the same intersectPlane approach getFloorPoint() above already
+  // uses for item dragging. A 3rd click starts a fresh pair rather than accumulating a 3rd point.
+  _placeMeasurePoint(clientX, clientY) {
+    const el = this.renderer.domElement
+    const rect = el.getBoundingClientRect()
+    this.pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1
+    this.pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1
+    this.raycaster.setFromCamera(this.pointerNDC, this.camera)
+    const itemMeshes = this.placedItems.map((p) => p.mesh)
+    const hits = this.raycaster.intersectObjects(itemMeshes, true)
+    let point
+    if (hits.length) {
+      point = hits[0].point.clone()
+    } else {
+      point = new THREE.Vector3()
+      if (!this.raycaster.ray.intersectPlane(this.floorPlane, point)) return
+    }
+    if (this.measurePoints.length >= 2) this.measurePoints = []
+    this.measurePoints.push(point)
+    this._updateMeasureOverlay()
+    this._emitMeasure()
+  }
+
+  _updateMeasureOverlay() {
+    this._removeMeasureOverlay()
+    if (this.measurePoints.length === 0) return
+    const group = new THREE.Group()
+    group.renderOrder = 999
+
+    const markerGeom = new THREE.SphereGeometry(0.06, 12, 12)
+    const markerMat = new THREE.MeshBasicMaterial({ color: 0xc1502e, depthTest: false })
+    for (const p of this.measurePoints) {
+      const marker = new THREE.Mesh(markerGeom, markerMat)
+      marker.position.copy(p)
+      marker.renderOrder = 999
+      group.add(marker)
+    }
+
+    if (this.measurePoints.length === 2) {
+      const [a, b] = this.measurePoints
+      const lineMat = new THREE.LineDashedMaterial({ color: 0xc1502e, dashSize: 0.15, gapSize: 0.1, depthTest: false })
+      const geometry = new THREE.BufferGeometry().setFromPoints([a, b])
+      const line = new THREE.Line(geometry, lineMat)
+      line.computeLineDistances()
+      line.renderOrder = 999
+      group.add(line)
+
+      const label = this._createDimLabel()
+      const mid = a.clone().add(b).multiplyScalar(0.5)
+      mid.y += 0.15 // lifted slightly so it doesn't clip into the floor/line it's sitting on
+      label.position.copy(mid)
+      this._setDimLabelText(label, `${a.distanceTo(b).toFixed(1)}'`)
+      group.add(label)
+    }
+
+    this.itemsGroup.add(group)
+    this.measureOverlay = group
+  }
+
+  _removeMeasureOverlay() {
+    if (!this.measureOverlay) return
+    this.measureOverlay.traverse((obj) => {
+      obj.geometry?.dispose()
+      if (obj.material) {
+        obj.material.map?.dispose() // no-op for the marker/line materials, which have no map
+        obj.material.dispose()
+      }
+    })
+    this.itemsGroup.remove(this.measureOverlay)
+    this.measureOverlay = null
+  }
+
+  _emitMeasure() {
+    const distanceFt = this.measurePoints.length === 2 ? this.measurePoints[0].distanceTo(this.measurePoints[1]) : null
+    this.onMeasureChange({ active: this.measureMode, pointCount: this.measurePoints.length, distanceFt })
+  }
+
+  // Collision detection (simple version, deliberately — see the session notes on why whole-item
+  // tinting from a bounding-box overlap was chosen over exact-geometry intersection highlighting,
+  // which would need real CSG boolean ops for a precision most users won't distinguish from this).
+  // Runs every frame against every placed item, same "cheap enough to just always run" choice as
+  // the dimension overlay above — a fresh Box3 per item is a full mesh traversal, but at the item
+  // counts a dorm room actually holds this stays smooth even while dragging (see the Your Room
+  // testing note on checking this with 10+ items placed).
+  _updateCollisions() {
+    const items = this.placedItems
+    const n = items.length
+    const boxes = items.map((p) => new THREE.Box3().setFromObject(p.mesh))
+    const colliding = new Array(n).fill(false)
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        // A stacked item resting directly on its base (e.g. a pillow on a bed) touches it by
+        // design — Box3.intersectsBox() counts touching boundaries as intersecting, so without
+        // this exclusion every legitimately stacked pair would permanently show as "doesn't fit."
+        if (items[i].stackedOnUid === items[j].uid || items[j].stackedOnUid === items[i].uid) continue
+        if (boxes[i].intersectsBox(boxes[j])) {
+          colliding[i] = true
+          colliding[j] = true
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) this._setCollisionTint(items[i], colliding[i])
+  }
+
+  // Emissive rather than swapping each material's own .color — tints every mesh red without
+  // needing to remember and restore each one's real color once the collision clears. Guards on
+  // the item's own last-applied state so an unchanged item's materials aren't re-walked every
+  // single frame — only items whose collision status actually flipped this frame pay for the
+  // traversal.
+  _setCollisionTint(item, on) {
+    if (item._collisionTinted === on) return
+    item._collisionTinted = on
+    item.mesh.traverse((o) => {
+      if (!o.isMesh || !o.material) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      mats.forEach((m) => {
+        if (!m.emissive) return
+        m.emissive.setHex(on ? 0xd93a2b : 0x000000)
+        m.emissiveIntensity = on ? 0.6 : 0
+      })
+    })
   }
 
   // Re-reports the selected item's current state to React — needed after selecting it fresh, and
@@ -1109,7 +1460,19 @@ export class RoomEngine {
       this.primaryPointerId = e.pointerId
       setPointerNDC(e.clientX, e.clientY)
       this.lastPointer = { x: e.clientX, y: e.clientY }
+      this._pointerDownPos = { x: e.clientX, y: e.clientY }
       this.raycaster.setFromCamera(this.pointerNDC, this.camera)
+
+      // Measure mode replaces the normal select/drag behavior below — a click (not a drag; see
+      // endPointer's own movement check) places a measure point instead of picking up an item.
+      // Camera orbit still works (mode stays 'orbit' the whole time either way), just without the
+      // orbit branch's usual deselectItem()/deselectFeature() side effect on every mousedown,
+      // since measuring is independent of whatever's currently selected.
+      if (this.measureMode) {
+        this.mode = 'orbit'
+        return
+      }
+
       const itemMeshes = this.placedItems.map((p) => p.mesh)
       const featureMeshes = this.wallFeatures.map((f) => f.mesh)
       const hits = this.raycaster.intersectObjects([...itemMeshes, ...featureMeshes], true)
@@ -1200,6 +1563,15 @@ export class RoomEngine {
       this.activePointers.delete(e.pointerId)
       if (this.activePointers.size < 2) this.pinch = null
       if (e.pointerId === this.primaryPointerId) {
+        // A "click" (as opposed to the drag that orbits the camera) is anything that moved less
+        // than 5px total between down and up — same threshold philosophy as most drag-to-orbit
+        // UIs, just not previously needed here since nothing but orbit ever listened for a plain
+        // click. Only fires the measure-point placement on an actual click, not at the end of an
+        // orbit drag.
+        if (this.measureMode && this._pointerDownPos) {
+          const moved = Math.hypot(e.clientX - this._pointerDownPos.x, e.clientY - this._pointerDownPos.y)
+          if (moved < 5) this._placeMeasurePoint(e.clientX, e.clientY)
+        }
         this.mode = null
         this.primaryPointerId = null
       }
