@@ -291,7 +291,15 @@ export async function listFeaturedCollections() {
 // vanity counter, and the RPC itself is a no-op if the layout isn't visible to the caller.
 export async function incrementLayoutViewCount(layoutId) {
   const client = requireClient()
-  await client.rpc('increment_layout_view_count', { p_layout_id: layoutId }).catch(() => {})
+  // client.rpc(...) returns a PostgREST builder, not a native Promise — it only implements
+  // .then(), not .catch()/.finally(), so swallowing the error has to go through try/catch here
+  // rather than chaining .catch() straight off the call (that throws its own "not a function"
+  // TypeError before the request ever runs).
+  try {
+    await client.rpc('increment_layout_view_count', { p_layout_id: layoutId })
+  } catch {
+    // best-effort, see comment above this function
+  }
 }
 
 // Duplicates a browsed layout into the current user's own layouts (new row, new owner,
@@ -316,7 +324,14 @@ export async function copyLayout(layout) {
       parent_layout_id: layout.id || null,
     })
     if (!error) {
-      if (layout.id) await client.rpc('increment_layout_copy_count', { p_layout_id: layout.id }).catch(() => {})
+      // Same non-Promise builder caveat as incrementLayoutViewCount above — try/catch, not
+      // .catch(), or this throws "client.rpc(...).catch is not a function" and the caller never
+      // gets back the (already-successful) copy's name.
+      if (layout.id) {
+        try {
+          await client.rpc('increment_layout_copy_count', { p_layout_id: layout.id })
+        } catch {}
+      }
       return name
     }
     if (error.code !== '23505') throw error // not a "name already taken" conflict — give up
