@@ -171,7 +171,13 @@ have been added since you last ran one — all additive and safe to re-run:
 9. New query → paste in
    [`supabase/migrations/010_comments.sql`](supabase/migrations/010_comments.sql), run it. Adds a
    `comments` table — see "Comments + shareable links + Open Graph previews" below.
-10. That's it — still no new env vars needed for any of these, including the OG preview
+10. New query → paste in
+    [`supabase/migrations/011_boards.sql`](supabase/migrations/011_boards.sql), run it. Adds
+    `boards`/`board_layouts` — the Saved tab's "boards as folders" view and the save-to-board
+    popover on `/browse` both need this; without it, saving from `/browse` will error and the
+    Saved tab's boards section will just show empty. Doesn't touch `layout_saves` at all, so the
+    plain heart/bookmark save-state you already have keeps working exactly as before either way.
+11. That's it — still no new env vars needed for any of these, including the OG preview
     serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
     in your Vercel project).
 

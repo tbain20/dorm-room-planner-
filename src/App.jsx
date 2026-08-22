@@ -3,14 +3,16 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
 import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
+import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
-  saveLayout, listLayouts, deleteLayout, setLayoutPublic, listPublicLayouts, copyLayout, getMyProfile,
+  saveLayout, listLayouts, deleteLayout, setLayoutPublic, copyLayout, getMyProfile,
   listChecklistItems, setChecklistItemChecked, addChecklistItem, deleteChecklistItem,
   listDistinctHalls, incrementLayoutViewCount, likeLayout, unlikeLayout, listMyLikedLayoutIds,
   saveLayoutBookmark, unsaveLayoutBookmark, listMySavedLayoutIds, listSavedLayouts, getPublicLayoutById,
   followUser, unfollowUser, listMyFollowingIds, getPublicProfile, updateMyProfile,
-  listDistinctTags, listFeaturedCollections, SUGGESTED_TAGS, submitReport,
+  SUGGESTED_TAGS, submitReport,
+  listMyBoardsWithLayouts, createBoard, renameBoard, deleteBoard, addLayoutToBoard, removeLayoutFromBoard,
   getLeaderboard, computeBadges,
 } from './storage.js'
 
@@ -244,27 +246,38 @@ export default function App() {
   // null — mirrors the engine's own stackPickSourceUid (see roomEngine.js), reported back via the
   // onStackPickModeChange callback so the selection panel can show the right button/hint.
   const [stackPickForUid, setStackPickForUid] = useState(null)
-  // Browse is the landing tab — the first thing anyone sees (signed in or not) is real layouts
-  // from other students, not an empty room. "Catalog" is one click away for starting from scratch.
-  const [tab, setTab] = useState('browse')
+  // Catalog is the landing tab — Browse moved out to its own /browse route (see BrowsePage.jsx),
+  // so it's no longer a tab value here at all.
+  const [tab, setTab] = useState('catalog')
   const [savedLayouts, setSavedLayouts] = useState([])
   const [layoutName, setLayoutName] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
   const [layoutsError, setLayoutsError] = useState('')
   const [myProfile, setMyProfile] = useState(null)
-  const [publicLayouts, setPublicLayouts] = useState([])
+  // Still named "browse*" — now the error/notice surface for the Saved tab's "Saved from others"
+  // actions (like/save/copy on a PublicLayoutRow there), which is the same handful of handlers
+  // Browse used to share this state with before it moved to BrowsePage.jsx.
   const [browseError, setBrowseError] = useState('')
   const [browseNotice, setBrowseNotice] = useState('')
-  const [hallFilter, setHallFilter] = useState('')
-  const [roomTypeFilter, setRoomTypeFilter] = useState('')
   const [distinctHalls, setDistinctHalls] = useState([])
   const [likedIds, setLikedIds] = useState(() => new Set())
   const [mySavedIds, setMySavedIds] = useState(() => new Set())
-  // "My Layouts" (yours, editable/publishable) vs "Saved from others" (bookmarks — see A5) are
-  // different things now that saving exists, so they're two views within the same Saved tab.
+  // "My Layouts" (yours, editable/publishable) vs "Saved from others" (bookmarks, organized into
+  // boards — see A5 and the Part B boards session) are different things now that saving exists,
+  // so they're two views within the same Saved tab.
   const [savedSubView, setSavedSubView] = useState('mine')
   const [savedFromOthers, setSavedFromOthers] = useState([])
   const [savedFromOthersError, setSavedFromOthersError] = useState('')
+  // Boards — named collections of saved layouts (see storage.js's listMyBoardsWithLayouts). Each
+  // board carries its own layouts array already, so no separate membership lookup is needed to
+  // render "Saved from others" as folders. openBoardIds tracks which folders are expanded, same
+  // pattern as the Catalog tab's openCategories.
+  const [myBoards, setMyBoards] = useState([])
+  const [boardsError, setBoardsError] = useState('')
+  const [openBoardIds, setOpenBoardIds] = useState(() => new Set())
+  const [newBoardDraft, setNewBoardDraft] = useState('')
+  const [renamingBoardId, setRenamingBoardId] = useState(null)
+  const [renameDraft, setRenameDraft] = useState('')
   // { name } of the layout currently prompting for optional hall/room type before publishing —
   // null when the prompt isn't open. Only shown on the private→public transition (see A4).
   const [publishPrompt, setPublishPrompt] = useState(null)
@@ -272,9 +285,6 @@ export default function App() {
   const [publishRoomType, setPublishRoomType] = useState('')
   const [publishTags, setPublishTags] = useState([])
   const [publishTagDraft, setPublishTagDraft] = useState('')
-  const [tagFilters, setTagFilters] = useState(() => new Set())
-  const [distinctTags, setDistinctTags] = useState([])
-  const [featuredCollections, setFeaturedCollections] = useState([])
   // { type: 'layout'|'comment'|'profile', id, label } of whatever's currently being reported, or
   // null when the report modal is closed.
   const [reportTarget, setReportTarget] = useState(null)
@@ -285,12 +295,11 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState(null)
   const [leaderboardError, setLeaderboardError] = useState('')
   const [followingIds, setFollowingIds] = useState(() => new Set())
-  const [followingOnlyFilter, setFollowingOnlyFilter] = useState(false)
   // Which user's public profile is showing when tab === 'profile' — a pseudo-route, not a real
   // URL, since react-router isn't in the app yet (that lands with shareable links in a later
   // session). "← Back" just returns to whichever tab you came from.
   const [viewingProfileId, setViewingProfileId] = useState(null)
-  const [profileReturnTab, setProfileReturnTab] = useState('browse')
+  const [profileReturnTab, setProfileReturnTab] = useState('catalog')
   const [profileData, setProfileData] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState('')
@@ -317,15 +326,25 @@ export default function App() {
     return () => engine.destroy()
   }, [])
 
-  // Picks up "Open in 3D editor" from LayoutDetailPage (/layouts/:id) — it navigates here with
-  // the layout it fetched already attached to router state, so this doesn't need a second fetch.
+  // Picks up hand-offs from other routes via router state, since BrowsePage.jsx (/browse) and
+  // LayoutDetailPage.jsx (/layouts/:id) are separate route components that can't reach into this
+  // one's RoomEngine/tab state directly — each just navigates here with what it wants done
+  // attached to `state`, and this effect does it on landing:
+  //   loadLayout    — "Open in 3D editor" (LayoutDetailPage) / a gallery card's image click or its
+  //                   copy action (BrowsePage) — load this layout into the room.
+  //   openTab       — a gated action clicked while signed out on BrowsePage (like/save/copy),
+  //                   or the Leaderboard link that used to live inside the old Browse tab — jump
+  //                   straight to the given tab (usually 'saved', to show the sign-in form).
+  //   viewProfileId — a gallery card's creator byline on BrowsePage — open that profile.
   // Clears the state immediately after consuming it (replace, no new history entry) so navigating
-  // back to this tab later doesn't reload the same layout again.
+  // back to this tab later doesn't repeat the same hand-off again.
   useEffect(() => {
-    if (location.state?.loadLayout) {
-      handleLoad(location.state.loadLayout)
-      navigate(location.pathname, { replace: true, state: {} })
-    }
+    const state = location.state
+    if (!state || (!state.loadLayout && !state.openTab && !state.viewProfileId)) return
+    if (state.loadLayout) handleLoad(state.loadLayout)
+    if (state.viewProfileId) handleViewProfile(state.viewProfileId)
+    else if (state.openTab) setTab(state.openTab)
+    navigate(location.pathname, { replace: true, state: {} })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state])
 
@@ -347,6 +366,10 @@ export default function App() {
     listSavedLayouts()
       .then(setSavedFromOthers)
       .catch((err) => setSavedFromOthersError(err.message))
+    setBoardsError('')
+    listMyBoardsWithLayouts()
+      .then(setMyBoards)
+      .catch((err) => setBoardsError(err.message))
   }, [tab, session, savedSubView])
 
   useEffect(() => {
@@ -365,29 +388,13 @@ export default function App() {
         setProfileDrafts({ bio: profile.bio || '', displayHall: profile.display_hall || '', classYear: profile.class_year || '' })
       })
       .catch(() => {})
-    // Fetched independent of which tab is open (not gated to 'browse') so hearts/bookmarks render
-    // correctly the moment Browse becomes visible — Browse is now the landing tab, and a
-    // signed-in user's session is often already restored before this effect's first run.
+    // Fetched independent of which tab is open — a signed-in user's session is often already
+    // restored before this effect's first run, and BrowsePage.jsx (a separate route/component)
+    // needs its own copy of this same data rather than reading it from here.
     listMyLikedLayoutIds().then((ids) => setLikedIds(new Set(ids))).catch(() => {})
     listMySavedLayoutIds().then((ids) => setMySavedIds(new Set(ids))).catch(() => {})
     listMyFollowingIds().then((ids) => setFollowingIds(new Set(ids))).catch(() => {})
   }, [session])
-
-  useEffect(() => {
-    if (tab !== 'browse') return
-    setBrowseError('')
-    const authorIds = followingOnlyFilter ? [...followingIds] : undefined
-    const tags = tagFilters.size > 0 ? [...tagFilters] : undefined
-    listPublicLayouts({ hall: hallFilter || undefined, roomType: roomTypeFilter || undefined, authorIds, tags })
-      .then(setPublicLayouts)
-      .catch((err) => setBrowseError(err.message))
-  }, [tab, hallFilter, roomTypeFilter, followingOnlyFilter, followingIds, tagFilters])
-
-  useEffect(() => {
-    if (tab !== 'browse') return
-    listDistinctTags().then(setDistinctTags).catch(() => {})
-    listFeaturedCollections().then(setFeaturedCollections).catch(() => {})
-  }, [tab])
 
   useEffect(() => {
     if (tab !== 'leaderboard') return
@@ -414,8 +421,11 @@ export default function App() {
       .finally(() => setProfileLoading(false))
   }, [tab, viewingProfileId])
 
+  // distinctHalls only feeds the publish-prompt's hall dropdown now that Browse (which used to
+  // share this fetch for its own hall filter) has moved to BrowsePage.jsx — gated on 'saved'
+  // since that's the only tab that can ever open that prompt.
   useEffect(() => {
-    if (tab !== 'browse') return
+    if (tab !== 'saved') return
     listDistinctHalls().then(setDistinctHalls).catch(() => {})
   }, [tab])
 
@@ -791,22 +801,11 @@ export default function App() {
     handleTogglePublic(name, true, { tags: publishTags })
   }
 
-  function toggleTagFilter(tag) {
-    setTagFilters((prev) => {
-      const next = new Set(prev)
-      if (next.has(tag)) next.delete(tag)
-      else next.add(tag)
-      return next
-    })
-  }
-
-  // Local optimistic update for likes_count after a like/unlike — avoids a full refetch on every
-  // click. Applied to whichever list(s) currently hold this layout; a plain no-op on lists that
-  // don't (e.g. liking from Browse doesn't need to touch savedFromOthers unless it's also there).
+  // Local optimistic update for likes_count after a like/unlike on a "Saved from others" row —
+  // avoids a full refetch on every click. BrowsePage.jsx does its own equivalent patch for its
+  // own layouts list, since it's a separate component with its own state.
   function bumpLikesCount(layoutId, delta) {
-    const patch = (list) => list.map((l) => (l.id === layoutId ? { ...l, likesCount: Math.max(0, l.likesCount + delta) } : l))
-    setPublicLayouts(patch)
-    setSavedFromOthers(patch)
+    setSavedFromOthers((list) => list.map((l) => (l.id === layoutId ? { ...l, likesCount: Math.max(0, l.likesCount + delta) } : l)))
   }
 
   async function handleToggleLike(layout) {
@@ -873,6 +872,72 @@ export default function App() {
       handleLoad(layout)
     } catch (err) {
       setBrowseError(err.message)
+    }
+  }
+
+  function toggleBoardOpen(boardId) {
+    setOpenBoardIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(boardId)) next.delete(boardId)
+      else next.add(boardId)
+      return next
+    })
+  }
+
+  async function handleCreateBoard() {
+    const name = newBoardDraft.trim()
+    if (!name) return
+    setBoardsError('')
+    try {
+      const board = await createBoard(name)
+      setMyBoards((prev) => [...prev, board])
+      setOpenBoardIds((prev) => new Set(prev).add(board.id))
+      setNewBoardDraft('')
+    } catch (err) {
+      setBoardsError(err.message)
+    }
+  }
+
+  function startRenameBoard(board) {
+    setRenamingBoardId(board.id)
+    setRenameDraft(board.name)
+  }
+
+  async function submitRenameBoard() {
+    const name = renameDraft.trim()
+    const boardId = renamingBoardId
+    setRenamingBoardId(null)
+    if (!name) return
+    setBoardsError('')
+    try {
+      await renameBoard(boardId, name)
+      setMyBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, name } : b)))
+    } catch (err) {
+      setBoardsError(err.message)
+    }
+  }
+
+  // No confirmation prompt — same as handleDelete for a saved layout above, this app doesn't gate
+  // deletes behind a dialog anywhere else either. Deleting a board only removes the organization,
+  // not the underlying saved layouts (their layout_saves bookmark rows are untouched), so it's a
+  // low-stakes action to begin with.
+  async function handleDeleteBoard(boardId) {
+    setBoardsError('')
+    try {
+      await deleteBoard(boardId)
+      setMyBoards((prev) => prev.filter((b) => b.id !== boardId))
+    } catch (err) {
+      setBoardsError(err.message)
+    }
+  }
+
+  async function handleRemoveFromBoard(boardId, layoutId) {
+    setBoardsError('')
+    try {
+      await removeLayoutFromBoard(boardId, layoutId)
+      setMyBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, layouts: b.layouts.filter((l) => l.id !== layoutId) } : b)))
+    } catch (err) {
+      setBoardsError(err.message)
     }
   }
 
@@ -1194,7 +1259,7 @@ export default function App() {
             Your room {cart.length > 0 && `(${cart.length})`}
           </button>
           <button className={`tab-btn ${tab === 'saved' ? 'active' : ''}`} onClick={() => setTab('saved')}>Saved</button>
-          <button className={`tab-btn ${tab === 'browse' ? 'active' : ''}`} onClick={() => setTab('browse')}>Browse</button>
+          <button className="tab-btn" onClick={() => navigate('/browse')}>Browse ↗</button>
           <button className={`tab-btn ${tab === 'checklist' ? 'active' : ''}`} onClick={() => setTab('checklist')}>Checklist</button>
         </div>
 
@@ -1490,153 +1555,142 @@ export default function App() {
                   </>
                 ) : (
                   <>
+                    {shareNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600, wordBreak: 'break-all' }}>{shareNotice}</div>}
+                    {browseNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600 }}>{browseNotice}</div>}
+                    {browseError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{browseError}</div>}
                     {savedFromOthersError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{savedFromOthersError}</div>}
-                    {savedFromOthers.length === 0 ? (
-                      <div className="empty-note">
-                        Nothing saved yet. Tap the ☆ on any layout in Browse to bookmark it here for later.
-                      </div>
-                    ) : (
-                      savedFromOthers.map((layout) => (
-                        <PublicLayoutRow
-                          key={layout.id}
-                          layout={layout}
-                          liked={likedIds.has(layout.id)}
-                          saved={mySavedIds.has(layout.id)}
-                          signedIn={!!session}
-                          onView={() => handleLoad(layout)}
-                          onCopy={handleCopyPublic}
-                          onToggleLike={handleToggleLike}
-                          onToggleSave={handleToggleSave}
-                          onViewParent={handleViewLayoutById}
-                          onViewProfile={handleViewProfile}
-                          onReport={handleOpenReport}
-                          onShare={handleCopyLink}
-                          onViewDetails={(layoutId) => navigate(`/layouts/${layoutId}`)}
-                        />
-                      ))
-                    )}
+                    {boardsError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{boardsError}</div>}
+
+                    <div className="board-create-row">
+                      <input
+                        placeholder="New board name…"
+                        value={newBoardDraft}
+                        onChange={(e) => setNewBoardDraft(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCreateBoard()}
+                      />
+                      <button onClick={handleCreateBoard} disabled={!newBoardDraft.trim()}>+ Board</button>
+                    </div>
+
+                    {myBoards.map((board) => {
+                      const isOpen = openBoardIds.has(board.id)
+                      return (
+                        <div key={board.id} className="board-folder">
+                          <div className="board-folder-header" onClick={() => toggleBoardOpen(board.id)}>
+                            <span className="board-folder-caret">{isOpen ? '▾' : '▸'}</span>
+                            {renamingBoardId === board.id ? (
+                              <input
+                                autoFocus
+                                className="board-rename-input"
+                                value={renameDraft}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && submitRenameBoard()}
+                                onBlur={submitRenameBoard}
+                              />
+                            ) : (
+                              <span className="board-folder-name">📁 {board.name}</span>
+                            )}
+                            <span className="board-folder-count">{board.layouts.length}</span>
+                            <button
+                              className="board-folder-icon-btn"
+                              title="Rename board"
+                              onClick={(e) => { e.stopPropagation(); startRenameBoard(board) }}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              className="board-folder-icon-btn"
+                              title="Delete board"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteBoard(board.id) }}
+                            >
+                              🗑
+                            </button>
+                          </div>
+                          {isOpen && (
+                            board.layouts.length === 0 ? (
+                              <div className="empty-note" style={{ padding: '8px 6px' }}>
+                                Empty — save a layout from <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => navigate('/browse')}>Browse</span> and add it to this board.
+                              </div>
+                            ) : (
+                              board.layouts.map((layout) => (
+                                <div
+                                  key={layout.id}
+                                  className="cart-row"
+                                  style={{ alignItems: 'flex-start' }}
+                                  onClick={() => handleLoad(layout)}
+                                  title="Click to load this layout into your room"
+                                >
+                                  <LayoutThumb url={layout.thumbnailUrl} />
+                                  <div className="name">
+                                    {layout.name}
+                                    <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+                                      {layout.items.length} item{layout.items.length === 1 ? '' : 's'} · {layout.room.w}'×{layout.room.l}'
+                                    </span>
+                                  </div>
+                                  <button
+                                    className="add-btn"
+                                    style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', fontSize: 11 }}
+                                    title="Shop this room"
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/layouts/${layout.id}`) }}
+                                  >
+                                    🛒
+                                  </button>
+                                  <button
+                                    className="remove-btn"
+                                    title="Remove from this board"
+                                    onClick={(e) => { e.stopPropagation(); handleRemoveFromBoard(board.id, layout.id) }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))
+                            )
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {(() => {
+                      const boardedIds = new Set(myBoards.flatMap((b) => b.layouts.map((l) => l.id)))
+                      const unsorted = savedFromOthers.filter((l) => !boardedIds.has(l.id))
+                      if (savedFromOthers.length === 0) {
+                        return (
+                          <div className="empty-note">
+                            Nothing saved yet. Tap the ☆ on any layout in <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => navigate('/browse')}>Browse</span> to bookmark it here for later.
+                          </div>
+                        )
+                      }
+                      if (unsorted.length === 0) return null
+                      return (
+                        <div className="board-folder">
+                          <div className="board-folder-header board-folder-header-static">
+                            <span className="board-folder-name">🗂️ Unsorted</span>
+                            <span className="board-folder-count">{unsorted.length}</span>
+                          </div>
+                          {unsorted.map((layout) => (
+                            <PublicLayoutRow
+                              key={layout.id}
+                              layout={layout}
+                              liked={likedIds.has(layout.id)}
+                              saved={mySavedIds.has(layout.id)}
+                              signedIn={!!session}
+                              onView={() => handleLoad(layout)}
+                              onCopy={handleCopyPublic}
+                              onToggleLike={handleToggleLike}
+                              onToggleSave={handleToggleSave}
+                              onViewParent={handleViewLayoutById}
+                              onViewProfile={handleViewProfile}
+                              onReport={handleOpenReport}
+                              onShare={handleCopyLink}
+                              onViewDetails={(layoutId) => navigate(`/layouts/${layoutId}`)}
+                            />
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </>
                 )}
               </>
-            )}
-          </div>
-        )}
-
-        {tab === 'browse' && (
-          <div id="browse-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
-            <div className="empty-note" style={{ padding: '0 0 8px 0' }}>
-              Layouts other students have made public. Copy one to start from it, view it in 3D first, or{' '}
-              <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setTab('catalog')}>
-                start from scratch
-              </span>
-              . <span style={{ textDecoration: 'underline', cursor: 'pointer' }} onClick={() => setTab('leaderboard')}>🏆 Leaderboard</span>
-            </div>
-            {featuredCollections.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                {featuredCollections.map((collection) => (
-                  <div key={collection.id} style={{ marginBottom: 12 }}>
-                    <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>
-                      ✨ {collection.title}
-                    </div>
-                    {collection.description && (
-                      <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6 }}>{collection.description}</div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-                      {collection.layouts.map((layout) => (
-                        <div
-                          key={layout.id}
-                          onClick={() => handleLoad(layout)}
-                          title="Click to view this layout in your room"
-                          style={{ flexShrink: 0, width: 110, cursor: 'pointer' }}
-                        >
-                          <LayoutThumb url={layout.thumbnailUrl} />
-                          <div style={{ fontSize: 10, color: 'var(--ink)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {layout.name}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {distinctTags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
-                {distinctTags.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => toggleTagFilter(t)}
-                    style={{
-                      border: 'none', borderRadius: 999, padding: '4px 10px', fontSize: 10.5, fontWeight: 600, cursor: 'pointer',
-                      background: tagFilters.has(t) ? 'var(--accent)' : 'var(--paper-shadow)',
-                      color: tagFilters.has(t) ? '#fff' : 'var(--ink-soft)',
-                    }}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-              <select
-                value={hallFilter}
-                onChange={(e) => setHallFilter(e.target.value)}
-                style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 11, color: 'var(--ink)' }}
-              >
-                <option value="">All halls</option>
-                {distinctHalls.map((h) => (
-                  <option key={h} value={h}>{h}</option>
-                ))}
-              </select>
-              <select
-                value={roomTypeFilter}
-                onChange={(e) => setRoomTypeFilter(e.target.value)}
-                style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 11, color: 'var(--ink)', textTransform: 'capitalize' }}
-              >
-                <option value="">All room types</option>
-                {ROOM_TYPES.map((rt) => (
-                  <option key={rt} value={rt} style={{ textTransform: 'capitalize' }}>{rt}</option>
-                ))}
-              </select>
-            </div>
-            {session && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer', marginBottom: 12 }}>
-                <input type="checkbox" checked={followingOnlyFilter} onChange={(e) => setFollowingOnlyFilter(e.target.checked)} />
-                Following only
-              </label>
-            )}
-            {shareNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600, wordBreak: 'break-all' }}>{shareNotice}</div>}
-            {browseNotice && <div style={{ color: 'var(--sage)', fontSize: 11, marginBottom: 10, fontWeight: 600 }}>{browseNotice}</div>}
-            {browseError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{browseError}</div>}
-            {followingOnlyFilter && followingIds.size === 0 ? (
-              <div className="empty-note">
-                You're not following anyone yet. Tap a layout's byline anywhere to visit their profile and follow them.
-              </div>
-            ) : publicLayouts.length === 0 ? (
-              <div className="empty-note">
-                {hallFilter || roomTypeFilter || tagFilters.size > 0
-                  ? 'No public layouts match this filter yet.'
-                  : 'No public layouts yet. Publish one of your own from the Saved tab to be the first.'}
-              </div>
-            ) : (
-              publicLayouts.map((layout) => (
-                <PublicLayoutRow
-                  key={layout.id}
-                  layout={layout}
-                  liked={likedIds.has(layout.id)}
-                  saved={mySavedIds.has(layout.id)}
-                  signedIn={!!session}
-                  onView={() => handleLoad(layout)}
-                  onCopy={handleCopyPublic}
-                  onToggleLike={handleToggleLike}
-                  onToggleSave={handleToggleSave}
-                  onViewParent={handleViewLayoutById}
-                  onViewProfile={handleViewProfile}
-                  onReport={handleOpenReport}
-                  onShare={handleCopyLink}
-                  onViewDetails={(layoutId) => navigate(`/layouts/${layoutId}`)}
-                />
-              ))
             )}
           </div>
         )}
@@ -1749,7 +1803,7 @@ export default function App() {
           <div id="leaderboard-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
             <span
               style={{ fontSize: 11, color: 'var(--ink-soft)', textDecoration: 'underline', cursor: 'pointer', marginBottom: 14 }}
-              onClick={() => setTab('browse')}
+              onClick={() => navigate('/browse')}
             >
               ← Back to Browse
             </span>

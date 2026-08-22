@@ -371,3 +371,55 @@ create policy "Users can delete their own comments or layout owners can delete a
     auth.uid() = user_id
     or exists (select 1 from layouts l where l.id = layout_id and l.user_id = auth.uid())
   );
+
+-- Boards / collections (Pinterest-style gallery redesign, Part B — see
+-- migrations/011_boards.sql for the full narrative on why this is separate from layout_saves).
+create table if not exists boards (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, name)
+);
+
+alter table boards enable row level security;
+create index if not exists boards_user_id_idx on boards (user_id);
+
+create policy "Users can view their own boards"
+  on boards for select
+  using (auth.uid() = user_id);
+
+create policy "Users can create their own boards"
+  on boards for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can rename their own boards"
+  on boards for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete their own boards"
+  on boards for delete
+  using (auth.uid() = user_id);
+
+create table if not exists board_layouts (
+  board_id uuid not null references boards(id) on delete cascade,
+  layout_id uuid not null references layouts(id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (board_id, layout_id)
+);
+
+alter table board_layouts enable row level security;
+create index if not exists board_layouts_layout_id_idx on board_layouts (layout_id);
+
+create policy "Users can view layouts in their own boards"
+  on board_layouts for select
+  using (exists (select 1 from boards b where b.id = board_id and b.user_id = auth.uid()));
+
+create policy "Users can add layouts to their own boards"
+  on board_layouts for insert
+  with check (exists (select 1 from boards b where b.id = board_id and b.user_id = auth.uid()));
+
+create policy "Users can remove layouts from their own boards"
+  on board_layouts for delete
+  using (exists (select 1 from boards b where b.id = board_id and b.user_id = auth.uid()));

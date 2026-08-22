@@ -138,11 +138,17 @@ export async function setLayoutPublic(name, isPublic, { hall, roomType, tags } =
 // `roomType` are optional exact-match filters (values come from listDistinctHalls() below —
 // there's no fixed hall list, so filtering is always against whatever's actually in the data).
 // `authorIds`, if passed, restricts to just those users' layouts — this is what backs Browse's
-// "Following only" filter (see App.jsx: fetches listMyFollowingIds() first, then passes the
-// result here rather than this function knowing anything about follows itself). `tags`, if
+// "Following only" filter (see BrowsePage.jsx: fetches listMyFollowingIds() first, then passes
+// the result here rather than this function knowing anything about follows itself). `tags`, if
 // passed, requires the layout to have ALL of the given tags (AND, not OR — narrowing, same as
 // combining it with hall/roomType) via Postgres array-contains (`@>`).
-export async function listPublicLayouts({ hall, roomType, authorIds, tags } = {}) {
+//
+// `limit`/`offset` back the gallery's infinite scroll (see BrowsePage.jsx) — a plain offset
+// paginator rather than a keyset cursor, since `updated_at` isn't unique enough on its own to
+// build a stable cursor from and the added complexity isn't worth it for a browse list this size.
+// The caller determines "is there another page" itself (results.length === limit), so this always
+// just returns a plain array rather than wrapping it in a {data, hasMore} shape.
+export async function listPublicLayouts({ hall, roomType, authorIds, tags, limit = 24, offset = 0 } = {}) {
   const client = requireClient()
   let query = client
     .from('layouts')
@@ -151,6 +157,7 @@ export async function listPublicLayouts({ hall, roomType, authorIds, tags } = {}
     )
     .eq('is_public', true)
     .order('updated_at', { ascending: false })
+    .range(offset, offset + limit - 1)
   if (hall) query = query.eq('hall', hall)
   if (roomType) query = query.eq('room_type', roomType)
   if (authorIds) query = query.in('user_id', authorIds.length > 0 ? authorIds : ['00000000-0000-0000-0000-000000000000'])
@@ -426,6 +433,113 @@ export async function listSavedLayouts() {
       roomType: row.layouts.room_type,
       bookmarkedAt: new Date(row.created_at).getTime(),
     }))
+}
+
+// Boards — named collections of saved layouts (see migrations/011_boards.sql). Deliberately not
+// layered on top of layout_saves as "a save with a label"; it's a separate join table so a layout
+// can sit in more than one board while still being a single row in layout_saves.
+//
+// Returns every one of the current user's boards with its full layout list already embedded
+// (same nested-select shape listFeaturedCollections() above uses) — cheap enough for how many
+// boards/layouts a student realistically has, and it means both the Saved tab's board-folders
+// view and the save-to-board popover's "which boards is this already in" checkmarks can work off
+// one fetch instead of a separate membership query. A board's layouts come back newest-added-
+// first; a layout that's since been deleted (or gone private, though board membership doesn't
+// require public) just drops out of its board_layouts embed via RLS, same pattern as
+// listSavedLayouts.
+export async function listMyBoardsWithLayouts() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('boards')
+    .select(
+      'id, name, created_at, board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
+    )
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data.map((board) => ({
+    id: board.id,
+    name: board.name,
+    createdAt: new Date(board.created_at).getTime(),
+    layouts: (board.board_layouts || [])
+      .filter((bl) => bl.layouts)
+      .sort((a, b) => new Date(b.added_at) - new Date(a.added_at))
+      .map((bl) => ({
+        id: bl.layouts.id,
+        name: bl.layouts.name,
+        room: bl.layouts.room,
+        items: bl.layouts.items,
+        features: bl.layouts.features || [],
+        thumbnailUrl: bl.layouts.thumbnail_url,
+        savedAt: new Date(bl.layouts.updated_at).getTime(),
+        authorId: bl.layouts.user_id,
+        authorName: bl.layouts.profiles?.display_name || null,
+        designerName: bl.layouts.profiles?.is_designer ? bl.layouts.profiles.display_name : null,
+        likesCount: bl.layouts.likes_count,
+        viewCount: bl.layouts.view_count,
+        copyCount: bl.layouts.copy_count,
+        hall: bl.layouts.hall,
+        roomType: bl.layouts.room_type,
+      })),
+  }))
+}
+
+export async function createBoard(name) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const clean = name.trim()
+  if (!clean) throw new Error('Board name required')
+  const { data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, created_at').single()
+  if (error) {
+    if (error.code === '23505') throw new Error(`You already have a board named "${clean}"`)
+    throw error
+  }
+  return { id: data.id, name: data.name, createdAt: new Date(data.created_at).getTime(), layouts: [] }
+}
+
+export async function renameBoard(boardId, name) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const clean = name.trim()
+  if (!clean) throw new Error('Board name required')
+  const { error } = await client.from('boards').update({ name: clean }).eq('id', boardId).eq('user_id', user.id)
+  if (error) {
+    if (error.code === '23505') throw new Error(`You already have a board named "${clean}"`)
+    throw error
+  }
+}
+
+export async function deleteBoard(boardId) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('boards').delete().eq('id', boardId).eq('user_id', user.id)
+  if (error) throw error
+}
+
+// Adds a layout to a board — and, since being in a board implies "saved," also makes sure the
+// plain bookmark (layout_saves) exists for it, best-effort. That keeps every other saved-state UI
+// in the app (the heart/star icon, the Saved tab's flat "saved from others" fetch) a strict
+// superset of "everything in any board," with no separate sync step required anywhere else.
+export async function addLayoutToBoard(boardId, layoutId) {
+  const client = requireClient()
+  await requireUser(client)
+  const { error } = await client.from('board_layouts').insert({ board_id: boardId, layout_id: layoutId })
+  if (error && error.code !== '23505') throw error
+  try {
+    await saveLayoutBookmark(layoutId)
+  } catch {
+    // best-effort — the board membership itself is what matters here, see comment above
+  }
+}
+
+// Deliberately does NOT touch layout_saves — the layout may still be in another board, or the
+// user may just want to keep it saved unsorted. Un-saving entirely is still the separate ☆ toggle.
+export async function removeLayoutFromBoard(boardId, layoutId) {
+  const client = requireClient()
+  await requireUser(client)
+  const { error } = await client.from('board_layouts').delete().eq('board_id', boardId).eq('layout_id', layoutId)
+  if (error) throw error
 }
 
 // Reports — no read-back UI (see migration 009); this is the only report-related function
