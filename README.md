@@ -191,7 +191,15 @@ have been added since you last ran one — all additive and safe to re-run:
     (JoinLayoutPage.jsx) to work at all. Without it, inviting/joining will error and "Shared with
     me" will just show empty — everything else (your own layouts, Browse, boards) is unaffected
     either way.
-13. That's it — still no new env vars needed for any of these, including the OG preview
+13. New query → paste in
+    [`supabase/migrations/014_fix_collaborator_rls_recursion.sql`](supabase/migrations/014_fix_collaborator_rls_recursion.sql),
+    run it. **Required if you've already run 013** — 013's `layouts` and `layout_collaborators`
+    RLS policies each query the other table, which Postgres detects as a cycle and rejects with
+    "infinite recursion detected in policy for relation layouts", breaking Browse and My Layouts
+    entirely (not just the collaboration feature). 014 rewrites those two policies to use
+    SECURITY DEFINER helper functions instead, which fixes the recursion without changing what
+    anyone is allowed to see or do.
+14. That's it — still no new env vars needed for any of these, including the OG preview
     serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
     in your Vercel project).
 
