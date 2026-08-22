@@ -58,7 +58,7 @@ export default function BrowseLayoutCard({
               {byline}
             </div>
             {shopSummary.count > 0 && (
-              <button className="gallery-card-shop" onClick={(e) => { e.stopPropagation(); onViewDetails() }}>
+              <button className="gallery-card-shop" title="Shop" onClick={(e) => { e.stopPropagation(); onViewDetails() }}>
                 🛒 {shopSummary.count} item{shopSummary.count === 1 ? '' : 's'} · from ${shopSummary.total.toLocaleString()}
               </button>
             )}

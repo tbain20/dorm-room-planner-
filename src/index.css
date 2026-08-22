@@ -196,12 +196,16 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
   background:var(--paper); color:var(--ink); padding:14px 16px; border-radius:var(--radius-md);
   box-shadow:var(--shadow-card); border:1px solid var(--paper-shadow);
 }
+.selection-panel-header{display:flex; align-items:center; justify-content:space-between; gap:8px;}
 #selection-panel h3{margin:0 0 6px 0; font-size:15px; font-family:var(--font-serif); font-weight:600;}
 #selection-panel .meta{font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;}
 #selection-panel button{
   width:100%; background:var(--danger); color:#fff; border:none; padding:8px; border-radius:var(--radius-sm);
   font-size:11.5px; letter-spacing:0.02em; cursor:pointer;
 }
+/* Drag-handle bar — decorative on desktop (hidden), a standard "this sheet slides" affordance on
+   mobile where #selection-panel becomes a bottom sheet (see the max-width:760px rule below). */
+.sheet-handle{display:none;}
 
 #modal-backdrop{
   position:fixed; inset:0; background:rgba(37,29,20,0.45); z-index:20;
@@ -268,6 +272,13 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 .board-popover-new button{background:var(--accent); color:#fff; border:none; border-radius:6px; width:26px; flex-shrink:0; font-size:14px; cursor:pointer;}
 .board-popover-new button:disabled{background:var(--paper-shadow); color:var(--ink-soft); cursor:default;}
 .board-popover-error{color:var(--danger); font-size:10.5px; margin-top:6px;}
+
+/* ---- Skeleton loaders — shared pulse animation for any "content not in yet" placeholder block.
+   Used by the Browse gallery grid (BrowseSkeletonCard in BrowsePage.jsx) and the layout detail
+   page (LayoutDetailSkeleton in LayoutDetailPage.jsx) instead of a blank flash or bare "Loading…"
+   text while the first fetch is in flight. ---- */
+@keyframes skeleton-pulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
+.skeleton{background:var(--paper-shadow); border-radius:var(--radius-sm); animation:skeleton-pulse 1.4s ease-in-out infinite;}
 
 /* ---- /browse — Pinterest-style masonry gallery (BrowsePage.jsx) ---- */
 .browse-page{max-width:1400px; margin:0 auto; padding:32px 24px 100px; min-height:100vh;}
@@ -355,7 +366,21 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
   #titleblock h1{font-size:15px;}
   .dim-row input{width:44px; font-size:12px;}
   #hint{display:none;}
-  #selection-panel{width:auto; left:18px; right:18px; top:auto; bottom:16px;}
+  /* Bottom sheet, not the desktop floating card — position:fixed to the actual viewport (not
+     #canvas-wrap, which is only 52vh tall) is what actually fixes the overlap bug: the old rule
+     kept #selection-panel absolutely positioned *within* that short 52vh box, bottom-anchored
+     but with no height cap, so a tall panel (dimensions expanded + bed height row + a few "goes
+     well with" items) could grow upward far enough to collide with #titleblock sitting top-left
+     in that same cramped box. Anchoring to the real viewport bottom instead, with a max-height
+     and its own scroll, means it can never reach up into #titleblock's corner no matter how much
+     content it holds — and the collapse toggle (see .selection-panel-header in App.jsx) means it
+     never has to cover the whole 3D view just to keep an item selected. */
+  #selection-panel{
+    position:fixed; left:0; right:0; bottom:0; top:auto; width:auto; z-index:15;
+    max-height:45vh; overflow-y:auto; border-radius:16px 16px 0 0; box-shadow:var(--shadow-lift);
+    padding-bottom:max(14px, env(safe-area-inset-bottom));
+  }
+  .sheet-handle{display:block; width:36px; height:4px; border-radius:999px; background:var(--paper-shadow); margin:0 auto 10px auto;}
   #sidebar{width:100%; flex:none; box-shadow:0 -12px 30px rgba(37,29,20,0.10);}
   .cat-item, .cart-row{padding:13px 8px;}
   .add-btn{width:32px; height:32px; font-size:18px;}

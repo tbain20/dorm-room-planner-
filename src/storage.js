@@ -23,8 +23,15 @@ async function requireUser(client) {
 // path convention for the layout-thumbnails bucket — user-id-prefixed so the storage RLS
 // policies (which check the first path segment against auth.uid()) work, and stable per layout
 // name so re-saving overwrites the old image instead of accumulating orphans.
+//
+// Deliberately NOT encodeURIComponent(name) — the storage SDK's own upload()/getPublicUrl()
+// already percent-encode the path themselves before building the request/public URL. Encoding it
+// here too meant a space became `%20` and then, encoded a second time by the SDK, `%2520` — a
+// URL that 400s. Confirmed against the actual installed @supabase/supabase-js: passing the raw
+// name is what produces a correctly single-encoded, working public URL. Any layout name with a
+// space (i.e. almost all of them) had a broken thumbnail because of this until now.
 function thumbnailPath(userId, name) {
-  return `${userId}/${encodeURIComponent(name)}.jpg`
+  return `${userId}/${name}.jpg`
 }
 
 async function uploadThumbnail(client, userId, name, dataUrl) {
@@ -132,6 +139,126 @@ export async function setLayoutPublic(name, isPublic, { hall, roomType, tags } =
   }
   const { error } = await client.from('layouts').update(patch).eq('user_id', user.id).eq('name', name)
   if (error) throw error
+}
+
+// Roommate collaboration — the simple version (see migrations/013_roommate_collaboration.sql):
+// shared edit access on one layout, no real-time sync. A layout is normally saved/loaded by
+// (user_id, name) — see saveLayout/listLayouts above — which only ever means "my own layout
+// named X." A shared layout needs its own id-keyed save/load path instead, since a collaborator
+// editing someone else's layout has no (user_id, name) row of their own to upsert into — see
+// saveSharedLayout and getLayoutForEditing below.
+
+// Blind self-service insert — see the migration's own comment for why this is a deliberate,
+// documented trust simplification (the layout id in the invite link is the only "token"). Does
+// NOT fetch the layout first; RLS wouldn't let a not-yet-collaborator read it anyway. Call
+// getLayoutForEditing() right after this succeeds to actually load it.
+export async function joinLayoutAsCollaborator(layoutId) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('layout_collaborators').insert({ layout_id: layoutId, user_id: user.id })
+  if (error && error.code !== '23505') throw error // already a collaborator — fine, not an error
+}
+
+export async function leaveLayoutCollaboration(layoutId) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('layout_collaborators').delete().eq('layout_id', layoutId).eq('user_id', user.id)
+  if (error) throw error
+}
+
+// Owner-only in practice — RLS's delete policy also allows a collaborator to remove *themselves*
+// (that's leaveLayoutCollaboration above), but only the owner can remove someone else's row, so
+// this just throws whatever RLS throws if a non-owner tries to kick another collaborator.
+export async function removeCollaborator(layoutId, userId) {
+  const client = requireClient()
+  await requireUser(client)
+  const { error } = await client.from('layout_collaborators').delete().eq('layout_id', layoutId).eq('user_id', userId)
+  if (error) throw error
+}
+
+// Fetches a layout by id for editing — works for the owner or any invited collaborator (RLS: see
+// the "Collaborators can view shared layouts" policy), unlike getPublicLayoutById which only ever
+// works for is_public = true. Also returns the collaborator roster (with display names) so the
+// editor can show "shared with X" — every profile in the list is visible regardless of whose
+// profile it is, since profiles are publicly readable already. Returns null if the layout doesn't
+// exist or you're neither the owner nor a collaborator (RLS just returns nothing rather than
+// erroring, same maybeSingle()-returns-null contract as the other getPublicX functions).
+export async function getLayoutForEditing(layoutId) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('layouts')
+    .select('id, name, room, items, features, user_id, updated_at, layout_collaborators(user_id, added_at, profiles(display_name))')
+    .eq('id', layoutId)
+    .maybeSingle()
+  if (error || !data) return null
+  return {
+    id: data.id,
+    name: data.name,
+    room: data.room,
+    items: data.items,
+    features: data.features || [],
+    ownerId: data.user_id,
+    isOwner: data.user_id === user.id,
+    savedAt: new Date(data.updated_at).getTime(),
+    collaborators: (data.layout_collaborators || [])
+      .map((c) => ({ userId: c.user_id, displayName: c.profiles?.display_name || 'A student', addedAt: new Date(c.added_at).getTime() }))
+      .sort((a, b) => a.addedAt - b.addedAt),
+  }
+}
+
+// Saves changes to a shared layout by id, preserving the original owner and name — the
+// (user_id, name) upsert saveLayout() does above would be wrong here, since a collaborator has no
+// row of their own to upsert into; this always updates the one existing row instead. RLS (plus
+// the preserve_layout_owner trigger) is what actually stops this from being misused to steal
+// ownership or edit a layout you're not part of — this function itself doesn't re-check
+// membership, same as saveLayout() doesn't re-check you own the (user_id, name) row it upserts.
+export async function saveSharedLayout(layoutId, data) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const patch = { room: data.room, items: data.items, features: data.features || [], updated_at: new Date().toISOString() }
+  if (data.thumbnailDataUrl) {
+    try {
+      // Uploaded under the *saving* user's own storage path — not necessarily the owner's —
+      // since the thumbnails bucket's write policy is scoped to your own uid prefix regardless
+      // of who owns the layout row it's a thumbnail for. The bucket is public-read, so the
+      // resulting URL works for anyone viewing the layout either way.
+      patch.thumbnail_url = await uploadThumbnail(client, user.id, data.name || layoutId, data.thumbnailDataUrl)
+    } catch (err) {
+      console.warn('Thumbnail upload failed, saving shared layout without one:', err.message)
+    }
+  }
+  const { error } = await client.from('layouts').update(patch).eq('id', layoutId)
+  if (error) throw error
+}
+
+// Every layout the current user collaborates on but doesn't own — the "Shared with me" list in
+// the Saved tab, since listLayouts() above only ever returns layouts you own. A layout that's
+// since been deleted just drops out of the embed via the foreign key cascade, same
+// drop-the-row-you-can't-see pattern used everywhere else here.
+export async function listSharedWithMe() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('layout_collaborators')
+    .select('added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, user_id, profiles(display_name))')
+    .eq('user_id', user.id)
+    .order('added_at', { ascending: false })
+  if (error) throw error
+  return data
+    .filter((row) => row.layouts)
+    .map((row) => ({
+      id: row.layouts.id,
+      name: row.layouts.name,
+      room: row.layouts.room,
+      items: row.layouts.items,
+      features: row.layouts.features || [],
+      thumbnailUrl: row.layouts.thumbnail_url,
+      savedAt: new Date(row.layouts.updated_at).getTime(),
+      ownerId: row.layouts.user_id,
+      ownerName: row.layouts.profiles?.display_name || 'a student',
+      joinedAt: new Date(row.added_at).getTime(),
+    }))
 }
 
 // Read-only, no auth required — RLS allows anyone to see rows where is_public = true. `hall` and
@@ -453,7 +580,7 @@ export async function listMyBoardsWithLayouts() {
   const { data, error } = await client
     .from('boards')
     .select(
-      'id, name, created_at, board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
+      'id, name, is_public, created_at, board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
     )
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
@@ -461,6 +588,7 @@ export async function listMyBoardsWithLayouts() {
   return data.map((board) => ({
     id: board.id,
     name: board.name,
+    isPublic: board.is_public,
     createdAt: new Date(board.created_at).getTime(),
     layouts: (board.board_layouts || [])
       .filter((bl) => bl.layouts)
@@ -490,12 +618,68 @@ export async function createBoard(name) {
   const user = await requireUser(client)
   const clean = name.trim()
   if (!clean) throw new Error('Board name required')
-  const { data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, created_at').single()
+  const { data, error } = await client.from('boards').insert({ user_id: user.id, name: clean }).select('id, name, is_public, created_at').single()
   if (error) {
     if (error.code === '23505') throw new Error(`You already have a board named "${clean}"`)
     throw error
   }
-  return { id: data.id, name: data.name, createdAt: new Date(data.created_at).getTime(), layouts: [] }
+  return { id: data.id, name: data.name, isPublic: data.is_public, createdAt: new Date(data.created_at).getTime(), layouts: [] }
+}
+
+// Owner-only, same as renameBoard — RLS's "Users can rename their own boards" update policy
+// covers any column, not just name, so no separate policy was needed for this.
+export async function setBoardPublic(boardId, isPublic) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('boards').update({ is_public: isPublic }).eq('id', boardId).eq('user_id', user.id)
+  if (error) throw error
+}
+
+// Fetches one public board by id, with its layouts — the /boards/:id shareable page. Returns
+// null (not a throw) if the board is gone or no longer public, same "nice if it still works"
+// contract getPublicLayoutById already has for /layouts/:id. A layout inside the board that's
+// since been deleted or gone private drops out of the embed via the layouts table's own RLS
+// (is_public = true or you own it) — completely unrelated to this board being public, so a
+// visitor here only ever sees entries that are themselves public layouts. See
+// migrations/012_public_boards.sql for the full narrative.
+export async function getPublicBoardById(id) {
+  const client = requireClient()
+  const { data, error } = await client
+    .from('boards')
+    .select(
+      'id, name, user_id, profiles(display_name, is_designer), board_layouts(added_at, layouts(id, name, room, items, features, thumbnail_url, updated_at, likes_count, view_count, copy_count, hall, room_type, user_id, profiles(display_name, is_designer)))'
+    )
+    .eq('id', id)
+    .eq('is_public', true)
+    .maybeSingle()
+  if (error || !data) return null
+  return {
+    id: data.id,
+    name: data.name,
+    authorId: data.user_id,
+    authorName: data.profiles?.display_name || null,
+    designerName: data.profiles?.is_designer ? data.profiles.display_name : null,
+    layouts: (data.board_layouts || [])
+      .filter((bl) => bl.layouts)
+      .sort((a, b) => new Date(b.added_at) - new Date(a.added_at))
+      .map((bl) => ({
+        id: bl.layouts.id,
+        name: bl.layouts.name,
+        room: bl.layouts.room,
+        items: bl.layouts.items,
+        features: bl.layouts.features || [],
+        thumbnailUrl: bl.layouts.thumbnail_url,
+        savedAt: new Date(bl.layouts.updated_at).getTime(),
+        authorId: bl.layouts.user_id,
+        authorName: bl.layouts.profiles?.display_name || null,
+        designerName: bl.layouts.profiles?.is_designer ? bl.layouts.profiles.display_name : null,
+        likesCount: bl.layouts.likes_count,
+        viewCount: bl.layouts.view_count,
+        copyCount: bl.layouts.copy_count,
+        hall: bl.layouts.hall,
+        roomType: bl.layouts.room_type,
+      })),
+  }
 }
 
 export async function renameBoard(boardId, name) {
@@ -642,10 +826,25 @@ export async function getLeaderboard() {
 
 // Badge thresholds, computed on the fly from a profile's own public layouts (see getPublicProfile
 // above) — not stored anywhere, so there's nothing to keep in sync when counts change.
-export function computeBadges(layouts) {
+// First student cohort this app shipped to, roughly — accounts created before fall move-in
+// counts as "early," everyone signing up once the semester's already under way doesn't. Tune
+// this if the real launch timeline turns out different; it's just a threshold, not tied to
+// anything else.
+const EARLY_ADOPTER_CUTOFF = new Date('2026-09-01T00:00:00Z')
+
+// Client-computed from data already on hand (a profile's public layouts, its is_designer flag
+// and account creation date) — no dedicated badge-awarding/tracking table, since every badge here
+// is just "does some already-stored number cross a threshold," recomputed fresh on every profile
+// view rather than persisted anywhere. `isDesigner`/`createdAt` are optional so existing callers
+// that only have a layouts array still work; pass what you have.
+export function computeBadges(layouts, { isDesigner, createdAt } = {}) {
   const totalLikes = layouts.reduce((sum, l) => sum + (l.likesCount || 0), 0)
   const totalCopies = layouts.reduce((sum, l) => sum + (l.copyCount || 0), 0)
   const badges = []
+  // Verified Designer already exists as a small tag next to the display name elsewhere — this is
+  // the same flag shown again, more prominently, grouped in with the other achievement badges.
+  if (isDesigner) badges.push({ emoji: '✓', label: 'Verified Designer' })
+  if (createdAt && createdAt < EARLY_ADOPTER_CUTOFF.getTime()) badges.push({ emoji: '🌱', label: 'Early Adopter' })
   if (layouts.length >= 5) badges.push({ emoji: '🎨', label: `${layouts.length}+ layouts published` })
   if (totalCopies >= 10) badges.push({ emoji: '🏆', label: `${totalCopies}+ copies` })
   if (totalLikes >= 25) badges.push({ emoji: '❤️', label: `${totalLikes}+ likes` })
@@ -715,7 +914,7 @@ export async function getPublicProfile(userId) {
   const client = requireClient()
   const { data: profile, error } = await client
     .from('profiles')
-    .select('id, display_name, is_designer, bio, display_hall, class_year')
+    .select('id, display_name, is_designer, bio, display_hall, class_year, created_at')
     .eq('id', userId)
     .maybeSingle()
   if (error || !profile) return null
@@ -738,6 +937,7 @@ export async function getPublicProfile(userId) {
     bio: profile.bio,
     displayHall: profile.display_hall,
     classYear: profile.class_year,
+    createdAt: new Date(profile.created_at).getTime(),
     followerCount: followerRes.count || 0,
     followingCount: followingRes.count || 0,
     layouts: (layoutsRes.data || []).map((row) => ({

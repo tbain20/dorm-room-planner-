@@ -82,10 +82,45 @@ create index if not exists layouts_room_type_idx on layouts (room_type);
 create index if not exists layouts_parent_layout_id_idx on layouts (parent_layout_id);
 create index if not exists layouts_tags_idx on layouts using gin (tags);
 
+-- Roommate collaboration — the simple version (shared edit access, no real-time sync). Defined
+-- here, before layouts' own RLS policies below, since two of those policies reference this table
+-- in a subquery. See migrations/013_roommate_collaboration.sql for the full narrative on the
+-- trust model: a layout's id is the invite token, joining is a self-service insert by whoever
+-- opens the link (/layouts/:id/join), not something the owner does to a specific person.
+create table if not exists layout_collaborators (
+  layout_id uuid not null references layouts(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (layout_id, user_id)
+);
+
+alter table layout_collaborators enable row level security;
+create index if not exists layout_collaborators_layout_id_idx on layout_collaborators (layout_id);
+create index if not exists layout_collaborators_user_id_idx on layout_collaborators (user_id);
+
+create policy "Users can view collaborators on layouts they own or share"
+  on layout_collaborators for select
+  using (
+    exists (select 1 from layouts l where l.id = layout_id and l.user_id = auth.uid())
+    or exists (select 1 from layout_collaborators lc2 where lc2.layout_id = layout_collaborators.layout_id and lc2.user_id = auth.uid())
+  );
+
+create policy "Users can join a layout as a collaborator"
+  on layout_collaborators for insert
+  with check (user_id = auth.uid());
+
+create policy "Owners can remove collaborators, collaborators can leave"
+  on layout_collaborators for delete
+  using (
+    user_id = auth.uid()
+    or exists (select 1 from layouts l where l.id = layout_id and l.user_id = auth.uid())
+  );
+
 alter table layouts enable row level security;
 
--- Two select policies, OR'd together: you can always see your own layouts, and anyone
--- (including signed-out visitors) can see layouts that have been made public.
+-- Three select policies, OR'd together: you can always see your own layouts, anyone (including
+-- signed-out visitors) can see layouts that have been made public, and a roommate you've invited
+-- as a collaborator (see layout_collaborators below) can see a layout that's neither of those.
 create policy "Users can view their own layouts"
   on layouts for select
   using (auth.uid() = user_id);
@@ -94,18 +129,51 @@ create policy "Public layouts are viewable by anyone"
   on layouts for select
   using (is_public = true);
 
+create policy "Collaborators can view shared layouts"
+  on layouts for select
+  using (exists (select 1 from layout_collaborators lc where lc.layout_id = id and lc.user_id = auth.uid()));
+
 create policy "Users can insert their own layouts"
   on layouts for insert
   with check (auth.uid() = user_id);
 
-create policy "Users can update their own layouts"
+-- Same OR as the select policies above — an invited collaborator can save changes exactly like
+-- the owner can (see migrations/013_roommate_collaboration.sql for the full narrative, including
+-- why user_id itself can never actually change via this path regardless of what "with check"
+-- alone would allow — see the preserve_layout_owner trigger further down).
+create policy "Owners and collaborators can update a layout"
   on layouts for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using (
+    auth.uid() = user_id
+    or exists (select 1 from layout_collaborators lc where lc.layout_id = id and lc.user_id = auth.uid())
+  )
+  with check (
+    auth.uid() = user_id
+    or exists (select 1 from layout_collaborators lc where lc.layout_id = id and lc.user_id = auth.uid())
+  );
 
 create policy "Users can delete their own layouts"
   on layouts for delete
   using (auth.uid() = user_id);
+
+-- Belt-and-suspenders on top of the update policy above: forces user_id back to whatever it
+-- already was on every update, no matter what a client sends — closes off a collaborator's
+-- update request reassigning ownership, which "with check" alone can't express (it only sees the
+-- new row, not old-vs-new). Same kind of invariant-plain-RLS-can't-express trigger as the
+-- likes_count one below.
+create or replace function public.preserve_layout_owner()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.user_id := old.user_id;
+  return new;
+end;
+$$;
+
+create trigger on_layout_update_preserve_owner
+  before update on layouts
+  for each row execute function public.preserve_layout_owner();
 
 -- Storage bucket for layout thumbnails (JPEG snapshots, captured on every save). Public read;
 -- write/update/delete scoped to "<user_id>/..." path prefixes.
@@ -378,6 +446,7 @@ create table if not exists boards (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
+  is_public boolean not null default false,
   created_at timestamptz not null default now(),
   unique (user_id, name)
 );
@@ -385,9 +454,16 @@ create table if not exists boards (
 alter table boards enable row level security;
 create index if not exists boards_user_id_idx on boards (user_id);
 
+-- Two select policies, OR'd together, same split layouts' own two policies use: you can always
+-- see your own boards, and anyone (including signed-out visitors) can see boards that have been
+-- made public (see migrations/012_public_boards.sql for the full narrative).
 create policy "Users can view their own boards"
   on boards for select
   using (auth.uid() = user_id);
+
+create policy "Anyone can view public boards"
+  on boards for select
+  using (is_public = true);
 
 create policy "Users can create their own boards"
   on boards for insert
@@ -412,9 +488,9 @@ create table if not exists board_layouts (
 alter table board_layouts enable row level security;
 create index if not exists board_layouts_layout_id_idx on board_layouts (layout_id);
 
-create policy "Users can view layouts in their own boards"
+create policy "Users can view layouts in boards they own or that are public"
   on board_layouts for select
-  using (exists (select 1 from boards b where b.id = board_id and b.user_id = auth.uid()));
+  using (exists (select 1 from boards b where b.id = board_id and (b.user_id = auth.uid() or b.is_public = true)));
 
 create policy "Users can add layouts to their own boards"
   on board_layouts for insert

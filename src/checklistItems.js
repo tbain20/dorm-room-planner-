@@ -186,7 +186,8 @@ const RAW_CHECKLIST_ITEMS = [
   { label: 'Fake plants', category: 'Decor', subcategory: 'Room' },
   { label: 'LED lights', category: 'Decor', subcategory: 'Room' },
   { label: 'String lights', category: 'Decor', subcategory: 'Room' },
-  { label: 'Curtains', category: 'Decor', subcategory: 'Room' },
+  // Curtains graduated to a real placeable catalog.js entry (id 'curtains') in the long-tail
+  // links pass — removed here so it doesn't show up as a redundant checklist-only line too.
 
   // ---- Optional Luxury Items ----
   { label: 'Espresso machine', category: 'Optional Luxury Items', subcategory: null },

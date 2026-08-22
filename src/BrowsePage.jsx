@@ -15,6 +15,12 @@ const ROOM_TYPES = ['single', 'double', 'triple']
 
 const PAGE_SIZE = 24
 
+// Varying heights (px) for the loading skeleton so it reads as a masonry grid from the first
+// frame instead of a uniform block wall — real card heights vary by thumbnail aspect ratio (see
+// BrowseLayoutCard), which isn't known until the actual image loads, so this is just a plausible
+// stand-in shape, not meant to predict real heights.
+const SKELETON_HEIGHTS = [220, 300, 180, 260, 340, 200, 280, 240, 190, 310, 230, 270]
+
 // The Pinterest-style masonry gallery, as its own full-width route rather than a tab squeezed
 // into the app's 340px sidebar — a real multi-column masonry grid needs more room than that, and
 // this is also where Browse's filter chips/dropdowns, the featured strip, and infinite scroll
@@ -284,7 +290,9 @@ export default function BrowsePage() {
       {error && <div className="browse-error">{error}</div>}
 
       {loading ? (
-        <div className="browse-empty">Loading…</div>
+        <div className="gallery-grid">
+          {SKELETON_HEIGHTS.map((h, i) => <BrowseSkeletonCard key={i} height={h} />)}
+        </div>
       ) : followingOnlyFilter && followingIds.size === 0 ? (
         <div className="browse-empty">You're not following anyone yet. Click a layout's creator name to visit their profile and follow them.</div>
       ) : layouts.length === 0 ? (
@@ -317,13 +325,24 @@ export default function BrowsePage() {
                 }}
               />
             ))}
+            {loadingMore && SKELETON_HEIGHTS.slice(0, 4).map((h, i) => <BrowseSkeletonCard key={`more-${i}`} height={h} />)}
           </div>
           <div ref={sentinelRef} className="browse-sentinel">
-            {loadingMore && 'Loading more…'}
             {!hasMore && !loadingMore && layouts.length > 0 && "You've reached the end."}
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// Placeholder card matching .gallery-card's shape (rounded image block, no text) so the masonry
+// grid reads as "loading real content" from the first frame instead of a blank flash — see
+// SKELETON_HEIGHTS above for why the heights vary.
+function BrowseSkeletonCard({ height }) {
+  return (
+    <div className="gallery-card">
+      <div className="skeleton" style={{ width: '100%', height, borderRadius: 'var(--radius-md)' }} />
     </div>
   )
 }

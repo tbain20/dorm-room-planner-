@@ -142,27 +142,27 @@ export default function LayoutDetailPage() {
     }
   }
 
-  const pageStyle = { maxWidth: 640, margin: '0 auto', padding: '40px 20px 80px', fontFamily: 'Inter, sans-serif', color: '#2b2620' }
+  const pageStyle = { maxWidth: 640, margin: '0 auto', padding: '40px 20px 80px', fontFamily: 'var(--font-sans)', color: 'var(--ink)' }
 
   if (loading) {
-    return <div style={pageStyle}>Loading…</div>
+    return <LayoutDetailSkeleton pageStyle={pageStyle} />
   }
 
   if (notFound) {
     return (
       <div style={pageStyle}>
-        <Link to="/" style={{ color: '#b2542f' }}>← Dorm Room Planner</Link>
-        <h1 style={{ marginTop: 20 }}>This layout isn't available</h1>
-        <p style={{ color: '#8a8072' }}>It may have been deleted, or made private by its owner.</p>
+        <Link to="/" style={{ color: 'var(--accent)' }}>← Dorm Room Planner</Link>
+        <h1 style={{ ...headingStyle, marginTop: 20 }}>This layout isn't available</h1>
+        <p style={{ color: 'var(--ink-soft)' }}>It may have been deleted, or made private by its owner.</p>
       </div>
     )
   }
 
   return (
     <div style={pageStyle}>
-      <Link to="/" style={{ color: '#b2542f', fontSize: 13 }}>← Dorm Room Planner</Link>
-      <h1 style={{ marginTop: 12, marginBottom: 4, fontSize: 26 }}>{layout.name}</h1>
-      <div style={{ color: '#8a8072', fontSize: 13, marginBottom: 4 }}>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <h1 style={{ ...headingStyle, marginTop: 12, marginBottom: 4, fontSize: 26 }}>{layout.name}</h1>
+      <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 4 }}>
         {layout.authorId && (
           // Profile pages are still a pseudo-tab inside the main app (see "Public profiles +
           // follow"), not a real route yet — so this can only send you to the app, not deep-link
@@ -172,37 +172,37 @@ export default function LayoutDetailPage() {
         {layout.parentLayoutId && (
           <>
             {' · '}
-            <Link to={`/layouts/${layout.parentLayoutId}`} style={{ color: '#8a8072' }}>Based on another layout</Link>
+            <Link to={`/layouts/${layout.parentLayoutId}`} style={{ color: 'var(--ink-soft)' }}>Based on another layout</Link>
           </>
         )}
       </div>
-      <div style={{ color: '#8a8072', fontSize: 12.5, marginBottom: 20 }}>
+      <div style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginBottom: 20 }}>
         {layout.room.w}'×{layout.room.l}' {layout.roomType && `· ${layout.roomType} `}{layout.hall && `· ${layout.hall}`}
       </div>
 
       {layout.thumbnailUrl ? (
         <img src={layout.thumbnailUrl} alt={layout.name} style={{ width: '100%', borderRadius: 12, marginBottom: 20 }} />
       ) : (
-        <div style={{ width: '100%', aspectRatio: '4/3', background: '#eee6d8', borderRadius: 12, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
+        <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--paper-shadow)', borderRadius: 12, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
           🏠
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button onClick={handleToggleLike} style={btnStyle(liked)}>{liked ? '♥' : '♡'} {likesCount}</button>
-        <button onClick={handleToggleSave} style={btnStyle(saved)}>{saved ? '🔖 Saved' : '☆ Save'}</button>
-        <button onClick={handleOpenInEditor} style={btnStyle(false)}>↺ Open in 3D editor</button>
-        <button onClick={handleCopy} style={btnStyle(false)}>+ Copy to my layouts</button>
-        <button onClick={handleReport} style={{ ...btnStyle(false), marginLeft: 'auto' }}>🚩</button>
+        <button onClick={handleToggleLike} title={liked ? 'Unlike' : 'Like'} style={btnStyle(liked)}>{liked ? '♥' : '♡'} {likesCount}</button>
+        <button onClick={handleToggleSave} title={saved ? 'Unsave' : 'Save'} style={btnStyle(saved)}>{saved ? '🔖 Saved' : '☆ Save'}</button>
+        <button onClick={handleOpenInEditor} title="Edit" style={btnStyle(false)}>↺ Open in 3D editor</button>
+        <button onClick={handleCopy} title="Copy" style={btnStyle(false)}>+ Copy to my layouts</button>
+        <button onClick={handleReport} title="Report" style={{ ...btnStyle(false), marginLeft: 'auto' }}>🚩</button>
       </div>
-      {actionError && <div style={{ color: '#b23a3a', fontSize: 12, marginBottom: 12 }}>{actionError}</div>}
-      {copyNotice && <div style={{ color: '#6b7a5e', fontSize: 12, marginBottom: 12, fontWeight: 600 }}>{copyNotice}</div>}
-      {!session && <div style={{ color: '#8a8072', fontSize: 11.5, marginBottom: 20 }}>Sign in on the main app to like, save, copy, or comment.</div>}
+      {actionError && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 12 }}>{actionError}</div>}
+      {copyNotice && <div style={{ color: 'var(--sage)', fontSize: 12, marginBottom: 12, fontWeight: 600 }}>{copyNotice}</div>}
+      {!session && <div style={{ color: 'var(--ink-soft)', fontSize: 11.5, marginBottom: 20 }}>Sign in on the main app to like, save, copy, or comment.</div>}
 
       <ShopThisRoom items={layout.items} />
 
-      <h2 style={{ fontSize: 15, marginTop: 32, marginBottom: 10 }}>Comments {comments.length > 0 && `(${comments.length})`}</h2>
-      {commentsError && <div style={{ color: '#b23a3a', fontSize: 12, marginBottom: 10 }}>{commentsError}</div>}
+      <h2 style={{ ...headingStyle, fontSize: 15, marginTop: 32, marginBottom: 10 }}>Comments {comments.length > 0 && `(${comments.length})`}</h2>
+      {commentsError && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 10 }}>{commentsError}</div>}
       {session && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input
@@ -210,28 +210,59 @@ export default function LayoutDetailPage() {
             value={commentBody}
             onChange={(e) => setCommentBody(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
-            style={{ flex: 1, padding: 9, border: '1px solid #e5ddcc', borderRadius: 8, fontSize: 13 }}
+            style={{ flex: 1, padding: 9, border: '1px solid var(--paper-shadow)', borderRadius: 8, fontSize: 13 }}
           />
-          <button onClick={handleAddComment} style={{ background: '#b2542f', color: '#fff', border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleAddComment} style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
             Post
           </button>
         </div>
       )}
       {comments.length === 0 ? (
-        <div style={{ color: '#8a8072', fontSize: 13 }}>No comments yet.</div>
+        <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>No comments yet — be the first to say something.</div>
       ) : (
         comments.map((c) => (
-          <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid #eee6d8' }}>
+          <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--paper-shadow)' }}>
             <div>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: '#2b2620' }}>{c.authorName}</div>
-              <div style={{ fontSize: 13, color: '#2b2620', marginTop: 2 }}>{c.body}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--ink)' }}>{c.authorName}</div>
+              <div style={{ fontSize: 13, color: 'var(--ink)', marginTop: 2 }}>{c.body}</div>
             </div>
             {session && (session.user.id === c.authorId || session.user.id === layout.authorId) && (
-              <button onClick={() => handleDeleteComment(c.id)} style={{ background: 'none', border: 'none', color: '#8a8072', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}>×</button>
+              <button onClick={() => handleDeleteComment(c.id)} title="Delete" style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 13, flexShrink: 0 }}>×</button>
             )}
           </div>
         ))
       )}
+    </div>
+  )
+}
+
+// Shown while the layout's own fetch is in flight — mirrors the real page's shape (back link,
+// title, meta line, hero image, action-button row, then a few shop-list rows) with pulsing
+// placeholder blocks instead of a bare "Loading…" or a blank flash, since this is usually the
+// very first thing a visitor following a shared link sees.
+function LayoutDetailSkeleton({ pageStyle }) {
+  return (
+    <div style={pageStyle}>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <div className="skeleton" style={{ width: '55%', height: 26, marginTop: 16, marginBottom: 8 }} />
+      <div className="skeleton" style={{ width: '35%', height: 13, marginBottom: 20 }} />
+      <div className="skeleton" style={{ width: '100%', aspectRatio: '4/3', marginBottom: 20 }} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {[70, 90, 140, 150].map((w, i) => (
+          <div key={i} className="skeleton" style={{ width: w, height: 30, borderRadius: 999 }} />
+        ))}
+      </div>
+      <div className="skeleton" style={{ width: '30%', height: 15, marginBottom: 14 }} />
+      {[1, 2, 3].map((i) => (
+        <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--paper-shadow)' }}>
+          <div className="skeleton" style={{ width: 44, height: 44, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div className="skeleton" style={{ width: '60%', height: 13, marginBottom: 6 }} />
+            <div className="skeleton" style={{ width: '35%', height: 11 }} />
+          </div>
+          <div className="skeleton" style={{ width: 70, height: 24, borderRadius: 999 }} />
+        </div>
+      ))}
     </div>
   )
 }
@@ -250,33 +281,33 @@ function ShopThisRoom({ items }) {
 
   return (
     <div style={{ marginTop: 32 }}>
-      <h2 style={{ fontSize: 15, marginBottom: 10 }}>Shop this room</h2>
+      <h2 style={{ ...headingStyle, fontSize: 15, marginBottom: 10 }}>Shop this room</h2>
       {resolved.length === 0 ? (
-        <div style={{ color: '#8a8072', fontSize: 13 }}>This room doesn't have any items yet.</div>
+        <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>This room doesn't have any items yet.</div>
       ) : (
         <>
           {resolved.map((cat, i) => (
-            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #eee6d8' }}>
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--paper-shadow)' }}>
               <CatalogThumb cat={cat} size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: '#2b2620' }}>{cat.name}</div>
-                <div style={{ fontSize: 11, color: '#8a8072', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{cat.name}</div>
+                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2 }}>
                   {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}'
                   {cat.rating && ` · ★ ${cat.rating}${cat.reviewCount ? ` (${cat.reviewCount.toLocaleString()})` : ''}`}
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 {cat.isProvided ? (
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7a5e' }}>Included by Colgate</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--sage)' }}>Included by Colgate</div>
                 ) : (
                   <>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#2b2620', marginBottom: 5 }}>${cat.price}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 5 }}>${cat.price}</div>
                     <a
                       href={catalogItemLink(cat)}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
-                        fontSize: 10.5, fontWeight: 600, color: '#fff', background: '#b2542f', borderRadius: 999,
+                        fontSize: 10.5, fontWeight: 600, color: '#fff', background: 'var(--accent)', borderRadius: 999,
                         padding: '4px 10px', textDecoration: 'none', display: 'inline-block', whiteSpace: 'nowrap',
                       }}
                     >
@@ -287,7 +318,7 @@ function ShopThisRoom({ items }) {
               </div>
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 14, fontSize: 14, fontWeight: 700, color: '#2b2620' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 14, fontSize: 14, fontWeight: 700, color: 'var(--ink)' }}>
             <span>Estimated total</span>
             <span>${total.toLocaleString()}</span>
           </div>
@@ -297,9 +328,15 @@ function ShopThisRoom({ items }) {
   )
 }
 
+// Headings otherwise inherit pageStyle's sans body font unless overridden — every other page in
+// the app uses the serif (Fraunces) for headings and sans only for body text, so h1/h2 need this
+// explicit override to match rather than silently rendering in the wrong typeface. Module-level
+// since both LayoutDetailPage and ShopThisRoom (a separate component below) need it.
+const headingStyle = { fontFamily: 'var(--font-serif)', fontWeight: 650 }
+
 function btnStyle(active) {
   return {
     border: 'none', borderRadius: 999, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-    background: active ? '#b2542f' : '#eee6d8', color: active ? '#fff' : '#5c5548',
+    background: active ? 'var(--accent)' : 'var(--paper-shadow)', color: active ? '#fff' : 'var(--ink-soft)',
   }
 }

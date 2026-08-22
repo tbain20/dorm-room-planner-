@@ -4,6 +4,7 @@ import { RoomEngine } from './roomEngine.js'
 import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
+import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, copyLayout, getMyProfile,
@@ -12,8 +13,9 @@ import {
   saveLayoutBookmark, unsaveLayoutBookmark, listMySavedLayoutIds, listSavedLayouts, getPublicLayoutById,
   followUser, unfollowUser, listMyFollowingIds, getPublicProfile, updateMyProfile,
   SUGGESTED_TAGS, submitReport,
-  listMyBoardsWithLayouts, createBoard, renameBoard, deleteBoard, addLayoutToBoard, removeLayoutFromBoard,
+  listMyBoardsWithLayouts, createBoard, renameBoard, deleteBoard, setBoardPublic, addLayoutToBoard, removeLayoutFromBoard,
   getLeaderboard, computeBadges,
+  leaveLayoutCollaboration, removeCollaborator, saveSharedLayout, listSharedWithMe, getLayoutForEditing,
 } from './storage.js'
 
 const REPORT_REASONS = ['Spam', 'Inappropriate', 'Other']
@@ -89,7 +91,7 @@ function LayoutThumb({ url }) {
   }
   return (
     <div className="layout-thumb layout-thumb-fallback">
-      <span>🏠</span>
+      <RoomFallbackIcon size={26} />
     </div>
   )
 }
@@ -242,6 +244,14 @@ export default function App() {
   const [featureSelection, setFeatureSelection] = useState(null)
   const [relatedNotice, setRelatedNotice] = useState('')
   const [showDimensions, setShowDimensions] = useState(false)
+  // Collapses the selection panel's body down to just its header (name + meta), leaving the rest
+  // of the 3D view visible — matters most on mobile, where the panel becomes a bottom sheet (see
+  // #selection-panel's mobile rule in index.css) that would otherwise cover a big chunk of the
+  // already-short 52vh canvas with no way to peek past it. Same collapse affordance as the Room
+  // Planner card (roomPlannerCollapsed above), shown on both panel variants (item selection and
+  // door/window selection) and at every width, not just mobile. Reset to expanded on every new
+  // selection so picking a different item doesn't stay collapsed from whatever you had before.
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
   // uid of the item currently waiting for a "click another item to place it on top of" pick, or
   // null — mirrors the engine's own stackPickSourceUid (see roomEngine.js), reported back via the
   // onStackPickModeChange callback so the selection panel can show the right button/hint.
@@ -278,6 +288,18 @@ export default function App() {
   const [newBoardDraft, setNewBoardDraft] = useState('')
   const [renamingBoardId, setRenamingBoardId] = useState(null)
   const [renameDraft, setRenameDraft] = useState('')
+  // Roommate collaboration (the simple version — see storage.js's saveSharedLayout/
+  // getLayoutForEditing). sharedLayout is set whenever the room currently loaded in the editor
+  // came from a shared layout (either you're the owner viewing your own shared layout, or a
+  // collaborator who joined via an invite link) — { id, isOwner, collaborators } — null for an
+  // ordinary from-scratch or personally-saved room, which is the normal case and keeps the
+  // existing name-based Save flow completely untouched. Cleared whenever a different (or no)
+  // layout gets loaded, same lifecycle as showDimensions/panelCollapsed reset on `selection`.
+  const [sharedLayout, setSharedLayout] = useState(null)
+  const [sharedLayoutError, setSharedLayoutError] = useState('')
+  const [sharedLayoutNotice, setSharedLayoutNotice] = useState('')
+  const [sharedWithMe, setSharedWithMe] = useState([])
+  const [sharedWithMeError, setSharedWithMeError] = useState('')
   // { name } of the layout currently prompting for optional hall/room type before publishing —
   // null when the prompt isn't open. Only shown on the private→public transition (see A4).
   const [publishPrompt, setPublishPrompt] = useState(null)
@@ -336,12 +358,24 @@ export default function App() {
   //                   or the Leaderboard link that used to live inside the old Browse tab — jump
   //                   straight to the given tab (usually 'saved', to show the sign-in form).
   //   viewProfileId — a gallery card's creator byline on BrowsePage — open that profile.
+  //   sharedLayoutId — JoinLayoutPage.jsx, right after joining a shared layout — marks the just-
+  //                   loaded layout (already fetched via getLayoutForEditing, attached as
+  //                   loadLayout above, so isOwner/collaborators ride along with it) as the one
+  //                   "Save shared changes" should target instead of the normal name-based save.
   // Clears the state immediately after consuming it (replace, no new history entry) so navigating
   // back to this tab later doesn't repeat the same hand-off again.
   useEffect(() => {
     const state = location.state
-    if (!state || (!state.loadLayout && !state.openTab && !state.viewProfileId)) return
+    if (!state || (!state.loadLayout && !state.openTab && !state.viewProfileId && !state.sharedLayoutId)) return
     if (state.loadLayout) handleLoad(state.loadLayout)
+    if (state.sharedLayoutId) {
+      setSharedLayout({
+        id: state.sharedLayoutId,
+        isOwner: !!state.loadLayout?.isOwner,
+        collaborators: state.loadLayout?.collaborators || [],
+      })
+      setSharedLayoutNotice("You're editing a shared layout — changes you save here are visible to everyone on it.")
+    }
     if (state.viewProfileId) handleViewProfile(state.viewProfileId)
     else if (state.openTab) setTab(state.openTab)
     navigate(location.pathname, { replace: true, state: {} })
@@ -351,13 +385,22 @@ export default function App() {
   useEffect(() => {
     setRelatedNotice('')
     setShowDimensions(false)
+    setPanelCollapsed(false)
   }, [selection])
+
+  useEffect(() => {
+    setPanelCollapsed(false)
+  }, [featureSelection])
 
   useEffect(() => {
     if (tab !== 'saved' || !session || savedSubView !== 'mine') return
     listLayouts()
       .then(setSavedLayouts)
       .catch((err) => setLayoutsError(err.message))
+    setSharedWithMeError('')
+    listSharedWithMe()
+      .then(setSharedWithMe)
+      .catch((err) => setSharedWithMeError(err.message))
   }, [tab, session, savedSubView])
 
   useEffect(() => {
@@ -637,6 +680,13 @@ export default function App() {
   }
 
   function handleLoad(data) {
+    // Loading anything clears "this is the shared layout" tracking by default — the join-invite
+    // flow's own effect re-sets it right after calling this, in the same tick, so that specific
+    // case still ends up correct; every other caller of handleLoad (My Layouts, Browse, a "Based
+    // on X" link, Colgate furniture, etc.) genuinely isn't loading the shared layout anymore.
+    setSharedLayout(null)
+    setSharedLayoutNotice('')
+    setSharedLayoutError('')
     engineRef.current.loadState(data)
     setRoom(data.room)
     setTab('cart')
@@ -941,6 +991,105 @@ export default function App() {
     }
   }
 
+  async function handleToggleBoardPublic(board) {
+    setBoardsError('')
+    try {
+      await setBoardPublic(board.id, !board.isPublic)
+      setMyBoards((prev) => prev.map((b) => (b.id === board.id ? { ...b, isPublic: !b.isPublic } : b)))
+    } catch (err) {
+      setBoardsError(err.message)
+    }
+  }
+
+  // /boards/:id is the shareable route BoardDetailPage.jsx serves — same clipboard-first, notice-
+  // as-fallback approach handleCopyLink already uses for a layout's /layouts/:id link.
+  async function handleCopyBoardLink(boardId) {
+    const url = `${window.location.origin}/boards/${boardId}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareNotice('Link copied!')
+    } catch {
+      setShareNotice(url)
+    }
+    setTimeout(() => setShareNotice(''), 3000)
+  }
+
+  // /layouts/:id/join is what JoinLayoutPage.jsx serves — this just builds that URL and puts it
+  // on the clipboard, same fallback-to-showing-the-raw-URL approach as the other two copy-link
+  // handlers. Available on any saved layout regardless of its public/private status — inviting a
+  // roommate is a completely separate thing from publishing to Browse.
+  async function handleCopyInviteLink(layoutId) {
+    const url = `${window.location.origin}/layouts/${layoutId}/join`
+    try {
+      await navigator.clipboard.writeText(url)
+      setShareNotice('Invite link copied! Send it to your roommate.')
+    } catch {
+      setShareNotice(url)
+    }
+    setTimeout(() => setShareNotice(''), 4000)
+  }
+
+  // Saves the currently-loaded shared layout back to its one shared row (see storage.js's
+  // saveSharedLayout) — a completely separate action from the name-based Save in the My Layouts
+  // list, since a collaborator has no (user_id, name) row of their own to upsert into.
+  // Re-fetches fresh (rather than trusting the possibly-stale row already in the "Shared with
+  // me" list) so the collaborator roster is accurate the moment you open it, same reasoning
+  // handleViewLayoutById gives for re-fetching a "Based on X" parent instead of trusting cached
+  // fields.
+  async function handleOpenShared(layoutId) {
+    setSharedLayoutError('')
+    try {
+      const layout = await getLayoutForEditing(layoutId)
+      if (!layout) {
+        setSharedLayoutError("Couldn't open that layout — it may have been deleted, or you may no longer have access.")
+        return
+      }
+      handleLoad(layout)
+      setSharedLayout({ id: layout.id, isOwner: layout.isOwner, collaborators: layout.collaborators })
+      setSharedLayoutNotice("You're editing a shared layout — changes you save here are visible to everyone on it.")
+    } catch (err) {
+      setSharedLayoutError(err.message)
+    }
+  }
+
+  async function handleSaveShared() {
+    if (!sharedLayout) return
+    setSharedLayoutError('')
+    setSharedLayoutNotice('')
+    try {
+      const state = engineRef.current.getState()
+      const thumbnailDataUrl = engineRef.current.captureSnapshot()
+      await saveSharedLayout(sharedLayout.id, { ...state, thumbnailDataUrl })
+      setSharedLayoutNotice('Saved — everyone on this layout will see your changes.')
+    } catch (err) {
+      setSharedLayoutError(err.message)
+    }
+  }
+
+  async function handleLeaveShared() {
+    if (!sharedLayout) return
+    setSharedLayoutError('')
+    try {
+      await leaveLayoutCollaboration(sharedLayout.id)
+      setSharedLayout(null)
+      setSharedLayoutNotice('')
+      setSharedWithMe((prev) => prev.filter((l) => l.id !== sharedLayout.id))
+    } catch (err) {
+      setSharedLayoutError(err.message)
+    }
+  }
+
+  async function handleRemoveCollaborator(userId) {
+    if (!sharedLayout) return
+    setSharedLayoutError('')
+    try {
+      await removeCollaborator(sharedLayout.id, userId)
+      setSharedLayout((prev) => (prev ? { ...prev, collaborators: prev.collaborators.filter((c) => c.userId !== userId) } : prev))
+    } catch (err) {
+      setSharedLayoutError(err.message)
+    }
+  }
+
   return (
     <div id="app">
       <div id="canvas-wrap" ref={canvasWrapRef}>
@@ -1070,7 +1219,21 @@ export default function App() {
 
         {selection && (
           <div id="selection-panel" className="visible">
-            <h3>{selection.cat.name}</h3>
+            <div className="sheet-handle" />
+            <div className="selection-panel-header">
+              <h3>{selection.cat.name}</h3>
+              <button
+                onClick={() => setPanelCollapsed((v) => !v)}
+                title={panelCollapsed ? 'Expand' : 'Collapse'}
+                aria-label={panelCollapsed ? 'Expand selection panel' : 'Collapse selection panel'}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)',
+                  fontSize: 13, padding: 4, lineHeight: 1, flexShrink: 0, width: 'auto',
+                }}
+              >
+                {panelCollapsed ? '▸' : '▾'}
+              </button>
+            </div>
             <div className="meta">
               {selection.cat.dims[0]}' x {selection.cat.dims[1]}' x {selection.cat.dims[2]}'
               {selection.cat.isProvided ? (
@@ -1079,6 +1242,8 @@ export default function App() {
                 <> · ${selection.cat.price}</>
               )}
             </div>
+            {!panelCollapsed && (
+            <>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
                 style={{ background: 'var(--ink)', color: 'var(--paper)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
@@ -1190,17 +1355,35 @@ export default function App() {
                 {relatedNotice && <div style={{ fontSize: 10.5, color: 'var(--sage)', marginTop: 4 }}>{relatedNotice}</div>}
               </div>
             )}
+            </>
+            )}
           </div>
         )}
 
         {featureSelection && (
           <div id="selection-panel" className="visible">
-            <h3>{featureSelection.type === 'door' ? 'Door' : 'Window'}</h3>
+            <div className="sheet-handle" />
+            <div className="selection-panel-header">
+              <h3>{featureSelection.type === 'door' ? 'Door' : 'Window'}</h3>
+              <button
+                onClick={() => setPanelCollapsed((v) => !v)}
+                title={panelCollapsed ? 'Expand' : 'Collapse'}
+                aria-label={panelCollapsed ? 'Expand selection panel' : 'Collapse selection panel'}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)',
+                  fontSize: 13, padding: 4, lineHeight: 1, flexShrink: 0, width: 'auto',
+                }}
+              >
+                {panelCollapsed ? '▸' : '▾'}
+              </button>
+            </div>
             <div className="meta">
               {featureSelection.width.toFixed(1)}' x {featureSelection.height.toFixed(1)}'
               {featureSelection.type === 'door' && ' · Standard size'}
             </div>
 
+            {!panelCollapsed && (
+            <>
             <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
               Wall
             </div>
@@ -1244,6 +1427,8 @@ export default function App() {
             )}
 
             <button onClick={handleRemoveFeature}>Remove {featureSelection.type}</button>
+            </>
+            )}
           </div>
         )}
       </div>
@@ -1310,7 +1495,7 @@ export default function App() {
                                 </div>
                               </div>
                               <div className="cat-price">${cat.price}</div>
-                              <button className="add-btn">+</button>
+                              <button className="add-btn" title="Add">+</button>
                             </div>
                           )
                         )}
@@ -1324,6 +1509,51 @@ export default function App() {
 
         {tab === 'cart' && (
           <div id="cart-panel" style={{ display: 'flex' }}>
+            {sharedLayout && (
+              <div style={{ background: 'var(--sage-soft)', border: '1px solid var(--sage)', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+                  <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 12.5, color: 'var(--ink)' }}>
+                    👥 Shared {sharedLayout.isOwner ? '· you own this one' : ''}
+                  </div>
+                  <button
+                    onClick={handleSaveShared}
+                    style={{ background: 'var(--sage)', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Save shared changes
+                  </button>
+                </div>
+                {sharedLayout.collaborators.length > 0 && (
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: sharedLayout.isOwner ? 6 : 0 }}>
+                    Editable by: {sharedLayout.collaborators.map((c) => c.displayName).join(', ')}
+                    {sharedLayout.isOwner && ' · you'}
+                  </div>
+                )}
+                {sharedLayout.isOwner && sharedLayout.collaborators.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                    {sharedLayout.collaborators.map((c) => (
+                      <button
+                        key={c.userId}
+                        onClick={() => handleRemoveCollaborator(c.userId)}
+                        title={`Remove ${c.displayName}`}
+                        style={{ background: 'var(--paper)', color: 'var(--ink-soft)', border: 'none', borderRadius: 999, padding: '3px 8px', fontSize: 9.5, fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        {c.displayName} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!sharedLayout.isOwner && (
+                  <button
+                    onClick={handleLeaveShared}
+                    style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', padding: 0, marginTop: 4 }}
+                  >
+                    Leave this shared layout
+                  </button>
+                )}
+                {sharedLayoutNotice && <div style={{ fontSize: 10.5, color: 'var(--sage)', fontWeight: 600, marginTop: 6 }}>{sharedLayoutNotice}</div>}
+                {sharedLayoutError && <div style={{ fontSize: 10.5, color: 'var(--danger)', marginTop: 6 }}>{sharedLayoutError}</div>}
+              </div>
+            )}
             {cart.length === 0 ? (
               <div className="empty-note">Nothing placed yet. Add items from the Catalog tab and drag them into position in your room.</div>
             ) : (
@@ -1340,6 +1570,7 @@ export default function App() {
                   )}
                   <button
                     className="remove-btn"
+                    title="Remove"
                     onClick={(e) => {
                       e.stopPropagation()
                       engineRef.current.removeItem(it.uid)
@@ -1547,10 +1778,45 @@ export default function App() {
                               🔗
                             </button>
                           )}
+                          <button
+                            className="add-btn"
+                            style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', fontSize: 11 }}
+                            title="Invite a roommate to edit this layout with you"
+                            onClick={(e) => { e.stopPropagation(); handleCopyInviteLink(data.id) }}
+                          >
+                            👥
+                          </button>
                           <button className="add-btn" style={{ background: 'var(--ink)' }} title="Load into room" onClick={(e) => { e.stopPropagation(); handleLoad(data) }}>↺</button>
-                          <button className="remove-btn" onClick={(e) => { e.stopPropagation(); handleDelete(data.name) }}>×</button>
+                          <button className="remove-btn" title="Delete" onClick={(e) => { e.stopPropagation(); handleDelete(data.name) }}>×</button>
                         </div>
                       ))
+                    )}
+
+                    {sharedWithMeError && <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 14 }}>{sharedWithMeError}</div>}
+                    {sharedLayoutError && <div style={{ color: 'var(--danger)', fontSize: 11, marginTop: 14 }}>{sharedLayoutError}</div>}
+                    {sharedWithMe.length > 0 && (
+                      <>
+                        <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginTop: 18, marginBottom: 6 }}>
+                          👥 Shared with me
+                        </div>
+                        {sharedWithMe.map((data) => (
+                          <div
+                            key={data.id}
+                            className="cart-row"
+                            style={{ alignItems: 'flex-start' }}
+                            onClick={() => handleOpenShared(data.id)}
+                            title="Click to load this shared layout into your room"
+                          >
+                            <LayoutThumb url={data.thumbnailUrl} />
+                            <div className="name">
+                              {data.name}
+                              <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
+                                {data.items.length} item{data.items.length === 1 ? '' : 's'} · {data.room.w}'×{data.room.l}' · shared by {data.ownerName}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </>
                 ) : (
@@ -1591,6 +1857,27 @@ export default function App() {
                               <span className="board-folder-name">📁 {board.name}</span>
                             )}
                             <span className="board-folder-count">{board.layouts.length}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleToggleBoardPublic(board) }}
+                              title={board.isPublic ? 'Public — anyone with the link can view. Click to make private.' : 'Private — only you can see this. Click to publish a shareable page.'}
+                              style={{
+                                border: 'none', borderRadius: 999, padding: '3px 8px', fontSize: 9, fontWeight: 600,
+                                letterSpacing: '0.03em', cursor: 'pointer', flexShrink: 0,
+                                background: board.isPublic ? 'var(--sage-soft)' : 'var(--paper-shadow)',
+                                color: board.isPublic ? 'var(--sage)' : 'var(--ink-soft)',
+                              }}
+                            >
+                              {board.isPublic ? 'PUBLIC' : 'PRIVATE'}
+                            </button>
+                            {board.isPublic && (
+                              <button
+                                className="board-folder-icon-btn"
+                                title="Copy shareable link"
+                                onClick={(e) => { e.stopPropagation(); handleCopyBoardLink(board.id) }}
+                              >
+                                🔗
+                              </button>
+                            )}
                             <button
                               className="board-folder-icon-btn"
                               title="Rename board"
@@ -1753,9 +2040,9 @@ export default function App() {
                   <span><strong style={{ color: 'var(--ink)' }}>{profileData.followingCount}</strong> following</span>
                   <span><strong style={{ color: 'var(--ink)' }}>{profileData.layouts.length}</strong> public layout{profileData.layouts.length === 1 ? '' : 's'}</span>
                 </div>
-                {computeBadges(profileData.layouts).length > 0 && (
+                {computeBadges(profileData.layouts, { isDesigner: profileData.isDesigner, createdAt: profileData.createdAt }).length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-                    {computeBadges(profileData.layouts).map((b) => (
+                    {computeBadges(profileData.layouts, { isDesigner: profileData.isDesigner, createdAt: profileData.createdAt }).map((b) => (
                       <span
                         key={b.label}
                         title={b.label}
@@ -1768,7 +2055,11 @@ export default function App() {
                 )}
                 {profileError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{profileError}</div>}
                 {profileData.layouts.length === 0 ? (
-                  <div className="empty-note">No public layouts yet.</div>
+                  <div className="empty-note">
+                    {viewingProfileId === session?.user.id
+                      ? 'No public layouts yet — publish one from the Saved tab to show it here.'
+                      : 'No public layouts yet.'}
+                  </div>
                 ) : (
                   profileData.layouts.map((layout) => (
                     <div
@@ -1816,7 +2107,7 @@ export default function App() {
                   🏆 Top designers
                 </div>
                 {leaderboard.topDesigners.length === 0 ? (
-                  <div className="empty-note">No public layouts yet.</div>
+                  <div className="empty-note">No public layouts yet — publish one to be the first on the board.</div>
                 ) : (
                   leaderboard.topDesigners.map((d, i) => (
                     <div key={d.userId} className="cart-row" onClick={() => handleViewProfile(d.userId)} title="View profile">
@@ -1916,7 +2207,7 @@ export default function App() {
                                         />
                                         <span className={`checklist-label ${item.checked ? 'checked' : ''}`}>{item.label}</span>
                                       </label>
-                                      <button className="remove-btn" onClick={() => handleDeleteChecklistItem(item.id)}>×</button>
+                                      <button className="remove-btn" title="Delete" onClick={() => handleDeleteChecklistItem(item.id)}>×</button>
                                     </div>
                                   ))}
                                 </div>
@@ -1929,7 +2220,7 @@ export default function App() {
                                 onChange={(e) => setChecklistDrafts((prev) => ({ ...prev, [category]: e.target.value }))}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddChecklistItem(category)}
                               />
-                              <button onClick={() => handleAddChecklistItem(category)}>+</button>
+                              <button title="Add" onClick={() => handleAddChecklistItem(category)}>+</button>
                             </div>
                           </>
                         )}

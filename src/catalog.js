@@ -239,8 +239,12 @@ export const CATALOG = [
   // colgateChest.glb (like the rest of Tyler's Colgate models) came out of Blender as flat gray
   // with no material color — see the note above PROVIDED_CATALOG.
   { id: 'stackable-chest', name: 'Stackable Chest', price: 79, retailer: 'IKEA', dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateChest.glb', tintMaterial: true, relatedIds: ['dresser'] },
-  { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
+  { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'closet-organizer', 'chk:hangers', 'chk:vacuum-storage-bags'] },
   { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'chk:command-hooks'] },
+  // Closet Organizer — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
+  // remaining-longtail-picks.md) — single entry, same "no productUrl yet" convention as every
+  // other unlinked item until Tyler grabs a real listing.
+  { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [1.5, 0.3, 4.0], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
   { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb', relatedIds: ['wardrobe'] },
   // Laundry Hamper — ✅ fully researched, though the doc didn't list prices for any of the three
   // picks — the prices below are market estimates, not sourced (see the note at the top of this
@@ -248,7 +252,7 @@ export const CATALOG = [
   { id: 'hamper-budget', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'budget', name: 'Handy Laundry Collapsible Mesh Pop-Up Hamper (2-Pack)', price: 16, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07CGXZFW6', dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
   { id: 'hamper', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'moderate', name: 'Target Brightroom Rolling Hamper', price: 32, retailer: 'Target', productUrl: 'https://www.target.com/p/br-rolling-hamper-white-brightroom/-/A-93226286', dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
   { id: 'hamper-premium', groupId: 'hamper', groupLabel: 'Laundry Hamper', tier: 'premium', name: 'Bukere Backpack-Style Laundry Hamper', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B09ZP93SDM', dims: [1.5, 1.5, 2.2], color: 0x4d6373, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/trashcan.glb', relatedIds: ['drying-rack', 'chk:detergent', 'chk:dryer-sheets'] },
-  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', relatedIds: ['chair', 'lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
+  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', relatedIds: ['chair', 'lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },
   { id: 'desk-corner', name: 'Corner Desk', price: 149, retailer: 'IKEA', dims: [4.5, 4.5, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/deskCorner.glb', relatedIds: ['chair', 'lamp', 'shelf'] },
   { id: 'chair', name: 'Desk Chair', price: 79, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0x3a3a3a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairDesk.glb', relatedIds: ['desk'] },
   { id: 'chair-cushion', name: 'Cushioned Desk Chair', price: 89, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairCushion.glb', relatedIds: ['desk'] },
@@ -256,6 +260,18 @@ export const CATALOG = [
   { id: 'shelf', name: 'Bookshelf', price: 59, retailer: 'IKEA', dims: [2.5, 1.0, 4.0], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseOpen.glb', relatedIds: ['desk', 'chk:books'] },
   { id: 'shelf-closed', name: 'Closed Bookshelf', price: 79, retailer: 'IKEA', dims: [2.5, 1.2, 4.0], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseClosed.glb', relatedIds: ['desk'] },
   { id: 'shelf-wide', name: 'Wide Bookshelf', price: 99, retailer: 'IKEA', dims: [3.5, 1.2, 3.6], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseClosedWide.glb', relatedIds: ['desk'] },
+  // Desk Organizer/Monitor Stand/Cable Management Box/Desk Hutch — long-tail commodity pass (see
+  // remaining-longtail-picks.md). Desk Organizer and Monitor Stand replace what used to be
+  // checklist-only stubs (desk/colgate-desk's relatedIds pointed at 'chk:desk-organizer') now
+  // that the doc named real, well-reviewed products worth actually placing on the desk — same
+  // "graduate it to a real catalog entry" treatment earlier sessions gave other items. Cable
+  // Management Box and Desk Hutch are the two extra product ideas flagged at the bottom of that
+  // doc, not part of the original master list, added here since both are well-reviewed dorm-
+  // specific products with a genuine physical footprint worth placing.
+  { id: 'desk-organizer', name: 'Poppin All-In-One Desktop Organizer', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.2, 0.7, 0.6], color: 0x6f8a9c, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'chk:pencil-holder'] },
+  { id: 'monitor-stand', name: 'Wood Desk Riser w/ Storage Shelf', price: 30, retailer: 'Amazon', productUrl: null, dims: [2.0, 1.0, 0.5], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'desk-lamp'] },
+  { id: 'cable-management-box', name: 'Bamboo Cable Management Box', price: 25, retailer: 'Amazon', productUrl: null, dims: [1.3, 0.6, 0.5], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'desk-hutch'] },
+  { id: 'desk-hutch', name: 'Smart Charging Desk Hutch', price: 89, retailer: 'Amazon', productUrl: null, dims: [2.5, 0.8, 1.8], color: 0xe8e0cf, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'cable-management-box'] },
   { id: 'rolling-cart', name: 'Rolling Storage Cart', price: 39, retailer: 'Amazon', dims: [1.3, 1.3, 2.8], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'General Storage', relatedIds: ['chk:fabric-bins'] },
   { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Target', dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb', relatedIds: ['throw-pillow', 'rug'] },
   { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
@@ -269,7 +285,7 @@ export const CATALOG = [
   // that isn't at the desk."
   { id: 'accent-chair', name: 'Accent Chair', price: 149, retailer: 'IKEA', dims: [2.6, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeChair.glb', relatedIds: ['lamp', 'rug', 'throw-pillow'] },
   { id: 'loveseat', name: 'Loveseat', price: 299, retailer: 'Amazon', dims: [4.3, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
-  { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Best Buy', dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', relatedIds: ['chk:streaming-device', 'chk:gaming-console', 'chk:bluetooth-speaker'] },
+  { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Best Buy', dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', relatedIds: ['chk:streaming-device', 'chk:gaming-console', 'bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.
@@ -304,6 +320,10 @@ export const CATALOG = [
 
   // ---- Entertainment ----
   { id: 'instrument', name: 'Musical Instrument', price: 199, retailer: 'Amazon', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['shelf'] },
+  // Bluetooth Speaker — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
+  // remaining-longtail-picks.md) — replaces what used to be a checklist-only stub referenced from
+  // the TV's relatedIds ('chk:bluetooth-speaker'), now a real placeable entry.
+  { id: 'bluetooth-speaker', name: 'Anker Soundcore Bluetooth Speaker', price: 40, retailer: 'Amazon', productUrl: null, dims: [0.6, 0.6, 0.9], color: 0x1b1b1b, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['tv', 'desk'] },
 
   // ---- Decor ----
   // Area Rug — ✅ fully researched (rectangular 5x3 only — rug-round/rug-square below are shape
@@ -320,6 +340,10 @@ export const CATALOG = [
   { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
   { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
   { id: 'tapestry', name: 'Tapestry', price: 22, retailer: 'Amazon', dims: [4.5, 0.05, 5.5], color: 0x7a3f6b, category: 'Decor', subcategory: 'Wall', relatedIds: ['flag', 'chk:string-lights'] },
+  // Curtains — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
+  // remaining-longtail-picks.md). No dedicated "Window" subcategory exists for one item — filed
+  // under Wall alongside the other window/wall dressing items (tapestry, flag) it's closest to.
+  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['tapestry', 'chk:string-lights'] },
   { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster'] },
   { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['mirror'] },
 
@@ -395,7 +419,7 @@ export const PROVIDED_CATALOG = [
     ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'],
   },
-  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, relatedIds: ['lamp', 'shelf', 'chk:desk-organizer', 'chk:pencil-holder'] },
+  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, relatedIds: ['lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },
   { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateChair.glb', tintMaterial: true, relatedIds: ['colgate-desk'] },
   { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateWardrobe.glb', tintMaterial: true, relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
 ]

@@ -74,7 +74,7 @@ export default function SaveToBoardMenu({ boards, memberBoardIds, onToggle, onCr
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           />
-          <button onClick={handleCreate} disabled={busy || !draft.trim()}>+</button>
+          <button title="Create" onClick={handleCreate} disabled={busy || !draft.trim()}>+</button>
         </div>
         {error && <div className="board-popover-error">{error}</div>}
       </div>

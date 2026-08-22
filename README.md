@@ -177,7 +177,21 @@ have been added since you last ran one — all additive and safe to re-run:
     popover on `/browse` both need this; without it, saving from `/browse` will error and the
     Saved tab's boards section will just show empty. Doesn't touch `layout_saves` at all, so the
     plain heart/bookmark save-state you already have keeps working exactly as before either way.
-11. That's it — still no new env vars needed for any of these, including the OG preview
+11. New query → paste in
+    [`supabase/migrations/012_public_boards.sql`](supabase/migrations/012_public_boards.sql), run
+    it. Adds `boards.is_public` plus the RLS to actually let someone other than the owner read a
+    public board and its layouts — needed for the PUBLIC/PRIVATE toggle on each board folder in
+    the Saved tab and for `/boards/:id` (BoardDetailPage.jsx) to work at all. Run 011 first if you
+    haven't — this one assumes the `boards` table already exists.
+12. New query → paste in
+    [`supabase/migrations/013_roommate_collaboration.sql`](supabase/migrations/013_roommate_collaboration.sql),
+    run it. Adds `layout_collaborators` and extends `layouts`' own SELECT/UPDATE RLS so an invited
+    roommate can actually open and save a layout they don't own — needed for the 👥 invite icon on
+    each My Layouts row, the "Shared with me" list, and `/layouts/:id/join`
+    (JoinLayoutPage.jsx) to work at all. Without it, inviting/joining will error and "Shared with
+    me" will just show empty — everything else (your own layouts, Browse, boards) is unaffected
+    either way.
+13. That's it — still no new env vars needed for any of these, including the OG preview
     serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
     in your Vercel project).
 
