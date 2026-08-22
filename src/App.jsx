@@ -96,7 +96,7 @@ function LayoutThumb({ url }) {
 // others" view) — same actions apply in both places: view, copy, like, bookmark, and a "Based on"
 // link if it's itself a remix. "My Layouts" gets its own row markup instead (publish toggle +
 // delete + remix count aren't relevant here, and copy/like/save aren't relevant there).
-function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onToggleLike, onToggleSave, onViewParent, onViewProfile, onReport, onShare }) {
+function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onToggleLike, onToggleSave, onViewParent, onViewProfile, onReport, onShare, onViewDetails }) {
   // Lightweight shoppability teaser — the full priced/linked list lives on the layout detail
   // page (see "Shop this room"); this is just a taste of it before clicking in. Only shown when
   // the layout has at least one purchasable item, so a room built entirely from Colgate-provided
@@ -114,8 +114,18 @@ function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onTog
           {layout.tags && layout.tags.length > 0 && ` · ${layout.tags.join(', ')}`}
         </span>
         {shopSummary.count > 0 && (
-          <span style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 1 }}>
-            🛒 {shopSummary.count} item{shopSummary.count === 1 ? '' : 's'} to shop · starting at ${shopSummary.total.toLocaleString()}
+          // Clicking the row itself loads the layout into the 3D editor (see onView below) —
+          // this is the other click target, straight to the priced/linked list on the layout's
+          // own page (LayoutDetailPage's "Shop this room"), since that's a separate destination
+          // from "put this in my room."
+          <span
+            style={{ display: 'block', fontSize: 10, color: 'var(--sage)', fontWeight: 600, marginTop: 1, textDecoration: 'underline', cursor: 'pointer' }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onViewDetails(layout.id)
+            }}
+          >
+            🛒 {shopSummary.count} item{shopSummary.count === 1 ? '' : 's'} to shop · starting at ${shopSummary.total.toLocaleString()} →
           </span>
         )}
         {layout.authorId && (
@@ -170,6 +180,17 @@ function PublicLayoutRow({ layout, liked, saved, signedIn, onView, onCopy, onTog
         {saved ? '🔖' : '☆'}
       </button>
       <button className="add-btn" style={{ background: 'var(--ink)' }} title="View in 3D" onClick={(e) => { e.stopPropagation(); onView() }}>↺</button>
+      <button
+        className="add-btn"
+        style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', fontSize: 12 }}
+        title="Shop this room — priced item list with buy links"
+        onClick={(e) => {
+          e.stopPropagation()
+          onViewDetails(layout.id)
+        }}
+      >
+        🛒
+      </button>
       <button
         className="add-btn"
         title={signedIn ? 'Copy to your layouts' : 'Sign in to copy'}
@@ -1490,6 +1511,7 @@ export default function App() {
                           onViewProfile={handleViewProfile}
                           onReport={handleOpenReport}
                           onShare={handleCopyLink}
+                          onViewDetails={(layoutId) => navigate(`/layouts/${layoutId}`)}
                         />
                       ))
                     )}
@@ -1612,6 +1634,7 @@ export default function App() {
                   onViewProfile={handleViewProfile}
                   onReport={handleOpenReport}
                   onShare={handleCopyLink}
+                  onViewDetails={(layoutId) => navigate(`/layouts/${layoutId}`)}
                 />
               ))
             )}
