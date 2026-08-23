@@ -1585,6 +1585,18 @@ export default function App() {
               ))}
             </div>
 
+            <button
+              style={{
+                background: featureSelection.locked ? '#5b6b73' : 'var(--paper-shadow)',
+                color: featureSelection.locked ? '#fff' : 'var(--ink-soft)',
+                width: '100%', border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer', marginBottom: 12,
+              }}
+              onClick={() => engineRef.current.toggleFeatureLock(featureSelection.id)}
+              title={featureSelection.locked ? "Unlock so it can be dragged again" : "Lock in place so a stray drag can't move it"}
+            >
+              {featureSelection.locked ? '🔒 Locked — click to unlock' : '🔓 Lock in place'}
+            </button>
+
             {featureSelection.type === 'window' && (
               <>
                 <div className="dim-row" style={{ marginBottom: 6 }}>

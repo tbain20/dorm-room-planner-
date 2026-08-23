@@ -1430,6 +1430,7 @@ export class RoomEngine {
         offset: f.offset,
         width: f.width,
         height: f.height,
+        locked: f.locked,
       })),
     }
   }
@@ -1510,7 +1511,13 @@ export class RoomEngine {
         }, it.y)
       })
     }
-    ;(data.features || []).forEach((f) => this.addFeatureAt(f.type, f.wall, f.offset, f.width, f.height))
+    ;(data.features || []).forEach((f) => {
+      const id = this.addFeatureAt(f.type, f.wall, f.offset, f.width, f.height)
+      if (f.locked) {
+        const feature = this.wallFeatures.find((wf) => wf.id === id)
+        if (feature) feature.locked = true
+      }
+    })
   }
 
   _resolveLoadedStacking(savedItems, uidsByIndex) {
@@ -1644,7 +1651,7 @@ export class RoomEngine {
 
   _addFeature(type, wall, offset, width, height) {
     const id = this.featureIdCounter++
-    const feature = { id, type, wall, offset, width, height }
+    const feature = { id, type, wall, offset, width, height, locked: false }
     feature.mesh = this._buildFeatureMesh(feature)
     this.featuresGroup.add(feature.mesh)
     this._repositionFeature(feature)
@@ -1680,7 +1687,27 @@ export class RoomEngine {
   // mutation (wall reassignment, resize), not just on initial selection, otherwise the panel's
   // wall picker / width / height inputs go stale even though the 3D mesh updates correctly.
   _emitFeatureSelection(feature) {
-    this.onFeatureSelectionChange({ id: feature.id, type: feature.type, wall: feature.wall, width: feature.width, height: feature.height })
+    this.onFeatureSelectionChange({
+      id: feature.id,
+      type: feature.type,
+      wall: feature.wall,
+      width: feature.width,
+      height: feature.height,
+      locked: feature.locked,
+    })
+  }
+
+  // Mirrors toggleItemLock — a locked door/window still selects on click but never picks up a
+  // drag (see the pointerdown handler's 'feature' branch in _initInteraction), and its wall/size
+  // controls stay usable since those are deliberate panel actions, not an accidental drag.
+  toggleFeatureLock(id) {
+    const feature = this.wallFeatures.find((f) => f.id === id)
+    if (!feature) return
+    feature.locked = !feature.locked
+    if (this.selectedFeature === feature) {
+      this._updateFeatureSelectionHelper()
+      this._emitFeatureSelection(feature)
+    }
   }
 
   setFeatureWall(id, wall) {
@@ -1734,7 +1761,7 @@ export class RoomEngine {
 
   _updateFeatureSelectionHelper() {
     if (this.featureSelectionHelper) this.featuresGroup.remove(this.featureSelectionHelper)
-    this.featureSelectionHelper = new THREE.BoxHelper(this.selectedFeature.mesh, 0xc1502e)
+    this.featureSelectionHelper = new THREE.BoxHelper(this.selectedFeature.mesh, this.selectedFeature.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
     this.featuresGroup.add(this.featureSelectionHelper)
   }
 
@@ -1869,10 +1896,17 @@ export class RoomEngine {
           this.dragOffset.set(item.mesh.position.x - floorPt.x, 0, item.mesh.position.z - floorPt.z)
         }
       } else if (feature) {
-        this.mode = 'drag-feature'
-        this.selectFeature(feature.id)
-        const floorPt = getFloorPoint()
-        this.dragOffset.x = feature.offset - offsetForFeature(feature, floorPt)
+        if (feature.locked) {
+          // Same reasoning as the locked-item branch above — select it (so the panel's Unlock
+          // control is reachable) but let the drag orbit the camera instead of sliding it.
+          this.mode = 'orbit'
+          this.selectFeature(feature.id)
+        } else {
+          this.mode = 'drag-feature'
+          this.selectFeature(feature.id)
+          const floorPt = getFloorPoint()
+          this.dragOffset.x = feature.offset - offsetForFeature(feature, floorPt)
+        }
       } else {
         this.mode = 'orbit'
         this.deselectItem()
