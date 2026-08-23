@@ -1052,19 +1052,31 @@ export class RoomEngine {
 
   // Collision detection — whole-item tinting (not per-triangle highlighting; true exact-geometry
   // intersection would need real CSG boolean ops for precision most users won't distinguish from
-  // this), but "whole-item" no longer means testing one bounding box per item end to end. A
-  // single box around, say, a desk covers its entire legroom as solid — a chair pushed in under
-  // it would always register as overlapping even with real clearance on every side. Testing each
-  // item's individual sub-meshes (a desk's top and each leg, separately, rather than one box
-  // spanning all of them) against each other fixes that: two items only count as touching if some
-  // actual piece of one is inside some actual piece of the other. Box-placeholder items (a single
-  // BoxGeometry, no decomposition) still get exactly one box either way, so simple items are
-  // unaffected. A cheap whole-object broad-phase check runs first so this per-submesh narrow phase
-  // only runs for pairs that are anywhere near each other at all — see the Your Room testing note
-  // on checking this stays smooth with 10+ items placed.
+  // this), but "whole-item" no longer means testing one bounding box per item end to end. Testing
+  // each item's individual sub-meshes against each other means two items only count as touching if
+  // some actual piece of one is inside some actual piece of the other. In practice this alone
+  // doesn't get a chair genuinely "under" a desk, or a bin genuinely "under" a bed: every model in
+  // public/models/ came out of Blender as one merged mesh per item (headboard+rails+legs, or
+  // desktop+legs, all one blob), so there's no separate "legs only" sub-mesh to test against —
+  // _collectLeafBoxes below still gets back one box spanning the item's full footprint and full
+  // height, same as no decomposition happened at all. Two targeted, data-driven exceptions cover
+  // the two real cases users hit:
+  //  - Beds (cat.bedHeights present): the mattress/slat's current height level *is* the real
+  //    clearance a real bed offers underneath it, and it's already tracked per placed item
+  //    (bedHeightLevel) — see the clearance crop in _collectLeafBoxes. An item shorter than that
+  //    clearance no longer touches the bed's box at all; a too-tall item still pokes into the
+  //    cropped box and still turns red, which is the actual "too big to fit" case.
+  //  - Desks (cat.hasLegroom) vs. chairs (cat.isChair): a chair tucked under a desk is a normal,
+  //    wanted layout, not a fit problem — its backrest is routinely taller than the desk itself,
+  //    so no height crop could ever make that pair stop registering as touching. These pairs are
+  //    exempted outright in _updateCollisions rather than modeled geometrically.
+  // A cheap whole-object broad-phase check still runs first so the per-submesh narrow phase only
+  // runs for pairs that are anywhere near each other at all — see the Your Room testing note on
+  // checking this stays smooth with 10+ items placed.
   _updateCollisions() {
     const items = this.placedItems
     const n = items.length
+    const cats = items.map((p) => ALL_ITEMS.find((c) => c.id === p.catalogId))
     const wholeBoxes = items.map((p) => new THREE.Box3().setFromObject(p.mesh))
     const colliding = new Array(n).fill(false)
     for (let i = 0; i < n; i++) {
@@ -1073,8 +1085,11 @@ export class RoomEngine {
         // design — Box3.intersectsBox() counts touching boundaries as intersecting, so without
         // this exclusion every legitimately stacked pair would permanently show as "doesn't fit."
         if (items[i].stackedOnUid === items[j].uid || items[j].stackedOnUid === items[i].uid) continue
+        // A desk chair slid in under a desk — see the note above on why height clearance can't
+        // model this pair, so it's exempted outright instead.
+        if ((cats[i]?.isChair && cats[j]?.hasLegroom) || (cats[j]?.isChair && cats[i]?.hasLegroom)) continue
         if (!wholeBoxes[i].intersectsBox(wholeBoxes[j])) continue
-        if (this._piecesTouch(items[i].mesh, items[j].mesh)) {
+        if (this._piecesTouch(items[i], items[j], cats[i], cats[j])) {
           colliding[i] = true
           colliding[j] = true
         }
@@ -1083,11 +1098,11 @@ export class RoomEngine {
     for (let i = 0; i < n; i++) this._setCollisionTint(items[i], colliding[i])
   }
 
-  // True if any actual mesh piece of `meshA` intersects any actual mesh piece of `meshB` — see
+  // True if any actual mesh piece of `itemA` intersects any actual mesh piece of `itemB` — see
   // _updateCollisions above for why this is per-submesh rather than one box per item.
-  _piecesTouch(meshA, meshB) {
-    const boxesA = this._collectLeafBoxes(meshA)
-    const boxesB = this._collectLeafBoxes(meshB)
+  _piecesTouch(itemA, itemB, catA, catB) {
+    const boxesA = this._collectLeafBoxes(itemA, catA)
+    const boxesB = this._collectLeafBoxes(itemB, catB)
     for (const a of boxesA) {
       for (const b of boxesB) {
         if (a.intersectsBox(b)) return true
@@ -1098,11 +1113,24 @@ export class RoomEngine {
 
   // One Box3 per actual mesh in the hierarchy (skips the black EdgesGeometry outline helper added
   // in _buildBoxMesh/_buildPosterMesh/etc. — it's a LineSegments, not a Mesh, so o.isMesh already
-  // excludes it with no special-casing needed).
-  _collectLeafBoxes(root) {
+  // excludes it with no special-casing needed). For a bed (cat.bedHeights present), each box's
+  // bottom is cropped up to the bed's current under-mattress clearance — see _updateCollisions —
+  // so a box that was entirely below that clearance disappears rather than staying a zero-height
+  // sliver right at the crop line (which would still register as "touching" the floor-level parts
+  // of whatever's placed underneath).
+  _collectLeafBoxes(item, cat) {
     const boxes = []
-    root.traverse((o) => {
-      if (o.isMesh && o.geometry) boxes.push(new THREE.Box3().setFromObject(o))
+    const clearance = cat?.bedHeights ? cat.bedHeights[item.bedHeightLevel || 'standard'] : 0
+    const clearanceY = item.mesh.position.y + clearance
+    item.mesh.traverse((o) => {
+      if (!o.isMesh || !o.geometry) return
+      const b = new THREE.Box3().setFromObject(o)
+      if (clearance > 0) {
+        if (b.min.y >= clearanceY) { boxes.push(b); return }
+        if (b.max.y <= clearanceY) return
+        b.min.y = clearanceY
+      }
+      boxes.push(b)
     })
     return boxes
   }

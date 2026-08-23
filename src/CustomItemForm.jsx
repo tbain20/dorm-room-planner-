@@ -1,6 +1,14 @@
 import { useState } from 'react'
 import { ALL_CATALOG_ITEMS, CATEGORY_ORDER, CATEGORY_ICONS } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
+import { feetToUnit, unitToFeet } from './units.js'
+
+// Only ft/cm here, not the room planner's full ft-in/ft/cm trio — there's no sensible typed-
+// decimal form of "5'6\"" for a plain number input, so ft-in isn't offered as a choice.
+const DIM_UNITS = [
+  { id: 'ft', label: 'ft' },
+  { id: 'cm', label: 'cm' },
+]
 
 // "Add a custom item" modal (Catalog tab, App.jsx) — lets a signed-in user add an item the
 // curated catalog doesn't have: their own name/product link/price/dims, paired with an existing
@@ -27,6 +35,8 @@ export default function CustomItemForm({ onCreate, onClose }) {
   const [width, setWidth] = useState('')
   const [depth, setDepth] = useState('')
   const [height, setHeight] = useState('')
+  const [dimUnit, setDimUnit] = useState('ft')
+  const [dimMenuOpen, setDimMenuOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -37,14 +47,42 @@ export default function CustomItemForm({ onCreate, onClose }) {
     setStandIn(cat)
   }
 
+  // Re-expresses whatever's already typed in feet/cm terms when the unit toggle changes, so
+  // switching units mid-entry rescales the numbers instead of silently reinterpreting them (24
+  // typed as cm shouldn't suddenly mean 24 feet just because the toggle moved).
+  function changeDimUnit(newUnit) {
+    if (newUnit === dimUnit) { setDimMenuOpen(false); return }
+    const convert = (value, setValue) => {
+      if (!value.trim()) return
+      const n = parseFloat(value)
+      if (!(n > 0)) return
+      const feet = unitToFeet(n, dimUnit)
+      const converted = feetToUnit(feet, newUnit)
+      setValue(String(newUnit === 'cm' ? Math.round(converted) : Math.round(converted * 10) / 10))
+    }
+    convert(width, setWidth)
+    convert(depth, setDepth)
+    convert(height, setHeight)
+    setDimUnit(newUnit)
+    setDimMenuOpen(false)
+  }
+
+  // The stand-in's own dims (always feet) shown in the unit the user currently has selected, so
+  // the placeholder stays an honest preview of what "left blank" will actually use.
+  function dimPlaceholder(axisIndex) {
+    const v = feetToUnit(standIn.dims[axisIndex], dimUnit)
+    return dimUnit === 'cm' ? String(Math.round(v)) : String(Math.round(v * 10) / 10)
+  }
+
   // Each dim is independently optional — parseDim returns null for a blank field (buildCustom-
-  // CatalogItem then falls back to the stand-in's own dims for that axis), a positive number for
-  // a filled one, or throws if what's typed isn't a valid positive number.
+  // CatalogItem then falls back to the stand-in's own dims for that axis), a positive number of
+  // feet for a filled one (converting from whatever dimUnit is currently selected — the catalog
+  // itself always stores dims in feet), or throws if what's typed isn't a valid positive number.
   function parseDim(value, label) {
     if (!value.trim()) return null
     const n = parseFloat(value)
     if (!(n > 0)) throw new Error(`${label} must be a positive number, or left blank to match the stand-in`)
-    return n
+    return unitToFeet(n, dimUnit)
   }
 
   async function handleSubmit(e) {
@@ -100,26 +138,57 @@ export default function CustomItemForm({ onCreate, onClose }) {
             <span>Price (optional)</span>
             <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" inputMode="decimal" disabled={busy} />
           </label>
+          <div className="custom-item-dims-header">
+            <span>Dimensions (optional)</span>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="unit-menu-trigger"
+                onClick={() => setDimMenuOpen((v) => !v)}
+                disabled={busy}
+              >
+                📏 {DIM_UNITS.find((u) => u.id === dimUnit)?.label} ▾
+              </button>
+              {dimMenuOpen && (
+                <>
+                  <div className="board-popover-backdrop" onClick={() => setDimMenuOpen(false)} />
+                  <div className="unit-menu" style={{ right: 0, left: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                    {DIM_UNITS.map((u) => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        className="unit-menu-option"
+                        style={dimUnit === u.id ? { background: 'var(--accent)', color: '#fff' } : undefined}
+                        onClick={() => changeDimUnit(u.id)}
+                      >
+                        {u.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
           <div className="custom-item-dims-row">
             <label className="custom-item-field">
-              <span>Width (ft, optional)</span>
+              <span>Width ({dimUnit})</span>
               <input
                 value={width} onChange={(e) => setWidth(e.target.value)} inputMode="decimal" disabled={busy}
-                placeholder={standIn ? String(standIn.dims[0]) : '—'}
+                placeholder={standIn ? dimPlaceholder(0) : '—'}
               />
             </label>
             <label className="custom-item-field">
-              <span>Depth (ft, optional)</span>
+              <span>Depth ({dimUnit})</span>
               <input
                 value={depth} onChange={(e) => setDepth(e.target.value)} inputMode="decimal" disabled={busy}
-                placeholder={standIn ? String(standIn.dims[1]) : '—'}
+                placeholder={standIn ? dimPlaceholder(1) : '—'}
               />
             </label>
             <label className="custom-item-field">
-              <span>Height (ft, optional)</span>
+              <span>Height ({dimUnit})</span>
               <input
                 value={height} onChange={(e) => setHeight(e.target.value)} inputMode="decimal" disabled={busy}
-                placeholder={standIn ? String(standIn.dims[2]) : '—'}
+                placeholder={standIn ? dimPlaceholder(2) : '—'}
               />
             </label>
           </div>

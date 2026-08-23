@@ -24,3 +24,17 @@ export function formatLength(feet, unit = DEFAULT_UNIT_SYSTEM) {
   const inches = totalInches - wholeFeet * 12
   return `${wholeFeet}'${inches}"`
 }
+
+// Plain decimal round-trip conversions for typed number inputs (CustomItemForm.jsx's Width/Depth/
+// Height fields) — distinct from formatLength above, which renders a read-only label. 'ft-in' has
+// no sensible typed-decimal form (you can't type "5'6\"" into a number input), so it's treated the
+// same as 'ft' here: both mean "the number you typed is decimal feet."
+export function feetToUnit(feet, unit) {
+  if (feet == null || Number.isNaN(feet)) return null
+  return unit === 'cm' ? feet * CM_PER_FOOT : feet
+}
+
+export function unitToFeet(value, unit) {
+  if (value == null || Number.isNaN(value)) return null
+  return unit === 'cm' ? value / CM_PER_FOOT : value
+}

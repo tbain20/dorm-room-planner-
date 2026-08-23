@@ -275,6 +275,8 @@ export default function App() {
     }
     engineRef.current?.setUnitSystem(unitSystem)
   }, [unitSystem])
+
+  const [unitMenuOpen, setUnitMenuOpen] = useState(false)
   // Catalog is the landing tab — Browse moved out to its own /browse route (see BrowsePage.jsx),
   // so it's no longer a tab value here at all.
   const [tab, setTab] = useState('catalog')
@@ -1262,28 +1264,32 @@ export default function App() {
                 )}
               </div>
 
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
-                  Units
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {UNIT_SYSTEMS.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => setUnitSystem(u.id)}
-                      style={{
-                        flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
-                        background: unitSystem === u.id ? 'var(--accent)' : 'var(--paper-shadow)',
-                        color: unitSystem === u.id ? '#fff' : 'var(--ink-soft)',
-                      }}
-                    >
-                      {u.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="sub" style={{ marginTop: 6, marginBottom: 0 }}>
-                  Applies to the 📏 overlay, the measuring tool, and this panel — room/catalog dimensions stay in feet either way.
-                </div>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)', position: 'relative' }}>
+                <button
+                  className="structure-btn"
+                  style={{ flex: 'none', padding: '7px 12px' }}
+                  onClick={() => setUnitMenuOpen((v) => !v)}
+                  title="Change the displayed unit of measurement"
+                >
+                  📏 Units: {UNIT_SYSTEMS.find((u) => u.id === unitSystem)?.label} ▾
+                </button>
+                {unitMenuOpen && (
+                  <>
+                    <div className="board-popover-backdrop" onClick={() => setUnitMenuOpen(false)} />
+                    <div className="unit-menu" onClick={(e) => e.stopPropagation()}>
+                      {UNIT_SYSTEMS.map((u) => (
+                        <button
+                          key={u.id}
+                          className="unit-menu-option"
+                          style={unitSystem === u.id ? { background: 'var(--accent)', color: '#fff' } : undefined}
+                          onClick={() => { setUnitSystem(u.id); setUnitMenuOpen(false) }}
+                        >
+                          {u.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
