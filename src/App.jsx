@@ -1379,7 +1379,7 @@ export default function App() {
         <div id="hint">
           {measureState.active
             ? 'Click two points to measure the distance between them · Click again to start over · Drag to orbit'
-            : 'Drag floor to orbit · Scroll to zoom · Drag an item to move it · Select + R to rotate'}
+            : 'Drag floor to orbit · Scroll to zoom · WASD/arrows or Shift+drag to pan · Drag an item to move it · Select + R to rotate'}
         </div>
 
         {selection && (
@@ -1433,6 +1433,17 @@ export default function App() {
                 📏 Dimensions
               </button>
             </div>
+            <button
+              style={{
+                background: selection.locked ? '#5b6b73' : 'var(--paper-shadow)',
+                color: selection.locked ? '#fff' : 'var(--ink-soft)',
+                width: '100%', border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer', marginBottom: 6,
+              }}
+              onClick={() => engineRef.current.toggleItemLock(selection.uid)}
+              title={selection.locked ? "Unlock so it can be dragged again" : "Lock in place so a stray drag can't move it"}
+            >
+              {selection.locked ? '🔒 Locked — click to unlock' : '🔓 Lock in place'}
+            </button>
             {showDimensions && (
               <div style={{ background: 'var(--paper-shadow)', borderRadius: 8, padding: 10, marginBottom: 6, fontSize: 11.5, color: 'var(--ink)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>

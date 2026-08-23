@@ -21,6 +21,11 @@ const WINDOW_MIN_HEIGHT = 2.0
 const WINDOW_MAX_HEIGHT = 5.0
 const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
 
+const SELECTION_COLOR = 0xc1502e // normal selection outline
+const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, distinct from both
+// the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
+// item reads as "locked" at a glance rather than looking like it's mid-collision.
+
 // RoomEngine owns the Three.js scene and all room/item state. It's deliberately independent of
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
@@ -68,6 +73,7 @@ export class RoomEngine {
 
     this._initScene()
     this._initInteraction()
+    this._initKeyboardPan()
     this.buildRoom()
     this._animate = this._animate.bind(this)
     this._raf = requestAnimationFrame(this._animate)
@@ -78,6 +84,9 @@ export class RoomEngine {
   destroy() {
     cancelAnimationFrame(this._raf)
     window.removeEventListener('resize', this._onResize)
+    window.removeEventListener('keydown', this._onKeyDown)
+    window.removeEventListener('keyup', this._onKeyUp)
+    window.removeEventListener('blur', this._onWindowBlur)
     this.renderer.dispose()
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement)
@@ -125,8 +134,13 @@ export class RoomEngine {
     this.renderer.setSize(w, h)
   }
 
-  _animate() {
+  _animate(now) {
     this._raf = requestAnimationFrame(this._animate)
+    // Capped at 100ms so a stalled/backgrounded tab resuming doesn't register as one giant pan
+    // jump — dt only matters here for _applyKeyboardPan's speed-per-second math.
+    const dt = this._lastFrameTime != null ? Math.min((now - this._lastFrameTime) / 1000, 0.1) : 0
+    this._lastFrameTime = now
+    if (this.panKeysHeld.size) this._applyKeyboardPan(dt)
     if (this.selectionHelper) this.selectionHelper.update()
     if (this.featureSelectionHelper) this.featureSelectionHelper.update()
     // Recomputed every frame (cheap — a handful of line points) rather than only on
@@ -146,6 +160,85 @@ export class RoomEngine {
     this.camera.position.y = target.y + radius * Math.cos(phi)
     this.camera.position.z = target.z + radius * Math.sin(phi) * Math.cos(theta)
     this.camera.lookAt(target)
+    // _panCamera (below) reads the camera's world-space right/up basis vectors right after a
+    // pointer move or key tick, before the next render() would otherwise refresh matrixWorld —
+    // without this it'd pan using last frame's orientation, one step behind a fast orbit+pan.
+    this.camera.updateMatrixWorld()
+  }
+
+  // Shifts the orbit target along the camera's own current screen-space right/up axes — true
+  // panning, not orbiting: the framing slides without changing viewing angle or zoom. Both the
+  // Shift+drag and WASD/arrow-key pan paths (_initInteraction, _applyKeyboardPan) funnel through
+  // here so they share one implementation and one set of target clamps. rightAmount/upAmount are
+  // world-space distances (already scaled by whatever's calling in — screen pixels for drag,
+  // world-units/sec for keys), positive = pan right / pan up on screen.
+  _panCamera(rightAmount, upAmount) {
+    if (!rightAmount && !upAmount) return
+    const right = new THREE.Vector3()
+    const up = new THREE.Vector3()
+    const forward = new THREE.Vector3()
+    this.camera.matrixWorld.extractBasis(right, up, forward)
+    const target = this.camState.target
+    target.addScaledVector(right, rightAmount)
+    target.addScaledVector(up, upAmount)
+    // Loose bounds (not a tight clamp to the room rectangle) — just enough that holding a pan
+    // key/drag too long can't strand the view somewhere with nothing visible to orbit back from.
+    const { w, l, h } = this.room
+    target.x = Math.max(-w, Math.min(w, target.x))
+    target.z = Math.max(-l, Math.min(l, target.z))
+    target.y = Math.max(-2, Math.min(h + 4, target.y))
+    this._updateCameraPosition()
+  }
+
+  // WASD/arrow-key panning — a keyboard alternative to Shift+drag (_initInteraction's
+  // pointerdown) for nudging the framing without disturbing orbit angle or zoom, useful when a
+  // mouse drag alone makes it hard to land the view exactly where you want it. Keys are tracked
+  // in a Set and re-applied every animation frame (see _applyKeyboardPan, called from _animate)
+  // rather than panning once per keydown, so holding a key pans smoothly instead of relying on
+  // the OS's own key-repeat rate/delay.
+  _initKeyboardPan() {
+    this.panKeysHeld = new Set()
+    const PAN_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'])
+    // Arrow/WASD keys are also normal typing input (room-dimension fields, the custom-item form,
+    // etc.) — only treat them as camera pans when focus isn't sitting in something that expects
+    // to receive them itself.
+    const isTypingTarget = (el) => {
+      if (!el) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+    }
+    this._onKeyDown = (e) => {
+      const key = e.key.toLowerCase()
+      if (!PAN_KEYS.has(key) || isTypingTarget(document.activeElement)) return
+      e.preventDefault() // stop arrow keys from also scrolling the page behind the canvas
+      this.panKeysHeld.add(key)
+    }
+    this._onKeyUp = (e) => {
+      this.panKeysHeld.delete(e.key.toLowerCase())
+    }
+    // Alt-tabbing away (or anything else that steals focus) mid-pan would otherwise leave a key
+    // "stuck" held forever, since its keyup never reaches this window.
+    this._onWindowBlur = () => this.panKeysHeld.clear()
+    window.addEventListener('keydown', this._onKeyDown)
+    window.addEventListener('keyup', this._onKeyUp)
+    window.addEventListener('blur', this._onWindowBlur)
+  }
+
+  // dt is seconds since the last frame — panning by (direction * speed * dt) rather than a flat
+  // per-frame step keeps the pan speed constant regardless of the display's refresh rate. Speed
+  // scales with the current zoom (camState.radius) so a key-tap covers roughly the same fraction
+  // of the visible room whether zoomed in tight or pulled back.
+  _applyKeyboardPan(dt) {
+    const keys = this.panKeysHeld
+    let dxRight = 0
+    let dyUp = 0
+    if (keys.has('a') || keys.has('arrowleft')) dxRight -= 1
+    if (keys.has('d') || keys.has('arrowright')) dxRight += 1
+    if (keys.has('w') || keys.has('arrowup')) dyUp += 1
+    if (keys.has('s') || keys.has('arrowdown')) dyUp -= 1
+    if (!dxRight && !dyUp) return
+    const speed = this.camState.radius * 0.9 // world units/sec at this zoom level
+    this._panCamera(dxRight * speed * dt, dyUp * speed * dt)
   }
 
   fitCamera() {
@@ -712,7 +805,7 @@ export class RoomEngine {
     // 'standard' is the default because it's tuned to match how each bed's mattress was
     // originally (and still is, for extraModels' yOffset) positioned — a freshly-placed bed
     // matches the raw model's own look rather than silently starting on a different peg.
-    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard' })
+    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false })
     this._clampItemToRoom(mesh)
     this._emitCart()
     return uid
@@ -775,10 +868,25 @@ export class RoomEngine {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item) return
     this.selected = item
-    this.selectionHelper = new THREE.BoxHelper(item.mesh, 0xc1502e)
+    this.selectionHelper = new THREE.BoxHelper(item.mesh, item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
     this.itemsGroup.add(this.selectionHelper)
     if (this.showDimensionOverlay) this._buildDimensionOverlay()
     this._emitSelection()
+  }
+
+  // Toggles whether the item can be picked up by a mouse/touch drag (see the pointerdown handler
+  // in _initInteraction — a locked item still selects normally on click, but the drag that would
+  // otherwise follow orbits the camera instead of moving it). Deliberately doesn't block rotation,
+  // stacking, or removal — those are explicit button actions a user chose, not the accidental
+  // bump-it-with-the-mouse scenario locking exists for.
+  toggleItemLock(uid) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    item.locked = !item.locked
+    if (this.selected === item) {
+      if (this.selectionHelper) this.selectionHelper.material.color.setHex(item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
+      this._emitSelection()
+    }
   }
 
   deselectItem() {
@@ -1163,7 +1271,13 @@ export class RoomEngine {
       return
     }
     const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
-    this.onSelectionChange({ uid: this.selected.uid, cat, stackedOnUid: this.selected.stackedOnUid, bedHeightLevel: this.selected.bedHeightLevel })
+    this.onSelectionChange({
+      uid: this.selected.uid,
+      cat,
+      stackedOnUid: this.selected.stackedOnUid,
+      bedHeightLevel: this.selected.bedHeightLevel,
+      locked: this.selected.locked,
+    })
   }
 
   // ---------- Stacking one item on top of another (e.g. a TV on a table) ----------
@@ -1307,6 +1421,7 @@ export class RoomEngine {
           rotY: p.mesh.rotation.y,
           stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
           bedHeightLevel: p.bedHeightLevel,
+          locked: p.locked,
         }
       }),
       features: this.wallFeatures.map((f) => ({
@@ -1386,6 +1501,10 @@ export class RoomEngine {
           // it, though nothing will be yet; _resolveLoadedStacking below re-stacks using
           // _topSurfaceY, which already reads the level set here.
           if (it.bedHeightLevel && it.bedHeightLevel !== 'standard') this.setBedHeight(uid, it.bedHeightLevel)
+          if (it.locked) {
+            const placed = this.placedItems.find((p) => p.uid === uid)
+            if (placed) placed.locked = true
+          }
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
         }, it.y)
@@ -1676,6 +1795,15 @@ export class RoomEngine {
       this._pointerDownPos = { x: e.clientX, y: e.clientY }
       this.raycaster.setFromCamera(this.pointerNDC, this.camera)
 
+      // Shift+drag always pans the camera — a dedicated "move the view" gesture, checked before
+      // measure mode and item/feature hit-testing below so it works no matter what's under the
+      // cursor or what other mode is active. Plain drag on empty floor already orbits, and plain
+      // drag on an item moves it, so this needs its own modifier to stay unambiguous with both.
+      if (e.shiftKey) {
+        this.mode = 'pan'
+        return
+      }
+
       // Measure mode replaces the normal select/drag behavior below — a click (not a drag; see
       // endPointer's own movement check) places a measure point instead of picking up an item.
       // Camera orbit still works (mode stays 'orbit' the whole time either way), just without the
@@ -1713,7 +1841,13 @@ export class RoomEngine {
 
       if (item) {
         const itemCat = ALL_ITEMS.find((c) => c.id === item.catalogId)
-        if (itemCat?.wallMountable) {
+        if (item.locked) {
+          // A locked item still selects on click (so the panel's Unlock control is reachable) —
+          // it just never picks up a drag. Falling through to orbit mode means dragging from here
+          // behaves exactly like dragging empty floor instead of doing nothing/feeling stuck.
+          this.mode = 'orbit'
+          this.selectItem(item.uid)
+        } else if (itemCat?.wallMountable) {
           // Wall items drag along whichever wall the cursor is over instead of the floor plane —
           // see the pointermove handler's 'drag-wall-item' branch and _raycastWallPoint below. No
           // dragOffset: the item's center just follows the cursor's own wall hit point directly,
@@ -1765,6 +1899,12 @@ export class RoomEngine {
         this.camState.theta -= dx * 0.006
         this.camState.phi = Math.max(0.3, Math.min(1.45, this.camState.phi - dy * 0.006))
         this._updateCameraPosition()
+      } else if (this.mode === 'pan') {
+        // Pixel deltas scaled by the current zoom (radius), same reasoning as _applyKeyboardPan's
+        // keyboard speed — dragging a fixed screen distance covers a fixed *fraction* of the
+        // visible room whether zoomed in tight or pulled back, rather than a fixed world distance.
+        const factor = this.camState.radius * 0.0016
+        this._panCamera(-dx * factor, dy * factor)
       } else if (this.mode === 'drag-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
