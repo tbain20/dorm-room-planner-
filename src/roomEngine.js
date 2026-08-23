@@ -20,6 +20,18 @@ const WINDOW_MAX_WIDTH = 6.0
 const WINDOW_MIN_HEIGHT = 2.0
 const WINDOW_MAX_HEIGHT = 5.0
 const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
+const FEATURE_COLLISION_DEPTH = 0.2 // feet — a door/window has no real thickness of its own (see
+// _buildFeatureMesh); this stands in for it so _featureCollisionBox is a thin box, not a flat
+// zero-volume plane an item's box could never actually intersect.
+
+// Ceiling on how far a floor-plane ray-cast is trusted (see _intersectFloorPlane) — a couple feet
+// past the largest room's own half-diagonal (a 25'x25' room's is ~17.7'), so it never rejects a
+// point actually over the room, only the runaway ones from a near-parallel ray. Measured at the
+// camera's max allowed tilt (phi 1.45, nearly eye-level): the ray-plane intersection distance
+// blows up fast once the cursor drifts much above screen-center — 16' by NDC y=0.15, 25'+ by
+// y=0.18, hundreds of feet by y=0.28 — so this has to sit well below that, not just below some
+// theoretical "room could be huge" ceiling.
+const FLOOR_POINT_MAX_DIST = 20
 
 const SELECTION_COLOR = 0xc1502e // normal selection outline
 const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, distinct from both
@@ -188,6 +200,25 @@ export class RoomEngine {
     target.z = Math.max(-l, Math.min(l, target.z))
     target.y = Math.max(-2, Math.min(h + 4, target.y))
     this._updateCameraPosition()
+  }
+
+  // Ray-vs-floor-plane intersection, shared by every "where on the floor is the cursor" need —
+  // dragging an item/feature around (_initInteraction's getFloorPoint) and dropping a measure
+  // point on open floor (_placeMeasurePoint). Assumes this.raycaster is already primed via
+  // raycaster.setFromCamera() by the caller. Returns null — instead of a wildly distant point —
+  // both when the ray never hits the plane at all, and when it hits so far away it isn't
+  // meaningful: near the top of the viewport the camera's downward-angled ray grazes almost
+  // parallel to the floor, so a one-pixel cursor nudge there can swing the intersection tens of
+  // feet across the room. A caller that used that directly for a drag would see whatever it's
+  // moving "teleport" the instant the cursor drifted into that zone — it'd only ever get clamped
+  // back to whichever wall the runaway point happened to land past (_clampItemToRoom clamps the
+  // final position, but by then the jump already happened). Callers should just skip their update
+  // for this event when this returns null, leaving the dragged thing exactly where it was.
+  _intersectFloorPlane() {
+    const pt = new THREE.Vector3()
+    const hit = this.raycaster.ray.intersectPlane(this.floorPlane, pt)
+    if (!hit || pt.lengthSq() > FLOOR_POINT_MAX_DIST * FLOOR_POINT_MAX_DIST) return null
+    return pt
   }
 
   // WASD/arrow-key panning — a keyboard alternative to Shift+drag (_initInteraction's
@@ -1081,8 +1112,9 @@ export class RoomEngine {
 
   // Raycasts against placed items first so clicking directly on a piece of furniture measures
   // to that exact surface point (its real height, not the floor beneath it) — falls back to the
-  // floor plane for anywhere else, the same intersectPlane approach getFloorPoint() above already
-  // uses for item dragging. A 3rd click starts a fresh pair rather than accumulating a 3rd point.
+  // floor plane for anywhere else, via the same _intersectFloorPlane getFloorPoint() (in
+  // _initInteraction) uses for item dragging. A 3rd click starts a fresh pair rather than
+  // accumulating a 3rd point.
   _placeMeasurePoint(clientX, clientY) {
     const el = this.renderer.domElement
     const rect = el.getBoundingClientRect()
@@ -1095,8 +1127,8 @@ export class RoomEngine {
     if (hits.length) {
       point = hits[0].point.clone()
     } else {
-      point = new THREE.Vector3()
-      if (!this.raycaster.ray.intersectPlane(this.floorPlane, point)) return
+      point = this._intersectFloorPlane()
+      if (!point) return
     }
     if (this.measurePoints.length >= 2) this.measurePoints = []
     this.measurePoints.push(point)
@@ -1204,6 +1236,60 @@ export class RoomEngine {
       }
     }
     for (let i = 0; i < n; i++) this._setCollisionTint(items[i], colliding[i])
+
+    // Doors/windows vs. floor items — every wall feature is tested, not just doors: a window only
+    // ever actually collides with something tall enough to reach its sill height (a wardrobe
+    // blocking it, say), which is correct physically-grounded behavior rather than a deliberate
+    // "windows never collide" rule. A door, sitting right at floor level, is the case that matters
+    // in practice — furniture genuinely can block a doorway.
+    this.wallFeatures.forEach((feature) => {
+      const featureBox = this._featureCollisionBox(feature)
+      const hit = items.some((item, i) => {
+        if (!featureBox.intersectsBox(wholeBoxes[i])) return false
+        return this._collectLeafBoxes(item, cats[i]).some((b) => featureBox.intersectsBox(b))
+      })
+      this._setFeatureCollisionTint(feature, hit)
+    })
+  }
+
+  // A feature (door/window) has no reliable solid mesh to test against — _buildFeatureMesh draws
+  // a door as pure line art (an opening outline + floor swing-arc symbol, no fill, so it reads as
+  // a gap in the wall) with nothing for _collectLeafBoxes's mesh traversal to find at all. Its
+  // collidable volume is computed directly from its own known width/height instead, positioned
+  // and oriented exactly like its visual mesh (feature.mesh's own matrixWorld already has the
+  // right wall position + rotation from _repositionFeature) — a thin box standing in for "the
+  // door/window opening," since that's the actual physical thing furniture can't block.
+  _featureCollisionBox(feature) {
+    const halfW = feature.width / 2
+    const halfH = feature.height / 2
+    const halfD = FEATURE_COLLISION_DEPTH / 2
+    const box = new THREE.Box3(new THREE.Vector3(-halfW, -halfH, -halfD), new THREE.Vector3(halfW, halfH, halfD))
+    feature.mesh.updateMatrixWorld()
+    return box.applyMatrix4(feature.mesh.matrixWorld)
+  }
+
+  // Mirrors _setCollisionTint, but a feature's materials aren't all MeshStandardMaterial with an
+  // emissive channel the way an item's are — a window's pane is, but a door has none at all (see
+  // _buildFeatureMesh: pure LineBasicMaterial line art), and a window's own frame/mullion lines
+  // are LineBasicMaterial too. Those only have a plain .color to work with, so this remembers each
+  // material's real color the first time (in userData, since unlike emissive there's no separate
+  // "off" channel to reset to) and swaps between that and collision red instead.
+  _setFeatureCollisionTint(feature, on) {
+    if (feature._collisionTinted === on) return
+    feature._collisionTinted = on
+    feature.mesh.traverse((o) => {
+      if (!o.material) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      mats.forEach((m) => {
+        if (m.emissive) {
+          m.emissive.setHex(on ? 0xd93a2b : 0x000000)
+          m.emissiveIntensity = on ? 0.6 : 0
+        } else if (m.color) {
+          if (m.userData._origColorHex == null) m.userData._origColorHex = m.color.getHex()
+          m.color.setHex(on ? 0xd93a2b : m.userData._origColorHex)
+        }
+      })
+    })
   }
 
   // True if any actual mesh piece of `itemA` intersects any actual mesh piece of `itemB` — see
@@ -1732,6 +1818,11 @@ export class RoomEngine {
     feature.mesh = this._buildFeatureMesh(feature)
     this.featuresGroup.add(feature.mesh)
     this._repositionFeature(feature)
+    // The freshly-built mesh's materials start untinted regardless of whatever _collisionTinted
+    // says — without this reset, _setFeatureCollisionTint's own early-return (nothing changed)
+    // would skip re-applying a still-active collision tint to them, leaving a window that was
+    // red before a resize looking falsely clear until its collision state actually flips.
+    feature._collisionTinted = undefined
     if (this.selectedFeature?.id === id) {
       this.selectedFeature = feature
       this._updateFeatureSelectionHelper()
@@ -1787,11 +1878,12 @@ export class RoomEngine {
       this.pointerNDC.x = ((x - rect.left) / rect.width) * 2 - 1
       this.pointerNDC.y = -((y - rect.top) / rect.height) * 2 + 1
     }
+    // Returns null (see _intersectFloorPlane) when the pointer's ray-vs-floor hit isn't reliable
+    // this event — every caller below needs to handle that by leaving whatever it's dragging
+    // exactly where it already was, not by falling back to some other point.
     const getFloorPoint = () => {
       this.raycaster.setFromCamera(this.pointerNDC, this.camera)
-      const pt = new THREE.Vector3()
-      this.raycaster.ray.intersectPlane(this.floorPlane, pt)
-      return pt
+      return this._intersectFloorPlane()
     }
     const pinchDist = () => {
       const pts = [...this.activePointers.values()]
@@ -1893,7 +1985,11 @@ export class RoomEngine {
           this._dropDescendants(item.uid)
           this.selectItem(item.uid)
           const floorPt = getFloorPoint()
-          this.dragOffset.set(item.mesh.position.x - floorPt.x, 0, item.mesh.position.z - floorPt.z)
+          // floorPt is only unreliable right at the top of the viewport (see
+          // _intersectFloorPlane) — vanishingly unlikely right where you just clicked an item, but
+          // a zero offset (item follows the cursor's floor point exactly from here) is a safe,
+          // unsurprising fallback rather than leaving dragOffset stale from a previous drag.
+          this.dragOffset.set(floorPt ? item.mesh.position.x - floorPt.x : 0, 0, floorPt ? item.mesh.position.z - floorPt.z : 0)
         }
       } else if (feature) {
         if (feature.locked) {
@@ -1905,7 +2001,7 @@ export class RoomEngine {
           this.mode = 'drag-feature'
           this.selectFeature(feature.id)
           const floorPt = getFloorPoint()
-          this.dragOffset.x = feature.offset - offsetForFeature(feature, floorPt)
+          this.dragOffset.x = floorPt ? feature.offset - offsetForFeature(feature, floorPt) : 0
         }
       } else {
         this.mode = 'orbit'
@@ -1942,10 +2038,15 @@ export class RoomEngine {
       } else if (this.mode === 'drag-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
-        this.selected.mesh.position.x = floorPt.x + this.dragOffset.x
-        this.selected.mesh.position.z = floorPt.z + this.dragOffset.z
-        if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
-        else this._clampItemToRoom(this.selected.mesh)
+        // A null floorPt (see _intersectFloorPlane) means the cursor drifted into the unreliable
+        // near-the-horizon zone this event — skip the update entirely rather than snapping the
+        // item toward whatever wild point that ray would otherwise have produced.
+        if (floorPt) {
+          this.selected.mesh.position.x = floorPt.x + this.dragOffset.x
+          this.selected.mesh.position.z = floorPt.z + this.dragOffset.z
+          if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
+          else this._clampItemToRoom(this.selected.mesh)
+        }
       } else if (this.mode === 'drag-wall-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
         this.raycaster.setFromCamera(this.pointerNDC, this.camera)
@@ -1954,9 +2055,11 @@ export class RoomEngine {
       } else if (this.mode === 'drag-feature' && this.selectedFeature) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
-        this.selectedFeature.offset = offsetForFeature(this.selectedFeature, floorPt) + this.dragOffset.x
-        this._repositionFeature(this.selectedFeature)
-        this._updateFeatureSelectionHelper()
+        if (floorPt) {
+          this.selectedFeature.offset = offsetForFeature(this.selectedFeature, floorPt) + this.dragOffset.x
+          this._repositionFeature(this.selectedFeature)
+          this._updateFeatureSelectionHelper()
+        }
       }
       this.lastPointer = { x: e.clientX, y: e.clientY }
     })
