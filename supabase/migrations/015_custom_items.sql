@@ -2,8 +2,11 @@
 -- Safe to re-run.
 --
 -- Lets a signed-in user add an item the curated catalog doesn't have — their own name, product
--- URL, and real dimensions, paired with an existing catalog item as a purely visual stand-in (its
--- 3D model represents the custom item in the room; nothing else about the stand-in carries over).
+-- URL, and (optionally) real dimensions, paired with an existing catalog item as a purely visual
+-- stand-in (its 3D model represents the custom item in the room; nothing else about the stand-in
+-- carries over). width/depth/height are nullable on purpose — leaving a dimension blank means
+-- "same as the stand-in," not zero (see catalog.js's buildCustomCatalogItem, which falls back to
+-- the stand-in's own dims per axis for whichever ones are null).
 -- These are personal to the user who created them (RLS below is owner-only for regular users),
 -- not global catalog additions — see catalog.js's registerCustomCatalogItem for how the app
 -- resolves one alongside the real CATALOG at runtime. Doubles as market research: every
@@ -16,9 +19,9 @@ create table if not exists custom_items (
   name text not null,
   product_url text,
   price numeric not null default 0,
-  width numeric not null,
-  depth numeric not null,
-  height numeric not null,
+  width numeric,
+  depth numeric,
+  height numeric,
   stand_in_catalog_id text not null,
   created_at timestamptz not null default now()
 );

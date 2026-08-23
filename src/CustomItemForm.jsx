@@ -30,13 +30,21 @@ export default function CustomItemForm({ onCreate, onClose }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  // Dims stay blank on pick, not pre-filled — leaving a field blank means "same as the stand-in,"
+  // not "0". The stand-in's own dims show as each field's placeholder (see the inputs below) so
+  // the default is still visible without committing to a value the user has to clear.
   function pickStandIn(cat) {
     setStandIn(cat)
-    // Pre-fills dims from the stand-in as a starting point the user can then adjust to their real
-    // item's real measurements — better than starting from a blank/zero footprint.
-    setWidth(String(cat.dims[0]))
-    setDepth(String(cat.dims[1]))
-    setHeight(String(cat.dims[2]))
+  }
+
+  // Each dim is independently optional — parseDim returns null for a blank field (buildCustom-
+  // CatalogItem then falls back to the stand-in's own dims for that axis), a positive number for
+  // a filled one, or throws if what's typed isn't a valid positive number.
+  function parseDim(value, label) {
+    if (!value.trim()) return null
+    const n = parseFloat(value)
+    if (!(n > 0)) throw new Error(`${label} must be a positive number, or left blank to match the stand-in`)
+    return n
   }
 
   async function handleSubmit(e) {
@@ -45,10 +53,14 @@ export default function CustomItemForm({ onCreate, onClose }) {
     if (!name.trim()) return setError('Name is required')
     if (!productUrl.trim()) return setError('Product URL is required')
     if (!standIn) return setError('Choose a model to stand in for this item')
-    const w = parseFloat(width)
-    const d = parseFloat(depth)
-    const h = parseFloat(height)
-    if (!(w > 0) || !(d > 0) || !(h > 0)) return setError('Width, depth, and height must all be positive numbers')
+    let w, d, h
+    try {
+      w = parseDim(width, 'Width')
+      d = parseDim(depth, 'Depth')
+      h = parseDim(height, 'Height')
+    } catch (err) {
+      return setError(err.message)
+    }
     setBusy(true)
     setError('')
     try {
@@ -90,17 +102,29 @@ export default function CustomItemForm({ onCreate, onClose }) {
           </label>
           <div className="custom-item-dims-row">
             <label className="custom-item-field">
-              <span>Width (ft)</span>
-              <input value={width} onChange={(e) => setWidth(e.target.value)} inputMode="decimal" disabled={busy} />
+              <span>Width (ft, optional)</span>
+              <input
+                value={width} onChange={(e) => setWidth(e.target.value)} inputMode="decimal" disabled={busy}
+                placeholder={standIn ? String(standIn.dims[0]) : '—'}
+              />
             </label>
             <label className="custom-item-field">
-              <span>Depth (ft)</span>
-              <input value={depth} onChange={(e) => setDepth(e.target.value)} inputMode="decimal" disabled={busy} />
+              <span>Depth (ft, optional)</span>
+              <input
+                value={depth} onChange={(e) => setDepth(e.target.value)} inputMode="decimal" disabled={busy}
+                placeholder={standIn ? String(standIn.dims[1]) : '—'}
+              />
             </label>
             <label className="custom-item-field">
-              <span>Height (ft)</span>
-              <input value={height} onChange={(e) => setHeight(e.target.value)} inputMode="decimal" disabled={busy} />
+              <span>Height (ft, optional)</span>
+              <input
+                value={height} onChange={(e) => setHeight(e.target.value)} inputMode="decimal" disabled={busy}
+                placeholder={standIn ? String(standIn.dims[2]) : '—'}
+              />
             </label>
+          </div>
+          <div className="rsub" style={{ marginBottom: 0, marginTop: -4 }}>
+            Leave any of these blank to use the stand-in's own size for that dimension.
           </div>
 
           <div className="custom-item-standin-label">

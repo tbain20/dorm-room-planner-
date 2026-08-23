@@ -7,6 +7,7 @@ import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 import CustomItemForm from './CustomItemForm.jsx'
 import PosterUploadForm from './PosterUploadForm.jsx'
+import { UNIT_SYSTEMS, DEFAULT_UNIT_SYSTEM, formatLength } from './units.js'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
   saveLayout, listLayouts, deleteLayout, setLayoutPublic, copyLayout, getMyProfile,
@@ -34,16 +35,6 @@ const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
 
 // room_type is stored as free text (see migration 006) but the app only ever writes one of these.
 const ROOM_TYPES = ['single', 'double', 'triple']
-
-// catalog dims are decimal feet (e.g. 3.4) — fine for the 3D math, not how anyone actually reads
-// furniture dimensions. Formats as feet'inches" (e.g. "3'5""), the standard furniture-listing
-// format, for the selection panel's Dimensions button.
-function formatFeetInches(ft) {
-  const totalInches = Math.round(ft * 12)
-  const feet = Math.floor(totalInches / 12)
-  const inches = totalInches % 12
-  return inches === 0 ? `${feet}'` : `${feet}'${inches}"`
-}
 
 const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
 
@@ -264,6 +255,26 @@ export default function App() {
   // measurePoints, reported back via onMeasureChange so the button/readout can reflect whether
   // it's active and, once two points are placed, the live distance between them.
   const [measureState, setMeasureState] = useState({ active: false, pointCount: 0, distanceFt: null })
+  // Display unit for every read-out dimension/distance (the 📏 overlay, the measuring tool, the
+  // selection panel's text list) — persisted per-browser since it's a lasting preference, not
+  // per-session state. The underlying data (catalog dims, room dims, saved layouts) always stays
+  // in feet regardless of this; only how a length is *shown* changes (see units.js).
+  const [unitSystem, setUnitSystem] = useState(() => {
+    try {
+      return localStorage.getItem('dorm-planner-units') || DEFAULT_UNIT_SYSTEM
+    } catch {
+      return DEFAULT_UNIT_SYSTEM
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dorm-planner-units', unitSystem)
+    } catch {
+      // Private-browsing/storage-disabled — the preference just won't persist across reloads.
+    }
+    engineRef.current?.setUnitSystem(unitSystem)
+  }, [unitSystem])
   // Catalog is the landing tab — Browse moved out to its own /browse route (see BrowsePage.jsx),
   // so it's no longer a tab value here at all.
   const [tab, setTab] = useState('catalog')
@@ -355,7 +366,9 @@ export default function App() {
   const [openChecklistCategories, setOpenChecklistCategories] = useState(() => new Set())
   const [checklistDrafts, setChecklistDrafts] = useState({})
 
-  // Init the Three.js engine once, tear it down on unmount
+  // Init the Three.js engine once, tear it down on unmount. unitSystem is read here only for its
+  // initial (mount-time) value — later changes go through the effect above instead, which calls
+  // engineRef.current.setUnitSystem() once the engine actually exists.
   useEffect(() => {
     const engine = new RoomEngine(canvasWrapRef.current, {
       onCartChange: setCart,
@@ -363,9 +376,11 @@ export default function App() {
       onFeatureSelectionChange: setFeatureSelection,
       onStackPickModeChange: setStackPickForUid,
       onMeasureChange: setMeasureState,
+      unitSystem,
     })
     engineRef.current = engine
     return () => engine.destroy()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Picks up hand-offs from other routes via router state, since BrowsePage.jsx (/browse) and
@@ -404,11 +419,10 @@ export default function App() {
 
   useEffect(() => {
     setRelatedNotice('')
-    setShowDimensions(false)
-    // Keeps the engine's own 3D dimension-line overlay (see roomEngine.js's
-    // setShowDimensionOverlay) in sync with this reset — otherwise a newly selected item would
-    // inherit the previous item's overlay even though the 📏 Dimensions button visually shows off.
-    engineRef.current?.setShowDimensionOverlay(false)
+    // Deliberately does NOT reset showDimensions here — the 📏 Dimensions overlay should persist
+    // across selecting a different item (the engine's own selectItem() already redraws it for
+    // whichever item is newly selected, see roomEngine.js) and only go away when the button
+    // itself is pressed again, not as a side effect of picking a different item.
     setPanelCollapsed(false)
   }, [selection])
 
@@ -1240,12 +1254,36 @@ export default function App() {
                 {measureState.active && (
                   <div className="sub" style={{ marginTop: 6, marginBottom: 0 }}>
                     {measureState.distanceFt != null
-                      ? `${measureState.distanceFt.toFixed(1)}' between your two points. Click again to start a new measurement.`
+                      ? `${formatLength(measureState.distanceFt, unitSystem)} between your two points. Click again to start a new measurement.`
                       : measureState.pointCount === 1
                         ? 'Click a second point to measure the distance.'
                         : 'Click a point on the floor or on an item to start measuring.'}
                   </div>
                 )}
+              </div>
+
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Units
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {UNIT_SYSTEMS.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => setUnitSystem(u.id)}
+                      style={{
+                        flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
+                        background: unitSystem === u.id ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: unitSystem === u.id ? '#fff' : 'var(--ink-soft)',
+                      }}
+                    >
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="sub" style={{ marginTop: 6, marginBottom: 0 }}>
+                  Applies to the 📏 overlay, the measuring tool, and this panel — room/catalog dimensions stay in feet either way.
+                </div>
               </div>
 
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
@@ -1393,15 +1431,15 @@ export default function App() {
               <div style={{ background: 'var(--paper-shadow)', borderRadius: 8, padding: 10, marginBottom: 6, fontSize: 11.5, color: 'var(--ink)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--ink-soft)' }}>Width</span>
-                  <span>{formatFeetInches(selection.cat.dims[0])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[0]}')</span></span>
+                  <span>{formatLength(selection.cat.dims[0], unitSystem)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--ink-soft)' }}>Depth</span>
-                  <span>{formatFeetInches(selection.cat.dims[1])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[1]}')</span></span>
+                  <span>{formatLength(selection.cat.dims[1], unitSystem)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--ink-soft)' }}>Height</span>
-                  <span>{formatFeetInches(selection.cat.dims[2])} <span style={{ color: 'var(--ink-soft)' }}>({selection.cat.dims[2]}')</span></span>
+                  <span>{formatLength(selection.cat.dims[2], unitSystem)}</span>
                 </div>
               </div>
             )}

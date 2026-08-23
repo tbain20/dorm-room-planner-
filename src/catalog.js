@@ -335,17 +335,17 @@ export const CATALOG = [
   { id: 'rug-square', name: 'Square Rug', price: 45, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugSquare.glb', relatedIds: ['throw-pillow'] },
   { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
   { id: 'throw-pillow', name: 'Throw Pillow', price: 15, retailer: 'Target', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pillow.glb', relatedIds: ['loveseat', 'accent-chair'] },
-  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', relatedIds: ['dresser'] },
-  { id: 'poster', name: 'Poster', price: 12, retailer: 'Amazon', dims: [2.0, 0.05, 2.7], color: 0x4d6373, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster-landscape', 'flag'] },
-  { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
-  { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster', 'tapestry'] },
-  { id: 'tapestry', name: 'Tapestry', price: 22, retailer: 'Amazon', dims: [4.5, 0.05, 5.5], color: 0x7a3f6b, category: 'Decor', subcategory: 'Wall', relatedIds: ['flag', 'chk:string-lights'] },
+  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['dresser'] },
+  { id: 'poster', name: 'Poster', price: 12, retailer: 'Amazon', dims: [2.0, 0.05, 2.7], color: 0x4d6373, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster-landscape', 'flag'] },
+  { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
+  { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
+  { id: 'tapestry', name: 'Tapestry', price: 22, retailer: 'Amazon', dims: [4.5, 0.05, 5.5], color: 0x7a3f6b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['flag', 'chk:string-lights'] },
   // Curtains — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
   // remaining-longtail-picks.md). No dedicated "Window" subcategory exists for one item — filed
   // under Wall alongside the other window/wall dressing items (tapestry, flag) it's closest to.
-  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['tapestry', 'chk:string-lights'] },
-  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', relatedIds: ['poster'] },
-  { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', relatedIds: ['mirror'] },
+  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['tapestry', 'chk:string-lights'] },
+  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster'] },
+  { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['mirror'] },
 
   // ---- Optional Luxury Items ----
   // Bean Bag Chair — ✅ fully researched.
@@ -503,8 +503,13 @@ export function findCatalogItemById(id) {
 // (name, dims, buy link) is the user's own. id is prefixed 'custom-' so it can never collide with
 // a real catalog id. price is required at creation (see CustomItemForm in App.jsx) so shopping-
 // list totals/receipt rendering need no null-handling anywhere else in the app.
+//
+// width/depth/height are each optional (null when the user left that field blank) — falls back
+// per-axis to the stand-in's own dims, so "no dimensions entered" renders at the stand-in's real
+// size instead of collapsing to 0×0×0.
 export function buildCustomCatalogItem(row) {
   const standIn = findCatalogItemById(row.stand_in_catalog_id)
+  const fallbackDims = standIn?.dims || [1, 1, 1]
   return {
     id: `custom-${row.id}`,
     customItemId: row.id,
@@ -512,7 +517,11 @@ export function buildCustomCatalogItem(row) {
     price: row.price,
     retailer: 'Custom Item',
     productUrl: row.product_url || null,
-    dims: [row.width, row.depth, row.height],
+    dims: [
+      row.width ?? fallbackDims[0],
+      row.depth ?? fallbackDims[1],
+      row.height ?? fallbackDims[2],
+    ],
     color: standIn?.color ?? 0x9c8a6b,
     category: 'Furniture & Organization',
     subcategory: 'My Items',
@@ -569,6 +578,7 @@ export function buildCustomPosterCatalogItem(row) {
     color: 0xe8e0cf,
     category: 'Decor',
     subcategory: 'Wall',
+    wallMountable: true,
     posterImageUrl: row.image_url,
     isCustomPoster: true,
     relatedIds: [],

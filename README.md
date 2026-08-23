@@ -211,7 +211,15 @@ have been added since you last ran one — all additive and safe to re-run:
     "+ Upload your own poster" (in the Catalog tab's Decor section, PosterUploadForm.jsx) to work
     at all. Same as 015: the button still renders and validates without it, every upload just
     errors inline ("Bucket not found") instead of succeeding.
-16. That's it — still no new env vars needed for any of these, including the OG preview
+16. New query → paste in
+    [`supabase/migrations/017_custom_items_optional_dims.sql`](supabase/migrations/017_custom_items_optional_dims.sql),
+    run it — **required if you already ran 015 before this one existed** (015's own file has
+    since been edited so a *fresh* install gets this for free, but that edit doesn't retroactively
+    change a table you already created). Makes `custom_items.width/depth/height` nullable, so
+    leaving a dimension blank in "Add a custom item" means "same size as the stand-in" like it's
+    supposed to, instead of erroring ("null value in column "width" ... violates not-null
+    constraint") — confirmed live. Harmless/no-op if your table was already nullable.
+17. That's it — still no new env vars needed for any of these, including the OG preview
     serverless function below (it reuses `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`, already set
     in your Vercel project).
 
