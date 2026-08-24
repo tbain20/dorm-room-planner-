@@ -284,6 +284,19 @@ export default function App() {
   const [layoutName, setLayoutName] = useState('')
   const [showReceipt, setShowReceipt] = useState(false)
   const [layoutsError, setLayoutsError] = useState('')
+  // The name this room is already saved under in Supabase, if any — set by handleSave() right
+  // after a fresh save and by handleLoad() when opening an existing one, cleared back to null by
+  // anything that starts a genuinely new room (see handleAddProvided's sibling "new room" paths
+  // aren't a thing here yet, so today this only ever goes null→name, never back). Lets the main-
+  // screen quick-save button (handleQuickSave) upsert straight over that same row — same
+  // (user_id, name) conflict target saveLayout already uses — instead of making the user reopen
+  // the Saved tab, retype the name, and save again just to update a room they already saved once.
+  const [currentLayoutName, setCurrentLayoutName] = useState(null)
+  const [quickSaveNotice, setQuickSaveNotice] = useState('')
+  // Whether roomEngine's clipboard (copySelected/pasteItem) currently holds anything — tracked
+  // here rather than re-derived from the engine every render since it only ever changes in
+  // response to the two button clicks below, and the engine has no change-event for it.
+  const [canPaste, setCanPaste] = useState(false)
   const [myProfile, setMyProfile] = useState(null)
   // Custom items (Session 1) — this user's own catalog.js's ALL_CATALOG_ITEMS registrations,
   // mirrored here just so the Catalog tab's "My Custom Items" section has something to render/
@@ -679,6 +692,19 @@ export default function App() {
     engineRef.current.addWindow()
   }
 
+  function handleDuplicateItem() {
+    engineRef.current.duplicateSelected()
+  }
+
+  function handleCopyItem() {
+    engineRef.current.copySelected()
+    setCanPaste(true)
+  }
+
+  function handlePasteItem() {
+    engineRef.current.pasteItem()
+  }
+
   function handleFeatureWallChange(wall) {
     engineRef.current.setFeatureWall(featureSelection.id, wall)
   }
@@ -782,7 +808,38 @@ export default function App() {
       const thumbnailDataUrl = engineRef.current.captureSnapshot()
       await saveLayout(name, { ...state, thumbnailDataUrl })
       setLayoutName('')
+      setCurrentLayoutName(name)
       setSavedLayouts(await listLayouts())
+    } catch (err) {
+      setLayoutsError(err.message)
+    }
+  }
+
+  // Main-screen "Save" button (titleblock) — updates the room in place under whatever name it's
+  // already saved as, without a trip through the Saved tab. A shared layout (sharedLayout != null)
+  // has its own save path (handleSaveShared, writes to the shared row everyone sees, not a
+  // personal (user_id, name) row) so this defers to that instead. A room that's never been saved
+  // yet has no name to upsert onto — send the user to the Saved tab to name and save it the first
+  // time, same as every other "you need to be signed in / do this in the Saved tab" redirect in
+  // this file (see e.g. handleOpenReport above).
+  async function handleQuickSave() {
+    if (sharedLayout) {
+      await handleSaveShared()
+      return
+    }
+    if (!session || !currentLayoutName) {
+      setTab('saved')
+      return
+    }
+    setLayoutsError('')
+    setQuickSaveNotice('')
+    try {
+      const state = engineRef.current.getState()
+      const thumbnailDataUrl = engineRef.current.captureSnapshot()
+      await saveLayout(currentLayoutName, { ...state, thumbnailDataUrl })
+      setSavedLayouts(await listLayouts())
+      setQuickSaveNotice('Saved!')
+      setTimeout(() => setQuickSaveNotice(''), 2000)
     } catch (err) {
       setLayoutsError(err.message)
     }
@@ -798,6 +855,17 @@ export default function App() {
     setSharedLayoutError('')
     engineRef.current.loadState(data)
     setRoom(data.room)
+    // handleLoad's callers span My Layouts, Browse, "Based on X" links, shared layouts, and
+    // Colgate-provided furniture — only the first is guaranteed to be a row you actually own, so
+    // quick-save shouldn't just trust data.name (a public/shared layout's name belongs to whoever
+    // saved it, not you). savedLayouts is your own My-Layouts list; matching by id there is a
+    // reliable "is this genuinely already one of your saved rooms" check regardless of which path
+    // it was loaded through — e.g. it also correctly recognizes your own layout when you open it
+    // via a public/leaderboard link. Anything that doesn't match falls back to null, same as a
+    // never-saved room, so quick-save sends it to the Saved tab instead of silently saving over
+    // (or under) a name you didn't choose.
+    const ownedMatch = data.id ? savedLayouts.find((l) => l.id === data.id) : null
+    setCurrentLayoutName(ownedMatch ? ownedMatch.name : null)
     setTab('cart')
     // Best-effort, no dedup for v1 (see brief) — incrementLayoutViewCount() swallows its own
     // errors, so this never blocks or breaks loading the layout itself. data.id is only present
@@ -1205,17 +1273,36 @@ export default function App() {
         <div id="titleblock">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <h1 style={{ margin: roomPlannerCollapsed ? 0 : undefined }}>Room Planner</h1>
-            <button
-              onClick={() => setRoomPlannerCollapsed((v) => !v)}
-              title={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
-              aria-label={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)',
-                fontSize: 13, padding: 4, lineHeight: 1, flexShrink: 0,
-              }}
-            >
-              {roomPlannerCollapsed ? '▸' : '▾'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <button
+                onClick={handleQuickSave}
+                title={
+                  sharedLayout
+                    ? 'Save changes — everyone on this shared layout will see them'
+                    : currentLayoutName
+                      ? `Save changes to "${currentLayoutName}"`
+                      : "Save this room — you'll be asked to name it"
+                }
+                style={{
+                  background: quickSaveNotice ? 'var(--sage)' : 'var(--accent)', color: '#fff',
+                  border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: 11.5, fontWeight: 600,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                {quickSaveNotice ? `✓ ${quickSaveNotice}` : '💾 Save'}
+              </button>
+              <button
+                onClick={() => setRoomPlannerCollapsed((v) => !v)}
+                title={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
+                aria-label={roomPlannerCollapsed ? 'Expand room planner' : 'Minimize room planner'}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)',
+                  fontSize: 13, padding: 4, lineHeight: 1, flexShrink: 0,
+                }}
+              >
+                {roomPlannerCollapsed ? '▸' : '▾'}
+              </button>
+            </div>
           </div>
           {!roomPlannerCollapsed && (
             <>
@@ -1239,6 +1326,12 @@ export default function App() {
                 <button className="structure-btn" onClick={handleAddDoor}>+ Door</button>
                 <button className="structure-btn" onClick={handleAddWindow}>+ Window</button>
               </div>
+
+              {canPaste && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button className="structure-btn" onClick={handlePasteItem}>📋 Paste item</button>
+                </div>
+              )}
 
               <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--paper-shadow)' }}>
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -1433,6 +1526,22 @@ export default function App() {
                 📏 Dimensions
               </button>
             </div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <button
+                style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
+                onClick={handleDuplicateItem}
+                title="Place an extra copy of this item nearby"
+              >
+                ⧉ Duplicate
+              </button>
+              <button
+                style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
+                onClick={handleCopyItem}
+                title="Copy this item so you can paste it again later"
+              >
+                📋 Copy
+              </button>
+            </div>
             <button
               style={{
                 background: selection.locked ? '#5b6b73' : 'var(--paper-shadow)',
@@ -1602,7 +1711,7 @@ export default function App() {
                 <div className="dim-row" style={{ marginBottom: 6 }}>
                   <label style={{ color: 'var(--ink-soft)' }}>Width</label>
                   <input
-                    type="number" value={featureSelection.width} min={1.5} max={6} step={0.5}
+                    type="number" value={featureSelection.width} min={1.5} max={10} step={0.5}
                     onChange={(e) => handleFeatureSizeChange('width', e.target.value)}
                     style={{ border: '1px solid var(--paper-shadow)', borderRadius: 6, padding: '3px 6px', width: 56, color: 'var(--ink)' }}
                   />
@@ -1611,7 +1720,7 @@ export default function App() {
                 <div className="dim-row" style={{ marginBottom: 12 }}>
                   <label style={{ color: 'var(--ink-soft)' }}>Height</label>
                   <input
-                    type="number" value={featureSelection.height} min={2} max={5} step={0.5}
+                    type="number" value={featureSelection.height} min={2} max={7} step={0.5}
                     onChange={(e) => handleFeatureSizeChange('height', e.target.value)}
                     style={{ border: '1px solid var(--paper-shadow)', borderRadius: 6, padding: '3px 6px', width: 56, color: 'var(--ink)' }}
                   />

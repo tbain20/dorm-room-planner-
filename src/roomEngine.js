@@ -16,9 +16,9 @@ const DOOR_HEIGHT = 6.67 // 80"
 const WINDOW_DEFAULT_WIDTH = 3.0
 const WINDOW_DEFAULT_HEIGHT = 3.0
 const WINDOW_MIN_WIDTH = 1.5
-const WINDOW_MAX_WIDTH = 6.0
+const WINDOW_MAX_WIDTH = 10.0
 const WINDOW_MIN_HEIGHT = 2.0
-const WINDOW_MAX_HEIGHT = 5.0
+const WINDOW_MAX_HEIGHT = 7.0
 const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
 const FEATURE_COLLISION_DEPTH = 0.2 // feet — a door/window has no real thickness of its own (see
 // _buildFeatureMesh); this stands in for it so _featureCollisionBox is a thin box, not a flat
@@ -32,6 +32,22 @@ const FEATURE_COLLISION_DEPTH = 0.2 // feet — a door/window has no real thickn
 // y=0.18, hundreds of feet by y=0.28 — so this has to sit well below that, not just below some
 // theoretical "room could be huge" ceiling.
 const FLOOR_POINT_MAX_DIST = 20
+
+// How close (in feet) a dragged floor item needs to get to another item's edge before it snaps
+// flush against it — see _snapToNearbyItems. Comfortably smaller than any real item's footprint so
+// it reads as "the two pieces kissed" rather than jumping from across the room; once the raw
+// cursor-driven position drifts more than this past the flush point, the snap releases and the
+// item resumes following the cursor exactly (including straight through the other item, same as
+// today — this is an alignment aid, not a hard collision block like a wall).
+const ITEM_SNAP_DISTANCE = 0.28
+
+// Wall opacity when a wall isn't the one currently facing the camera (unchanged from the original
+// single shared material) vs. when it is — see _updateNearWall. Kept far apart (0.4 vs. 0.05, not
+// just "less opaque") since the whole point is that the near wall reads as "basically not there"
+// so it stops visually competing with — and stops fielding accidental clicks meant for — whatever
+// is mounted on the far wall behind it.
+const WALL_OPACITY_NORMAL = 0.4
+const WALL_OPACITY_NEAR = 0.05
 
 const SELECTION_COLOR = 0xc1502e // normal selection outline
 const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, distinct from both
@@ -82,6 +98,18 @@ export class RoomEngine {
     this.featureIdCounter = 1
     this.selectedFeature = null
     this.featureSelectionHelper = null
+
+    // One placed item's worth of data, captured by copySelected() — see duplicateSelected()/
+    // copySelected()/pasteItem() below. Independent of `selected`, so a copy survives deselecting
+    // (or selecting something else) before you paste it.
+    this.clipboardItem = null
+
+    // Whichever wall segment is currently most "facing" the camera — see _updateNearWall, called
+    // once per frame from _animate. Used both to fade that wall's material almost to nothing (so
+    // it doesn't visually block the view into the room from this angle) and, in the pointerdown
+    // handler below, to keep a wall-mounted item sitting on it from being picked up by an
+    // accidental drag meant for something on the wall behind it.
+    this.nearWallEntry = null
 
     this._initScene()
     this._initInteraction()
@@ -163,6 +191,7 @@ export class RoomEngine {
     // needed here at all.
     if (this.dimensionOverlay) this._updateDimensionOverlay()
     this._updateCollisions()
+    this._updateNearWall()
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -294,11 +323,16 @@ export class RoomEngine {
     this._reclampAllItems()
   }
 
+  // Locked items are deliberately excluded from every pass below — locking an item is the user
+  // saying "don't move this," and a room resize/reshape isn't an exception to that any more than a
+  // stray drag is (see toggleItemLock). It can end up outside the new walls, floating over a notch
+  // that just ate its spot, or blocking a door — all preferable to silently relocating furniture
+  // the user explicitly pinned in place; they can always unlock it and reposition manually.
   _reclampAllItems() {
     // Un-stacked items first — a stacked item's own clamp depends on its base's (possibly
     // just-moved) position, and stacking order isn't the same as placedItems array order (you
     // can place the base after the item that ends up on top of it).
-    this.placedItems.filter((p) => p.stackedOnUid == null).forEach((p) => {
+    this.placedItems.filter((p) => p.stackedOnUid == null && !p.locked).forEach((p) => {
       const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
       // A resized/reshaped room rebuilds every wall from scratch (buildRoom(), called just before
       // this) — a wall item's old x/z might now float in empty space or sit behind a wall that
@@ -307,7 +341,7 @@ export class RoomEngine {
       if (cat?.wallMountable) this._resnapWallItemToNearestWall(p.mesh, cat)
       else this._clampItemToRoom(p.mesh)
     })
-    this.placedItems.filter((p) => p.stackedOnUid != null).forEach((p) => {
+    this.placedItems.filter((p) => p.stackedOnUid != null && !p.locked).forEach((p) => {
       const base = this.placedItems.find((q) => q.uid === p.stackedOnUid)
       if (!base) return
       p.mesh.position.x = base.mesh.position.x
@@ -408,11 +442,13 @@ export class RoomEngine {
     grid.material.opacity = 0.28
     this.roomGroup.add(grid)
 
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
     const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0xd9cfba, transparent: true, opacity: 0.6 })
     const addWall = (width, height, x, z, rotY, normal) => {
       const geo = new THREE.PlaneGeometry(width, height)
-      const mesh = new THREE.Mesh(geo, wallMat)
+      // Each wall gets its own material instance (not a shared one) so _updateNearWall can fade
+      // just the one currently facing the camera without dimming every other wall along with it.
+      const mat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, transparent: true, opacity: WALL_OPACITY_NORMAL, side: THREE.DoubleSide })
+      const mesh = new THREE.Mesh(geo, mat)
       mesh.position.set(x, height / 2, z)
       mesh.rotation.y = rotY
       this.roomGroup.add(mesh)
@@ -447,8 +483,38 @@ export class RoomEngine {
       addWall(segWidth, h, midX, midZ, rotY, new THREE.Vector3(nx, 0, nz))
     }
 
+    // Room just got rebuilt from scratch, so any previously-computed "nearest wall" reference is
+    // dangling (points at a disposed mesh) — _updateNearWall (called every frame) picks a fresh
+    // one before it's ever read again, but nulling it here avoids one stale frame where a wall
+    // material that no longer exists in the scene would otherwise get touched.
+    this.nearWallEntry = null
+    this._buildWallLabels()
     this.fitCamera()
     this._repositionAllFeatures()
+  }
+
+  // "BACK"/"FRONT"/"LEFT"/"RIGHT" billboards near the top of each of the room's 4 principal walls
+  // — a fixed reference so it's always clear which wall is which while orbiting, independent of
+  // the door/window "wall" picker using the same names. Positioned off the wall's overall span
+  // (via _wallConfig, the same helper the door/window picker's offset math uses) rather than off
+  // wallMeshes' per-segment list, since a notch splices extra short segments into whichever wall
+  // it's on — the label for that wall should still sit at the middle of its *original* full span,
+  // not on top of one of those fragments. Rebuilt on every buildRoom() (they live in roomGroup,
+  // cleared at the top of this method) since a resize moves every wall.
+  _buildWallLabels() {
+    const { h } = this.room
+    const INSET = 0.35 // feet — how far in front of the wall surface the label floats
+    const NORMALS = { back: [0, 1], front: [0, -1], left: [1, 0], right: [-1, 0] }
+    for (const wall of ['back', 'front', 'left', 'right']) {
+      const cfg = this._wallConfig(wall)
+      const [x, z] = cfg.pos(cfg.length / 2)
+      const [nx, nz] = NORMALS[wall]
+      const label = this._createDimLabel()
+      label.scale.set(1.1, 1.1 * (label.userData.canvas.height / label.userData.canvas.width), 1)
+      label.position.set(x + nx * INSET, Math.min(h - 0.5, h * 0.92), z + nz * INSET)
+      this._setDimLabelText(label, wall.toUpperCase())
+      this.roomGroup.add(label)
+    }
   }
 
   // ---------- Items ----------
@@ -612,11 +678,21 @@ export class RoomEngine {
     return swapped ? [d, w] : [w, d]
   }
 
+  // Keeps a floor item's footprint inside the room *and* clear of every door/window opening — see
+  // _clampPositionOnly for the room-rectangle/notch half, and _pushOutOfFeatures for the
+  // door/window half. Split into two steps because _pushOutOfFeatures needs to re-run the plain
+  // room clamp after nudging an item away from a feature (a push could in principle land it back
+  // outside the walls) without recursing back into the feature push itself.
+  _clampItemToRoom(mesh) {
+    this._clampPositionOnly(mesh)
+    this._pushOutOfFeatures(mesh)
+  }
+
   // Base case: clamp to the room's bounding rectangle, same as always. When a notch is present,
   // that's refined afterward — for an inset, pushed back out of the carved-out area; for a
   // bump-out, allowed to extend further out into it. Since the room is always "rectangle ± one
   // axis-aligned rectangle," this stays simple axis math rather than general polygon containment.
-  _clampItemToRoom(mesh) {
+  _clampPositionOnly(mesh) {
     const [w, d] = this._footprint(mesh)
     const hw = w / 2, hd = d / 2
     const rawX = mesh.position.x, rawZ = mesh.position.z
@@ -676,6 +752,48 @@ export class RoomEngine {
     mesh.position.z = pos.z
   }
 
+  // Pushes a floor item's footprint out of every door/window opening it currently overlaps — doors
+  // and windows are real physical gaps furniture can't occupy, not just a visual warning (compare
+  // _updateCollisions' item-vs-item tinting, which only warns). Resolves an overlap by nudging the
+  // item along whichever world axis needs the smaller move to clear it — the same "push along the
+  // cheaper axis" approach _clampPositionOnly's notch-inset branch uses — then re-clamps to the
+  // room afterward in case that nudge pushed it past a wall. Runs a few passes since a nudge away
+  // from one feature could in principle land it inside a second one (e.g. two windows on adjacent
+  // walls near a corner); a fixed small cap rather than a while(true) so a pathological layout
+  // (a feature wider than the room, say) can't spin this forever.
+  _pushOutOfFeatures(mesh) {
+    if (this.wallFeatures.length === 0) return
+    for (let pass = 0; pass < 4; pass++) {
+      const box = new THREE.Box3().setFromObject(mesh)
+      let pushedAny = false
+      for (const feature of this.wallFeatures) {
+        const fbox = this._featureCollisionBox(feature)
+        if (!box.intersectsBox(fbox)) continue
+        const overlapX = Math.min(box.max.x, fbox.max.x) - Math.max(box.min.x, fbox.min.x)
+        const overlapZ = Math.min(box.max.z, fbox.max.z) - Math.max(box.min.z, fbox.min.z)
+        if (overlapX <= 0 || overlapZ <= 0) continue
+        if (overlapX < overlapZ) {
+          const meshMidX = (box.min.x + box.max.x) / 2
+          const featMidX = (fbox.min.x + fbox.max.x) / 2
+          const delta = meshMidX < featMidX ? -overlapX : overlapX
+          mesh.position.x += delta
+          box.min.x += delta
+          box.max.x += delta
+        } else {
+          const meshMidZ = (box.min.z + box.max.z) / 2
+          const featMidZ = (fbox.min.z + fbox.max.z) / 2
+          const delta = meshMidZ < featMidZ ? -overlapZ : overlapZ
+          mesh.position.z += delta
+          box.min.z += delta
+          box.max.z += delta
+        }
+        pushedAny = true
+      }
+      if (!pushedAny) break
+      this._clampPositionOnly(mesh)
+    }
+  }
+
   // Keeps a stacked item's footprint within the item it's resting on, the same way
   // _clampItemToRoom keeps a floor item within the room's walls — you can slide a TV around on a
   // desk, but not off the edge of it. If the item on top is bigger than its base along some axis
@@ -695,6 +813,49 @@ export class RoomEngine {
     const baseZ = base.mesh.position.z
     mesh.position.x = Math.max(baseX - halfDiffW, Math.min(baseX + halfDiffW, mesh.position.x))
     mesh.position.z = Math.max(baseZ - halfDiffD, Math.min(baseZ + halfDiffD, mesh.position.z))
+  }
+
+  // Alignment aid for dragging a floor item near another one — independent X and Z snapping, each
+  // only considered when the item's footprint on the *other* axis would actually overlap the
+  // other item's (so it only kicks in when they're plausibly sliding into side-by-side contact,
+  // not any time their bounding boxes happen to be near each other diagonally). Within
+  // ITEM_SNAP_DISTANCE of the flush (zero-gap) touching position, the raw cursor-driven coordinate
+  // is replaced with that exact flush value; once the raw position drifts further than that past
+  // it, this stops touching that axis at all and the raw value passes through unchanged — which is
+  // what lets a further drag carry the item on through and past the other one instead of getting
+  // stuck at the first contact forever. Only considers other floor items (skips anything stacked
+  // on top of something else, which isn't a "floor neighbor" to align against).
+  _snapToNearbyItems(item, rawX, rawZ) {
+    const [w, d] = this._footprint(item.mesh)
+    const hw = w / 2
+    const hd = d / 2
+    let x = rawX
+    let z = rawZ
+    for (const other of this.placedItems) {
+      if (other.uid === item.uid || other.stackedOnUid != null) continue
+      const [ow, od] = this._footprint(other.mesh)
+      const ohw = ow / 2
+      const ohd = od / 2
+      const ox = other.mesh.position.x
+      const oz = other.mesh.position.z
+
+      const zOverlaps = rawZ - hd < oz + ohd && rawZ + hd > oz - ohd
+      if (zOverlaps) {
+        const flushLeft = ox - ohw - hw
+        const flushRight = ox + ohw + hw
+        const flush = Math.abs(rawX - flushLeft) < Math.abs(rawX - flushRight) ? flushLeft : flushRight
+        if (Math.abs(rawX - flush) < ITEM_SNAP_DISTANCE) x = flush
+      }
+
+      const xOverlaps = rawX - hw < ox + ohw && rawX + hw > ox - ohw
+      if (xOverlaps) {
+        const flushBack = oz - ohd - hd
+        const flushFront = oz + ohd + hd
+        const flush = Math.abs(rawZ - flushBack) < Math.abs(rawZ - flushFront) ? flushBack : flushFront
+        if (Math.abs(rawZ - flush) < ITEM_SNAP_DISTANCE) z = flush
+      }
+    }
+    return { x, z }
   }
 
   addItem(catId) {
@@ -794,13 +955,12 @@ export class RoomEngine {
     mesh.rotation.y = hit.wallMesh.rotation.y
   }
 
-  // Re-snaps a wall item to whichever wall is now closest to its stored position — used by
-  // _reclampAllItems after a room resize/notch change rebuilds every wall, since the item's old
-  // x/z may no longer sit against any real wall surface at all. Projects onto the chosen wall's
-  // own tangent, clamped to that wall segment's actual length, so the item lands somewhere on the
-  // wall itself rather than floating off its end.
-  _resnapWallItemToNearestWall(mesh, cat) {
-    if (!this.wallMeshes || this.wallMeshes.length === 0) return
+  // Whichever wall segment's mesh center sits closest to `mesh`'s current position — shared by
+  // _resnapWallItemToNearestWall (below) and the pointerdown handler's near-wall drag gate in
+  // _initInteraction, so "which wall is this wall-mounted item actually on" is answered the same
+  // way in both places.
+  _nearestWallMeshTo(mesh) {
+    if (!this.wallMeshes || this.wallMeshes.length === 0) return null
     let best = null
     let bestDist = Infinity
     for (const entry of this.wallMeshes) {
@@ -810,6 +970,16 @@ export class RoomEngine {
         best = entry
       }
     }
+    return best
+  }
+
+  // Re-snaps a wall item to whichever wall is now closest to its stored position — used by
+  // _reclampAllItems after a room resize/notch change rebuilds every wall, since the item's old
+  // x/z may no longer sit against any real wall surface at all. Projects onto the chosen wall's
+  // own tangent, clamped to that wall segment's actual length, so the item lands somewhere on the
+  // wall itself rather than floating off its end.
+  _resnapWallItemToNearestWall(mesh, cat) {
+    const best = this._nearestWallMeshTo(mesh)
     if (!best) return
     const { mesh: wallMesh, normal } = best
     const segLength = wallMesh.geometry.parameters.width
@@ -890,6 +1060,64 @@ export class RoomEngine {
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
     if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
     else this._clampItemToRoom(this.selected.mesh)
+  }
+
+  // Instant clone of the selected item, offset a bit from the original so the two don't land
+  // exactly on top of each other — same nudge-and-select pattern as pasteItem() below, just
+  // sourced straight from the live selection instead of the clipboard. Calling this repeatedly
+  // keeps re-selecting the newest copy (addItemAt's onRegistered below), so each duplicate steps
+  // diagonally away from the last one instead of every copy piling up in the same spot.
+  duplicateSelected() {
+    if (!this.selected) return
+    const src = this.selected
+    const cat = ALL_ITEMS.find((c) => c.id === src.catalogId)
+    if (!cat) return
+    const OFFSET = 1
+    this.addItemAt(
+      src.catalogId,
+      src.mesh.position.x + OFFSET,
+      src.mesh.position.z + OFFSET,
+      src.mesh.rotation.y,
+      (uid) => {
+        if (src.bedHeightLevel && src.bedHeightLevel !== 'standard') this.setBedHeight(uid, src.bedHeightLevel)
+        this.selectItem(uid)
+      },
+      cat.wallMountable ? src.mesh.position.y : undefined
+    )
+  }
+
+  // Snapshots the selected item's placement into an internal clipboard — independent of
+  // `selected`/`placedItems` from this point on, so it survives deselecting, selecting something
+  // else, or even removing the original before pasteItem() below is called.
+  copySelected() {
+    if (!this.selected) return
+    const src = this.selected
+    this.clipboardItem = {
+      catalogId: src.catalogId,
+      x: src.mesh.position.x,
+      y: src.mesh.position.y,
+      z: src.mesh.position.z,
+      rotY: src.mesh.rotation.y,
+      bedHeightLevel: src.bedHeightLevel,
+    }
+  }
+
+  // Places a new copy of whatever copySelected() last captured, offset from the clipboard's own
+  // stored position the same way duplicateSelected() offsets from the original — and then walks
+  // that stored position forward by the same offset, so pasting the same clipboard repeatedly
+  // steps each new copy further away rather than restacking every paste in the same spot.
+  pasteItem() {
+    if (!this.clipboardItem) return
+    const c = this.clipboardItem
+    const cat = ALL_ITEMS.find((x) => x.id === c.catalogId)
+    if (!cat) return
+    const OFFSET = 1
+    this.addItemAt(c.catalogId, c.x + OFFSET, c.z + OFFSET, c.rotY, (uid) => {
+      if (c.bedHeightLevel && c.bedHeightLevel !== 'standard') this.setBedHeight(uid, c.bedHeightLevel)
+      this.selectItem(uid)
+    }, cat.wallMountable ? c.y : undefined)
+    c.x += OFFSET
+    c.z += OFFSET
   }
 
   selectItem(uid) {
@@ -1250,6 +1478,38 @@ export class RoomEngine {
       })
       this._setFeatureCollisionTint(feature, hit)
     })
+  }
+
+  // Figures out which wall is currently "in front of" the camera — the one an orbit would have to
+  // pass through to see the room from outside — and fades just that wall's material down to
+  // WALL_OPACITY_NEAR so it stops visually blocking (and stops fielding accidental clicks meant
+  // for) whatever's mounted on the wall(s) behind it. Every other wall stays at the normal
+  // opacity. The room is always centered at world (0,0), so "toward the camera" in the floor
+  // plane is just the camera's own XZ position, normalized — no need to go through camState.target
+  // (panning moves the orbit target, but the walls themselves never move off-center).
+  _updateNearWall() {
+    if (!this.wallMeshes || this.wallMeshes.length === 0) return
+    const camX = this.camera.position.x
+    const camZ = this.camera.position.z
+    const len = Math.hypot(camX, camZ) || 1
+    const dirX = camX / len
+    const dirZ = camZ / len
+    let best = null
+    let bestDot = -Infinity
+    for (const entry of this.wallMeshes) {
+      // entry.normal points INTO the room; the wall facing the camera is the one whose outward
+      // face — the negation of that — points most toward the camera.
+      const dot = -entry.normal.x * dirX - entry.normal.z * dirZ
+      if (dot > bestDot) {
+        bestDot = dot
+        best = entry
+      }
+    }
+    if (best !== this.nearWallEntry) {
+      if (this.nearWallEntry) this.nearWallEntry.mesh.material.opacity = WALL_OPACITY_NORMAL
+      this.nearWallEntry = best
+    }
+    if (best) best.mesh.material.opacity = WALL_OPACITY_NEAR
   }
 
   // A feature (door/window) has no reliable solid mesh to test against — _buildFeatureMesh draws
@@ -1966,6 +2226,15 @@ export class RoomEngine {
           // behaves exactly like dragging empty floor instead of doing nothing/feeling stuck.
           this.mode = 'orbit'
           this.selectItem(item.uid)
+        } else if (itemCat?.wallMountable && this._nearestWallMeshTo(item.mesh) === this.nearWallEntry) {
+          // This item is mounted on whichever wall is currently nearly-invisible because it's
+          // facing the camera (see _updateNearWall) — exactly the wall a click aimed at something
+          // on the *far* wall behind it is liable to land on by accident, since it's physically
+          // the closer surface along that ray. Select it (so it's still reachable — Remove/Lock/
+          // Duplicate all still work) but don't let this pointer drag move it; same fallback-to-
+          // orbit behavior as a locked item below.
+          this.mode = 'orbit'
+          this.selectItem(item.uid)
         } else if (itemCat?.wallMountable) {
           // Wall items drag along whichever wall the cursor is over instead of the floor plane —
           // see the pointermove handler's 'drag-wall-item' branch and _raycastWallPoint below. No
@@ -2042,10 +2311,22 @@ export class RoomEngine {
         // near-the-horizon zone this event — skip the update entirely rather than snapping the
         // item toward whatever wild point that ray would otherwise have produced.
         if (floorPt) {
-          this.selected.mesh.position.x = floorPt.x + this.dragOffset.x
-          this.selected.mesh.position.z = floorPt.z + this.dragOffset.z
-          if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
-          else this._clampItemToRoom(this.selected.mesh)
+          const rawX = floorPt.x + this.dragOffset.x
+          const rawZ = floorPt.z + this.dragOffset.z
+          if (this.selected.stackedOnUid != null) {
+            this.selected.mesh.position.x = rawX
+            this.selected.mesh.position.z = rawZ
+            this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
+          } else {
+            // Snap-to-flush before the room/notch clamp: approaching another item stops this one
+            // flush against it (see _snapToNearbyItems); pushing the drag further past that point
+            // releases the snap and resumes tracking the cursor exactly, same as if the other item
+            // weren't there.
+            const snapped = this._snapToNearbyItems(this.selected, rawX, rawZ)
+            this.selected.mesh.position.x = snapped.x
+            this.selected.mesh.position.z = snapped.z
+            this._clampItemToRoom(this.selected.mesh)
+          }
         }
       } else if (this.mode === 'drag-wall-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
