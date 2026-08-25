@@ -1113,7 +1113,7 @@ function posterPath(userId, file) {
   return `${userId}/${crypto.randomUUID()}.${ext}`
 }
 
-const CUSTOM_POSTER_COLUMNS = 'id, name, image_url, width_in, height_in, created_at'
+const CUSTOM_POSTER_COLUMNS = 'id, name, image_url, product_url, width_in, height_in, created_at'
 
 export async function listMyCustomPosters() {
   const client = requireClient()
@@ -1127,7 +1127,7 @@ export async function listMyCustomPosters() {
   return data
 }
 
-export async function uploadCustomPoster({ file, name, widthIn, heightIn }) {
+export async function uploadCustomPoster({ file, name, widthIn, heightIn, productUrl }) {
   const client = requireClient()
   const user = await requireUser(client)
   const clean = name.trim()
@@ -1140,7 +1140,14 @@ export async function uploadCustomPoster({ file, name, widthIn, heightIn }) {
   const imageUrl = client.storage.from('custom-posters').getPublicUrl(path).data.publicUrl
   const { data, error } = await client
     .from('custom_posters')
-    .insert({ user_id: user.id, name: clean, image_url: imageUrl, width_in: widthIn, height_in: heightIn })
+    .insert({
+      user_id: user.id,
+      name: clean,
+      image_url: imageUrl,
+      product_url: productUrl?.trim() || null,
+      width_in: widthIn,
+      height_in: heightIn,
+    })
     .select(CUSTOM_POSTER_COLUMNS)
     .single()
   if (error) {

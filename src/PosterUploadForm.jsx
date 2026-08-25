@@ -4,12 +4,14 @@ import { POSTER_SIZE_PRESETS } from './catalog.js'
 const MAX_FILE_BYTES = 8 * 1024 * 1024 // 8MB — generous for a poster photo, small enough that a
 // mis-picked full-res camera photo or screenshot doesn't quietly upload something huge.
 
-// "Upload your own poster" modal (Catalog tab → Decor, App.jsx) — name, a standard poster-size
-// preset (not free-form dims, same simplification the real 'poster'/'poster-landscape' catalog
-// entries already made), and an image file. Same controlled-draft/busy/error shape as
-// CustomItemForm.jsx/SaveToBoardMenu.jsx.
+// "Upload your own poster" modal (Catalog tab → Decor, App.jsx) — name, an optional buy-it URL
+// (same shopping-list buy-link role as a real catalog item's productUrl — see catalog.js's
+// catalogItemLink/buildCustomPosterCatalogItem), a standard poster-size preset (not free-form
+// dims, same simplification the real 'poster'/'poster-landscape' catalog entries already made),
+// and an image file. Same controlled-draft/busy/error shape as CustomItemForm.jsx/SaveToBoardMenu.jsx.
 export default function PosterUploadForm({ onCreate, onClose }) {
   const [name, setName] = useState('')
+  const [productUrl, setProductUrl] = useState('')
   const [size, setSize] = useState(POSTER_SIZE_PRESETS[1])
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
@@ -37,7 +39,7 @@ export default function PosterUploadForm({ onCreate, onClose }) {
     setBusy(true)
     setError('')
     try {
-      await onCreate({ file, name: name.trim(), widthIn: size.widthIn, heightIn: size.heightIn })
+      await onCreate({ file, name: name.trim(), widthIn: size.widthIn, heightIn: size.heightIn, productUrl: productUrl.trim() })
     } catch (err) {
       setError(err.message)
       setBusy(false)
@@ -53,6 +55,11 @@ export default function PosterUploadForm({ onCreate, onClose }) {
           <label className="custom-item-field">
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Concert poster" disabled={busy} />
+          </label>
+
+          <label className="custom-item-field">
+            <span>Product URL (optional)</span>
+            <input value={productUrl} onChange={(e) => setProductUrl(e.target.value)} placeholder="https://…" disabled={busy} />
           </label>
 
           <div className="custom-item-standin-label">Size</div>

@@ -576,7 +576,7 @@ export function buildCustomPosterCatalogItem(row) {
     name: row.name,
     price: 0,
     retailer: 'Your Upload',
-    productUrl: null,
+    productUrl: row.product_url || null,
     dims: [row.width_in / 12, 0.05, row.height_in / 12],
     color: 0xe8e0cf,
     category: 'Decor',

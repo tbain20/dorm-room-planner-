@@ -32,6 +32,7 @@ create table if not exists custom_posters (
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   image_url text not null,
+  product_url text,
   width_in numeric not null,
   height_in numeric not null,
   created_at timestamptz not null default now()
