@@ -41,6 +41,13 @@ const FLOOR_POINT_MAX_DIST = 20
 // today — this is an alignment aid, not a hard collision block like a wall).
 const ITEM_SNAP_DISTANCE = 0.28
 
+// Box3.intersectsBox() treats touching boundaries (zero gap) as intersecting, which is exactly the
+// state two items end up in once _snapToNearbyItems snaps them flush against each other. Without
+// slack here, merely flush items would permanently read as "colliding" red instead of only items
+// actually dragged into one another. Small enough to be well below any real overlap from dragging,
+// but comfortably above the floating-point noise a flush snap can leave in a box's min/max.
+const COLLISION_EPSILON = 0.01
+
 // Wall opacity when a wall isn't the one currently facing the camera (unchanged from the original
 // single shared material) vs. when it is — see _updateNearWall. Kept far apart (0.4 vs. 0.05, not
 // just "less opaque") since the whole point is that the near wall reads as "basically not there"
@@ -1553,16 +1560,31 @@ export class RoomEngine {
   }
 
   // True if any actual mesh piece of `itemA` intersects any actual mesh piece of `itemB` — see
-  // _updateCollisions above for why this is per-submesh rather than one box per item.
+  // _updateCollisions above for why this is per-submesh rather than one box per item. Uses
+  // _boxesOverlap rather than Box3.intersectsBox so two pieces merely flush against each other
+  // (zero gap) don't count — see COLLISION_EPSILON.
   _piecesTouch(itemA, itemB, catA, catB) {
     const boxesA = this._collectLeafBoxes(itemA, catA)
     const boxesB = this._collectLeafBoxes(itemB, catB)
     for (const a of boxesA) {
       for (const b of boxesB) {
-        if (a.intersectsBox(b)) return true
+        if (this._boxesOverlap(a, b)) return true
       }
     }
     return false
+  }
+
+  // Like Box3.intersectsBox, but requires actual penetration on every axis rather than counting
+  // merely-touching boundaries — see COLLISION_EPSILON.
+  _boxesOverlap(a, b) {
+    return (
+      a.min.x < b.max.x - COLLISION_EPSILON &&
+      a.max.x > b.min.x + COLLISION_EPSILON &&
+      a.min.y < b.max.y - COLLISION_EPSILON &&
+      a.max.y > b.min.y + COLLISION_EPSILON &&
+      a.min.z < b.max.z - COLLISION_EPSILON &&
+      a.max.z > b.min.z + COLLISION_EPSILON
+    )
   }
 
   // One Box3 per actual mesh in the hierarchy (skips the black EdgesGeometry outline helper added
