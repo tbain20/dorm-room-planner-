@@ -1593,6 +1593,27 @@ export default function App() {
               </div>
             )}
 
+            {selection.cat.canWallMount && (
+              <>
+                <button
+                  style={{
+                    background: selection.wallMounted ? '#5b6b73' : 'var(--paper-shadow)',
+                    color: selection.wallMounted ? '#fff' : 'var(--ink-soft)',
+                    width: '100%', border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer', marginBottom: 6,
+                  }}
+                  onClick={() => engineRef.current.setWallMounted(selection.uid, !selection.wallMounted)}
+                  title={selection.wallMounted ? 'Take it down and place it on the floor' : 'Mount it on the wall'}
+                >
+                  {selection.wallMounted ? '🖼️ Wall-mounted — click to take down' : '🖼️ Mount on wall'}
+                </button>
+                {selection.wallMounted && (
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
+                    Drag it in the room to reposition along the wall.
+                  </div>
+                )}
+              </>
+            )}
+
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               {selection.stackedOnUid != null ? (
                 <button

@@ -6,13 +6,21 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024 // 8MB — generous for a poster photo, s
 
 // "Upload your own poster" modal (Catalog tab → Decor, App.jsx) — name, an optional buy-it URL
 // (same shopping-list buy-link role as a real catalog item's productUrl — see catalog.js's
-// catalogItemLink/buildCustomPosterCatalogItem), a standard poster-size preset (not free-form
-// dims, same simplification the real 'poster'/'poster-landscape' catalog entries already made),
-// and an image file. Same controlled-draft/busy/error shape as CustomItemForm.jsx/SaveToBoardMenu.jsx.
+// catalogItemLink/buildCustomPosterCatalogItem), a size (one of the 3 standard poster-size
+// presets, or a free-form Width/Height in inches via the "Custom" option), and an image file.
+// Same controlled-draft/busy/error shape as CustomItemForm.jsx/SaveToBoardMenu.jsx.
+// Sentinel selected in place of a POSTER_SIZE_PRESETS entry when the user wants free-form
+// dimensions instead of one of the 3 standard sizes — kept as an object with the same `label`
+// shape the preset buttons already key off of, so the existing selected-state comparison
+// (`size.label === preset.label`) doesn't need a separate branch for it.
+const CUSTOM_SIZE = { label: 'Custom' }
+
 export default function PosterUploadForm({ onCreate, onClose }) {
   const [name, setName] = useState('')
   const [productUrl, setProductUrl] = useState('')
   const [size, setSize] = useState(POSTER_SIZE_PRESETS[1])
+  const [customWidthIn, setCustomWidthIn] = useState('')
+  const [customHeightIn, setCustomHeightIn] = useState('')
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState('')
   const [busy, setBusy] = useState(false)
@@ -36,10 +44,19 @@ export default function PosterUploadForm({ onCreate, onClose }) {
     if (busy) return
     if (!name.trim()) return setError('Name is required')
     if (!file) return setError('Choose an image to upload')
+    let widthIn, heightIn
+    if (size === CUSTOM_SIZE) {
+      widthIn = parseFloat(customWidthIn)
+      heightIn = parseFloat(customHeightIn)
+      if (!(widthIn > 0) || !(heightIn > 0)) return setError('Enter a width and height in inches')
+    } else {
+      widthIn = size.widthIn
+      heightIn = size.heightIn
+    }
     setBusy(true)
     setError('')
     try {
-      await onCreate({ file, name: name.trim(), widthIn: size.widthIn, heightIn: size.heightIn, productUrl: productUrl.trim() })
+      await onCreate({ file, name: name.trim(), widthIn, heightIn, productUrl: productUrl.trim() })
     } catch (err) {
       setError(err.message)
       setBusy(false)
@@ -75,7 +92,33 @@ export default function PosterUploadForm({ onCreate, onClose }) {
                 {preset.label}
               </button>
             ))}
+            <button
+              type="button"
+              className={`poster-size-option${size === CUSTOM_SIZE ? ' selected' : ''}`}
+              onClick={() => setSize(CUSTOM_SIZE)}
+              disabled={busy}
+            >
+              Custom
+            </button>
           </div>
+          {size === CUSTOM_SIZE && (
+            <div className="custom-item-dims-row">
+              <label className="custom-item-field">
+                <span>Width (in)</span>
+                <input
+                  value={customWidthIn} onChange={(e) => setCustomWidthIn(e.target.value)}
+                  inputMode="decimal" placeholder="e.g. 20" disabled={busy}
+                />
+              </label>
+              <label className="custom-item-field">
+                <span>Height (in)</span>
+                <input
+                  value={customHeightIn} onChange={(e) => setCustomHeightIn(e.target.value)}
+                  inputMode="decimal" placeholder="e.g. 30" disabled={busy}
+                />
+              </label>
+            </div>
+          )}
 
           <label className="custom-item-field">
             <span>Image</span>

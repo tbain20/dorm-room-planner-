@@ -148,6 +148,9 @@ export class RoomEngine {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(w, h)
+    // Only used by a cat.wallMountClipFraction item's stand-hiding clip plane (the TV — see
+    // _loadItemMesh/_setWallMountClipActive/_updateWallMountClips below); a no-op otherwise.
+    this.renderer.localClippingEnabled = true
     this.container.appendChild(this.renderer.domElement)
 
     this.scene.add(new THREE.AmbientLight(0xfff3e4, 0.8))
@@ -199,6 +202,7 @@ export class RoomEngine {
     if (this.dimensionOverlay) this._updateDimensionOverlay()
     this._updateCollisions()
     this._updateNearWall()
+    this._updateWallMountClips()
     this.renderer.render(this.scene, this.camera)
   }
 
@@ -345,7 +349,7 @@ export class RoomEngine {
       // this) — a wall item's old x/z might now float in empty space or sit behind a wall that
       // moved, so it needs its own resnap to whichever wall is now closest, not the floor-item
       // rectangle clamp below (which doesn't know about "flush against a wall" at all).
-      if (cat?.wallMountable) this._resnapWallItemToNearestWall(p.mesh, cat)
+      if (this._isWallMounted(p, cat)) this._resnapWallItemToNearestWall(p.mesh, cat)
       else this._clampItemToRoom(p.mesh)
     })
     this.placedItems.filter((p) => p.stackedOnUid != null && !p.locked).forEach((p) => {
@@ -659,6 +663,16 @@ export class RoomEngine {
           }
 
           group.userData.dims = cat.dims
+          // wallMountClipFraction (see catalog.js's tv entry) — a horizontal clip plane, world-
+          // space normal (0,1,0), that hides everything below it. Created here (once, per placed
+          // instance) but left inactive (no material references it yet) until the item is
+          // actually wall-mounted — see _setWallMountClipActive, which is what turns it on/off,
+          // and _updateWallMountClips, which keeps its height in sync with the item while it's
+          // active. Only meaningful for a single-fused-mesh model with no separate stand node to
+          // hide via cat.hideNodes instead (the TV's televisionModern.glb is exactly that case —
+          // stand and screen are one mesh, so this is the only code-only way to hide the stand
+          // without a Blender re-export splitting them apart).
+          if (cat.wallMountClipFraction != null) group.userData.wallClipPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
           onReady(group)
         },
         undefined,
@@ -884,9 +898,13 @@ export class RoomEngine {
   // onRegistered, if given, fires with the freshly-assigned uid once the (possibly async, for a
   // glTF model) load finishes and the item actually lands in placedItems — used by loadState()
   // below to know each restored item's uid so it can resolve stackedOnIndex references afterward.
-  // y is only meaningful for a wallMountable item (see getState/loadState) — every other item's
-  // height is always derived from its own dims/stacking, never freely chosen, so omitting it
-  // (undefined) for a normal floor item is the common case, not an oversight.
+  // y is only meaningful for a wall item (see getState/loadState) — every other item's height is
+  // always derived from its own dims/stacking, never freely chosen, so omitting it (undefined)
+  // for a normal floor item is the common case, not an oversight. For a cat.canWallMount item
+  // (the TV), a passed y doubles as the signal that *this instance* should come back wall-
+  // mounted — duplicateSelected/pasteItem/loadState below only ever pass one when the source
+  // instance had wallMounted: true, so its mere presence is enough; there's no separate flag to
+  // thread through.
   addItemAt(catId, x, z, rotY, onRegistered, y) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
@@ -897,8 +915,15 @@ export class RoomEngine {
       if (cat.wallMountable) {
         if (y != null) mesh.position.y = y
         else this._defaultWallPlacement(mesh, cat)
+      } else if (cat.canWallMount && y != null) {
+        mesh.position.y = y
       }
       const uid = this._registerItem(mesh, cat)
+      if (cat.canWallMount && y != null) {
+        const item = this.placedItems.find((p) => p.uid === uid)
+        if (item) item.wallMounted = true
+        this._setWallMountClipActive(mesh, cat, true)
+      }
       if (onRegistered) onRegistered(uid)
     })
   }
@@ -1005,6 +1030,79 @@ export class RoomEngine {
     mesh.rotation.y = wallMesh.rotation.y
   }
 
+  // Whether `item` should currently behave like a wall item (wall dragging, wall-flush resnap on
+  // room resize, y persisted in getState) — true for a plain wallMountable catalog item (poster,
+  // mirror, ...) unconditionally, or for a cat.canWallMount item (currently just the TV) whose
+  // *this instance* has been toggled onto the wall via setWallMounted. Centralized here so every
+  // site that used to check cat.wallMountable alone picks up the TV's toggle for free.
+  _isWallMounted(item, cat) {
+    return !!(cat?.wallMountable || (cat?.canWallMount && item?.wallMounted))
+  }
+
+  // Flips a placed cat.canWallMount item (the TV) between a normal floor item and a wall-mounted
+  // one — the selection panel's "Mount on wall" / "Place on floor" button. Unlike a plain
+  // wallMountable item, this one item can be in either mode depending on the instance, so (unlike
+  // addItem/_defaultWallPlacement's one-shot use on a brand-new item) this has to actually move an
+  // *existing* mesh between the two states and flip the flag _isWallMounted reads everywhere else.
+  setWallMounted(uid, mounted) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (!cat?.canWallMount || item.wallMounted === mounted) return
+    // Nothing should be resting on this item, or have this item resting on something, once it's
+    // on the wall — same "surface it was on/resting on it is going away" cleanup a pickup-to-drag
+    // does elsewhere (see the pointerdown handler's drag-item branch).
+    if (item.stackedOnUid != null) item.stackedOnUid = null
+    this._dropDescendants(uid)
+    item.wallMounted = mounted
+    if (mounted) this._defaultWallPlacement(item.mesh, cat)
+    else {
+      item.mesh.position.y = 0
+      this._clampItemToRoom(item.mesh)
+    }
+    this._setWallMountClipActive(item.mesh, cat, mounted)
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
+    this._emitCart()
+  }
+
+  // Turns a wallMountClipFraction item's stand-hiding clip plane (see _loadItemMesh) on or off —
+  // "on" means every material in the model gets the plane added to its own clippingPlanes (three.js
+  // clipping is per-material, so this has to traverse), "off" clears it back to none so the item
+  // renders whole again once it's back on the floor. No-op for any item that didn't get a plane
+  // built in the first place (everything except the TV, currently).
+  _setWallMountClipActive(mesh, cat, active) {
+    if (cat.wallMountClipFraction == null) return
+    const plane = mesh.userData.wallClipPlane
+    if (!plane) return
+    mesh.traverse((o) => {
+      if (!o.isMesh || !o.material) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      mats.forEach((m) => { m.clippingPlanes = active ? [plane] : [] })
+    })
+  }
+
+  // Keeps every active wall-mount clip plane's height in sync with its item's current position —
+  // called once a frame from _animate rather than from every individual site that can move a
+  // wall-mounted item (mount, drag, room-resize resnap, duplicate, paste, load), since there'd
+  // otherwise be several of those to keep covered. mesh.position.y is the item's world-space
+  // *bottom* (see modelFit.js's floor-alignment — a wall item's group is floor-nudged up to its
+  // target height, same as a floor item's group sits at y=0), so "keep the top
+  // (1 - wallMountClipFraction) of the model" means clipping everything below
+  // position.y + wallMountClipFraction * height. Rotation around Y (the only axis a wall item ever
+  // rotates on) never tilts this plane off-level, so no need to touch the plane's normal here —
+  // only its height (`constant`) changes.
+  _updateWallMountClips() {
+    for (const p of this.placedItems) {
+      if (!p.wallMounted) continue
+      const plane = p.mesh.userData.wallClipPlane
+      if (!plane) continue
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      if (cat?.wallMountClipFraction == null) continue
+      const cutoffY = p.mesh.position.y + cat.wallMountClipFraction * cat.dims[2]
+      plane.constant = -cutoffY
+    }
+  }
+
   _registerItem(mesh, cat) {
     const uid = this.uidCounter++
     mesh.userData.uid = uid
@@ -1013,7 +1111,10 @@ export class RoomEngine {
     // 'standard' is the default because it's tuned to match how each bed's mattress was
     // originally (and still is, for extraModels' yOffset) positioned — a freshly-placed bed
     // matches the raw model's own look rather than silently starting on a different peg.
-    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false })
+    // wallMounted only ever flips true for a cat.canWallMount item (e.g. the TV) via
+    // setWallMounted below — a plain cat.wallMountable item (poster, mirror, ...) is wall-placed
+    // from the moment it's added and never reads this field at all (see _isWallMounted).
+    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false, wallMounted: false })
     this._clampItemToRoom(mesh)
     this._emitCart()
     return uid
@@ -1089,7 +1190,7 @@ export class RoomEngine {
         if (src.bedHeightLevel && src.bedHeightLevel !== 'standard') this.setBedHeight(uid, src.bedHeightLevel)
         this.selectItem(uid)
       },
-      cat.wallMountable ? src.mesh.position.y : undefined
+      this._isWallMounted(src, cat) ? src.mesh.position.y : undefined
     )
   }
 
@@ -1106,6 +1207,7 @@ export class RoomEngine {
       z: src.mesh.position.z,
       rotY: src.mesh.rotation.y,
       bedHeightLevel: src.bedHeightLevel,
+      wallMounted: src.wallMounted,
     }
   }
 
@@ -1122,7 +1224,7 @@ export class RoomEngine {
     this.addItemAt(c.catalogId, c.x + OFFSET, c.z + OFFSET, c.rotY, (uid) => {
       if (c.bedHeightLevel && c.bedHeightLevel !== 'standard') this.setBedHeight(uid, c.bedHeightLevel)
       this.selectItem(uid)
-    }, cat.wallMountable ? c.y : undefined)
+    }, this._isWallMounted(c, cat) ? c.y : undefined)
     c.x += OFFSET
     c.z += OFFSET
   }
@@ -1645,6 +1747,7 @@ export class RoomEngine {
       stackedOnUid: this.selected.stackedOnUid,
       bedHeightLevel: this.selected.bedHeightLevel,
       locked: this.selected.locked,
+      wallMounted: this.selected.wallMounted,
     })
   }
 
@@ -1781,10 +1884,13 @@ export class RoomEngine {
         return {
           catalogId: p.catalogId,
           x: p.mesh.position.x,
-          // Only a wallMountable item's height is ever freely chosen (see _snapToWallHit) — every
-          // other item's y is always re-derived deterministically from its own dims/stacking on
-          // load, so saving it for those would just be redundant, unused data.
-          y: cat?.wallMountable ? p.mesh.position.y : undefined,
+          // Only a wall item's height is ever freely chosen (see _snapToWallHit) — every other
+          // item's y is always re-derived deterministically from its own dims/stacking on load,
+          // so saving it for those would just be redundant, unused data. For a cat.canWallMount
+          // item currently wall-mounted (the TV — see setWallMounted/_isWallMounted), saving y
+          // here is also what tells addItemAt/loadState to bring it back wall-mounted instead of
+          // on the floor; no separate wallMounted field needed in the saved shape.
+          y: this._isWallMounted(p, cat) ? p.mesh.position.y : undefined,
           z: p.mesh.position.z,
           rotY: p.mesh.rotation.y,
           stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
@@ -2248,7 +2354,7 @@ export class RoomEngine {
           // behaves exactly like dragging empty floor instead of doing nothing/feeling stuck.
           this.mode = 'orbit'
           this.selectItem(item.uid)
-        } else if (itemCat?.wallMountable && this._nearestWallMeshTo(item.mesh) === this.nearWallEntry) {
+        } else if (this._isWallMounted(item, itemCat) && this._nearestWallMeshTo(item.mesh) === this.nearWallEntry) {
           // This item is mounted on whichever wall is currently nearly-invisible because it's
           // facing the camera (see _updateNearWall) — exactly the wall a click aimed at something
           // on the *far* wall behind it is liable to land on by accident, since it's physically
@@ -2257,7 +2363,7 @@ export class RoomEngine {
           // orbit behavior as a locked item below.
           this.mode = 'orbit'
           this.selectItem(item.uid)
-        } else if (itemCat?.wallMountable) {
+        } else if (this._isWallMounted(item, itemCat)) {
           // Wall items drag along whichever wall the cursor is over instead of the floor plane —
           // see the pointermove handler's 'drag-wall-item' branch and _raycastWallPoint below. No
           // dragOffset: the item's center just follows the cursor's own wall hit point directly,

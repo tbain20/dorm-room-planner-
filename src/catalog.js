@@ -18,9 +18,10 @@ import { DEFAULT_CHECKLIST_ITEMS } from './checklistItems.js'
 // checklistItems.js instead, for the packing-checklist tab.
 //
 // category/subcategory match Tyler's taxonomy (see CATEGORY_ORDER below for display order and
-// icons). A few existing items predate that taxonomy and were retagged into it; a few categories
-// in the taxonomy (School Supplies, Bathroom) have zero placeable items — everything in those is
-// checklist-only — so they never show up here.
+// icons). A few existing items predate that taxonomy and were retagged into it; School Supplies
+// still has zero placeable items — everything in it is checklist-only, so it never shows up here.
+// Bathroom used to be the same way, until the Shower Caddy placeholder below gave it its first
+// real entry.
 //
 // Tiered items (curated-research pass, see curated-research-FINAL.md): a conceptual item that
 // research turned up real budget/moderate/premium picks for (e.g. "Mattress Topper") is 3 separate
@@ -51,6 +52,7 @@ export const CATEGORY_ORDER = [
   'Kitchen & Food',
   'Cleaning Supplies',
   'Laundry',
+  'Bathroom',
   'Sleep & Comfort',
   'Entertainment',
   'Decor',
@@ -149,7 +151,26 @@ export const CATALOG = [
   { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'pillowcase-set', name: 'Pillowcase Set', price: 12, retailer: 'Target', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
+  // Pillowcases — ✅ final-links pass (2026-08-25). Previously a single untiered stub; Tyler
+  // supplied real budget/moderate/premium links so it's now a proper tiered group like the other
+  // Bedding items above. Prices are market estimates (Amazon's rendered price wasn't visible via
+  // fetch) — flagged for double-check once real pricing is confirmed, same as other estimated
+  // items noted at the top of this file.
+  { id: 'pillowcase-set-budget', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'budget', name: 'Pillow Cases Queen Size Set of 4', price: 10, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07RZSGV99', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
+  { id: 'pillowcase-set', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'moderate', name: 'Pillow Cases Queen Size Set of 12', price: 18, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00XK9CXSA', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
+  { id: 'pillowcase-set-premium', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'premium', name: 'Boll & Branch Signature Hemmed Pillowcase Set', price: 59, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DTBTCL9X', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
+  // Blanket/Throw — ✅ final-links pass. New tiered group, layered on top of the comforter the
+  // same way the comforter itself layers onto the sheet set.
+  { id: 'blanket-throw-budget', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'budget', name: 'Bedsure Fleece Throw Blanket', price: 15, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0C1YZJJ5L', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'blanket-throw', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'moderate', name: 'SAMIAH LUXE Chunky Knit Throw Blanket', price: 40, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08RRPQHLC', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'blanket-throw-premium', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'premium', name: 'Cozy Earth Cuddle Blanket', price: 199, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DSGLSN1R', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  // Decorative Pillows — ✅ final-links pass. Only budget has a specific product; moderate/premium
+  // share one generic Target search link (no specific product identified for those two tiers) —
+  // per Tyler's instruction, both point at the same target.com search rather than a fabricated
+  // product pick. Still a real 3-entry tiered group so the tier-picker UI renders normally.
+  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CVVVNB9L', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
   // Blanket/Comforter Organizer — new addition from the final-links pass (not part of the
   // original researched category list). Filed under Bedding/Storage since it's meant to pair
   // with the comforter/sheet items above (off-season storage), not general room storage. Price
@@ -220,7 +241,7 @@ export const CATALOG = [
       { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9 }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with
       { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 3.65 }, // top bunk mattress — fixed, same reason
     ],
-    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter'],
+    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
   // Storage Bins — ✅ fully researched. Mapped onto the existing under-bed-bins slot as the
   // closest match to the research's generic "Storage Bins" category; premium ($30) is cheaper
@@ -229,8 +250,16 @@ export const CATALOG = [
   { id: 'underbed-bins-budget', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'budget', name: 'Amazon Basics Collapsible Fabric Storage Bins (6-Pack)', price: 14, retailer: 'Amazon', productUrl: null, dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
   { id: 'underbed-bins', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'moderate', name: 'Target Brightroom 3-Drawer Wide Cart', price: 84, retailer: 'Target', productUrl: 'https://www.target.com/p/3-drawer-wide-cart-white-brightroom/-/A-84242464', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
   { id: 'underbed-bins-premium', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'premium', name: 'IRIS USA Stackable Storage Drawers', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B09C2QM669', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cardboardBoxClosed.glb', relatedIds: ['bed-full'] },
-  { id: 'storage-drawers', name: 'Rolling Storage Drawers', price: 45, retailer: 'Amazon', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
+  // Under-bed Storage Drawers — ✅ final-links pass. Single confirmed product, one tier — real
+  // link/name swapped in for the old generic "Rolling Storage Drawers" placeholder.
+  { id: 'storage-drawers', name: 'Sterilite Wide 3 Drawer Storage Tower', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0B7GRWSVJ', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/cabinetBedDrawer.glb', relatedIds: ['dresser'] },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb', relatedIds: ['bed-full', 'desk-lamp'] },
+  // Bed Risers / Bedside Caddy — ✅ final-links pass. Both were checklist-only stubs before;
+  // Tyler supplied real single-product links so they're promoted to real placeable entries, same
+  // treatment desk-organizer/monitor-stand got in an earlier pass. Prices are market estimates
+  // (Amazon's rendered price wasn't visible via fetch) — flagged for double-check.
+  { id: 'bed-risers', name: 'EclatBain Adjustable Bed Risers (4-Pack)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DLNBJ6K9', dims: [0.4, 0.4, 0.4], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', relatedIds: ['bed-full', 'colgate-bed', 'storage-drawers'] },
+  { id: 'bedside-caddy', name: 'Lazzanto Bedside Caddy', price: 50, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DMRNCLFK', dims: [1.2, 1.0, 1.8], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', relatedIds: ['bed-full', 'colgate-bed', 'nightstand'] },
   { id: 'dresser', name: 'Dresser', price: 129, retailer: 'IKEA', dims: [2.6, 2.0, 2.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/kitchenCabinetDrawer.glb', relatedIds: ['mirror'] },
   // Same real item/model as Colgate's provided "Stackable Chest" (see PROVIDED_CATALOG below) —
   // this is the purchasable version, for a student who wants a second one or whose room didn't
@@ -245,7 +274,8 @@ export const CATALOG = [
   // remaining-longtail-picks.md) — single entry, same "no productUrl yet" convention as every
   // other unlinked item until Tyler grabs a real listing.
   { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [1.5, 0.3, 4.0], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
-  { id: 'shoe-rack', name: 'Shoe Rack', price: 29, retailer: 'Target', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb', relatedIds: ['wardrobe'] },
+  // Shoe Rack — ✅ final-links pass, real single-product link (was generic-search-only before).
+  { id: 'shoe-rack', name: 'Bumusty 3-Tier Expandable Shoe Rack', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CRGSVFY7', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseOpenLow.glb', relatedIds: ['wardrobe'] },
   // Laundry Hamper — ✅ fully researched, though the doc didn't list prices for any of the three
   // picks — the prices below are market estimates, not sourced (see the note at the top of this
   // file); double-check them along with productUrl.
@@ -276,7 +306,9 @@ export const CATALOG = [
   { id: 'cable-management-box', name: 'Bamboo Cable Management Box', price: 25, retailer: 'Amazon', productUrl: null, dims: [1.3, 0.6, 0.5], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'desk-hutch'] },
   { id: 'desk-hutch', name: 'Smart Charging Desk Hutch', price: 89, retailer: 'Amazon', productUrl: null, dims: [2.5, 0.8, 1.8], color: 0xe8e0cf, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'cable-management-box'] },
   { id: 'rolling-cart', name: 'Rolling Storage Cart', price: 39, retailer: 'Amazon', dims: [1.3, 1.3, 2.8], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'General Storage', relatedIds: ['chk:fabric-bins'] },
-  { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Target', dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb', relatedIds: ['throw-pillow', 'rug'] },
+  // Storage Ottoman — Type C generic search (no specific product per Tyler's final-links pass);
+  // retailer switched Target → Amazon so catalogItemLink()'s generic-search fallback matches.
+  { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb', relatedIds: ['throw-pillow', 'rug'] },
   { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   { id: 'lamp-square', name: 'Square Floor Lamp', price: 39, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampSquareFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   // Desk Lamp — ✅ fully researched.
@@ -288,7 +320,26 @@ export const CATALOG = [
   // that isn't at the desk."
   { id: 'accent-chair', name: 'Accent Chair', price: 149, retailer: 'IKEA', dims: [2.6, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeChair.glb', relatedIds: ['lamp', 'rug', 'throw-pillow'] },
   { id: 'loveseat', name: 'Loveseat', price: 299, retailer: 'Amazon', dims: [4.3, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
-  { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Best Buy', dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', relatedIds: ['chk:streaming-device', 'chk:gaming-console', 'bluetooth-speaker'] },
+  // TV — Type C generic search; retailer switched Best Buy → Amazon per Tyler's final-links pass.
+  // canWallMount (not wallMountable): the TV starts on the floor like any normal item, but the
+  // selection panel's "Mount on wall" button (App.jsx) can flip a *placed instance* into wall
+  // mode — see roomEngine.js's setWallMounted. wallMountable, by contrast, means an item is
+  // *always* wall-mounted with no floor mode at all (poster, mirror, etc. below) — the TV needs
+  // both, so it gets this separate flag instead.
+  // wallMountClipFraction: televisionModern.glb is a single fused mesh (stand + screen, no
+  // separate node — checked, so cat.hideNodes can't target just the stand) with its stand
+  // occupying the bottom ~40% of its own modeled height. Rather than ship it wall-mounted with
+  // its floor stand visibly dangling on the wall, roomEngine.js clips away everything below this
+  // fraction of the item's height once it's wall-mounted (see _setWallMountClipActive/
+  // _updateWallMountClips) — 0.4 lands the cut right at the seam between the stand/neck and the
+  // screen's own bottom bezel, so the screen keeps its real (already-closed) bottom face instead
+  // of getting sliced open. The real fix is a Blender re-export with the stand as its own node
+  // (or a dedicated wall-mount model); this is damage control until then.
+  { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Amazon', productUrl: null, dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', canWallMount: true, wallMountClipFraction: 0.4, relatedIds: ['chk:streaming-device', 'gaming-console', 'bluetooth-speaker'] },
+  // Gaming Console — Type C generic search. Previously checklist-only ('chk:gaming-console');
+  // Tyler wants it as a real placeable entry now, same promotion desk-organizer/monitor-stand got
+  // in an earlier pass. No specific product — price is a rough market estimate.
+  { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.0, 0.3], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', relatedIds: ['tv', 'bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.
@@ -300,7 +351,10 @@ export const CATALOG = [
   { id: 'microwave-budget', groupId: 'microwave', groupLabel: 'Microwave', tier: 'budget', name: 'Chefman Compact Microwave', price: 60, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DY95T5HB', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
   { id: 'microwave', groupId: 'microwave', groupLabel: 'Microwave', tier: 'moderate', name: 'Farberware 1000W Microwave', price: 80, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B01EIZSF6I', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
   { id: 'microwave-premium', groupId: 'microwave', groupLabel: 'Microwave', tier: 'premium', name: 'Toshiba Microwave', price: 100, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B076VB5JFQ', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
-  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Target', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['electric-kettle', 'fridge'] },
+  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['electric-kettle', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'air-fryer', name: 'Air Fryer', price: 79, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.0, 1.0, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['fridge', 'microwave'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'rice-cooker', name: 'Rice Cooker', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.8, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['fridge', 'microwave'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'toaster', name: 'Toaster', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.0, 0.6, 0.7], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
   // Electric Kettle — ✅ fully researched category, but the doc didn't list prices for any of the
   // three picks — estimates, not sourced (see note at top of file).
   { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07PHRH6TL', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
@@ -308,18 +362,28 @@ export const CATALOG = [
   { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Meedome Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0HB5PWW2H', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
 
   // ---- Cleaning Supplies ----
-  { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] },
+  { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', productUrl: 'https://www.amazon.com', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] }, // TODO: placeholder link, replace with real product/search link
   { id: 'handheld-vacuum', name: 'Handheld Vacuum', price: 45, retailer: 'Target', dims: [0.5, 1.1, 0.6], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', relatedIds: ['trash-can'] },
 
   // ---- Laundry ----
-  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/coatRackStanding.glb', relatedIds: ['hamper', 'chk:detergent'] },
+  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/coatRackStanding.glb', relatedIds: ['hamper', 'chk:detergent'] }, // TODO: placeholder link, replace with real product/search link
   { id: 'ironing-board', name: 'Ironing Board', price: 30, retailer: 'Amazon', dims: [4.0, 1.1, 2.9], color: 0xd8d8d8, category: 'Laundry', subcategory: 'Optional', relatedIds: ['chk:iron'] },
 
+  // ---- Bathroom ----
+  // Shower Caddy — placeholder link for now. Tyler has real tiered research for this one already
+  // (Attmu/EUDELE/Rejomiik, see curated-research-FINAL.md) but is deliberately deferring wiring it
+  // in until later — this entry exists now purely so modeling can proceed unblocked. First real
+  // placeable item in Bathroom (see the CATEGORY_ORDER/note above).
+  { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.5, 1.5], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', relatedIds: ['chk:shower-shoes'] }, // TODO: placeholder link, replace with real product/search link
+
   // ---- Sleep & Comfort ----
-  // Fan — ⚠️ reasonable pick, not tiered (research flags this as a commodity category where a
-  // deep roundup wouldn't change the answer) — single entry, renamed to the researched "moderate"
-  // pick since it's the most broadly useful of the three options mentioned.
-  { id: 'fan', name: 'Tower Fan (Multi-Speed, Remote)', price: 35, retailer: 'Amazon', productUrl: null, dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['chk:humidifier'] },
+  // Fan — placeholder link for now, per Tyler's final-links pass (was previously an untiered
+  // "reasonable pick" with no link at all — now flagged for a real link like the other Type D
+  // placeholders, since Tyler's tiered fan research still hasn't been wired in either).
+  { id: 'fan', name: 'Tower Fan (Multi-Speed, Remote)', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['humidifier'] }, // TODO: placeholder link, replace with real product/search link
+  // Humidifier — placeholder link for now. Was checklist-only before; promoted since it has a
+  // real physical footprint worth placing, same as the other Type D promotions in this pass.
+  { id: 'humidifier', name: 'Humidifier', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.8, 1.2], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['fan'] }, // TODO: placeholder link, replace with real product/search link
 
   // ---- Entertainment ----
   { id: 'instrument', name: 'Musical Instrument', price: 199, retailer: 'Amazon', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['shelf'] },
@@ -338,7 +402,10 @@ export const CATALOG = [
   { id: 'rug-square', name: 'Square Rug', price: 45, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugSquare.glb', relatedIds: ['throw-pillow'] },
   { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
   { id: 'throw-pillow', name: 'Throw Pillow', price: 15, retailer: 'Target', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pillow.glb', relatedIds: ['loveseat', 'accent-chair'] },
-  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['dresser'] },
+  // Mirror — placeholder link for now. Tyler has real tiered research already (see
+  // curated-research-FINAL.md) but is deliberately deferring wiring it in until later, same as
+  // Shower Caddy and Fan above — this just unblocks modeling.
+  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', productUrl: 'https://www.amazon.com', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['dresser'] }, // TODO: placeholder link, replace with real product/search link
   { id: 'poster', name: 'Poster', price: 12, retailer: 'Amazon', dims: [2.0, 0.05, 2.7], color: 0x4d6373, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster-landscape', 'flag'] },
   { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
   { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
@@ -355,7 +422,11 @@ export const CATALOG = [
   { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'ILPEOD Basic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FZ9R3SNH', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FXXCCB7J', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08T7L23Z7', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['bev-cooler', 'fridge'] },
+  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['bev-cooler', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
+  // Vanity/Makeup Desk & Printer — placeholder link for now, per Tyler's final-links pass; new
+  // catalog entries purely to unblock modeling (see Type D note at the top of this file's session).
+  { id: 'vanity-desk', name: 'Vanity/Makeup Desk', price: 99, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [2.6, 1.3, 2.4], color: 0xe8e0cf, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['mirror', 'desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'printer', name: 'Printer', price: 79, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 0.8], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk'] }, // TODO: placeholder link, replace with real product/search link
   { id: 'bev-cooler', name: 'Beverage Cooler', price: 89, retailer: 'Best Buy', dims: [1.6, 1.6, 2.6], color: 0xe4e4e4, category: 'Optional Luxury Items', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['snack-cart'] },
 ]
 
@@ -420,7 +491,7 @@ export const PROVIDED_CATALOG = [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
       { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
     ],
-    relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'chk:pillowcases', 'chk:comforter', 'chk:bed-risers'],
+    relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter', 'bed-risers'],
   },
   { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, hasLegroom: true, relatedIds: ['lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },
   { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateChair.glb', tintMaterial: true, isChair: true, relatedIds: ['colgate-desk'] },
