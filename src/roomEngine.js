@@ -1981,7 +1981,7 @@ export class RoomEngine {
   stackItemOn(sourceUid, targetUid) {
     if (sourceUid === targetUid) return
     const source = this.placedItems.find((p) => p.uid === sourceUid)
-    const target = this.placedItems.find((p) => p.uid === targetUid)
+    let target = this.placedItems.find((p) => p.uid === targetUid)
     if (!source || !target) return
     // Refuse to stack an item onto one of its own descendants (would create a cycle).
     let ancestor = target
@@ -1990,6 +1990,25 @@ export class RoomEngine {
       ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
     }
     const sourceCat = ALL_ITEMS.find((c) => c.id === source.catalogId)
+    // A comforter fully covers whatever fitted sheet is underneath it in real life, so stacking one
+    // on top of already-placed sheets (same groupId concept as catalog.js's undressed-bed check)
+    // would just show two redundant "made bed" layers. Remove the sheets instead and attach the
+    // comforter exactly where they were — walking the whole chain down from target, not just target
+    // itself, since the sheets are usually but not necessarily the current top of the stack.
+    if (sourceCat && sourceCat.groupId === 'comforter') {
+      let cur = target
+      while (cur) {
+        const curCat = ALL_ITEMS.find((c) => c.id === cur.catalogId)
+        if (curCat && curCat.groupId === 'sheet-set') {
+          const sheetBaseUid = cur.stackedOnUid
+          this.removeItem(cur.uid)
+          target = this.placedItems.find((p) => p.uid === sheetBaseUid)
+          break
+        }
+        cur = cur.stackedOnUid != null ? this.placedItems.find((p) => p.uid === cur.stackedOnUid) : null
+      }
+      if (!target) return
+    }
     // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
     // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
     if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
@@ -2002,10 +2021,14 @@ export class RoomEngine {
       const surfaceDims = (targetCat && targetCat.mattressDims) || target.mesh.userData.dims
       this._refitFootprint(source, sourceCat, surfaceDims)
     }
-    source.mesh.position.y = this._topSurfaceY(target)
+    // embedRatio (sheets, comforter — see catalog.js) sinks a chunky, scanned-fabric model further
+    // into its base than the universal edge-rounding STACK_SINK alone would — a fitted sheet or
+    // comforter is meant to hug the mattress/topper underneath it, not perch fully on top of it.
+    const embed = sourceCat && sourceCat.embedRatio ? sourceCat.embedRatio * sourceCat.dims[2] : 0
+    source.mesh.position.y = this._topSurfaceY(target) - embed
     source.mesh.position.x = target.mesh.position.x
     source.mesh.position.z = target.mesh.position.z
-    source.stackedOnUid = targetUid
+    source.stackedOnUid = target.uid
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
 
@@ -2017,7 +2040,9 @@ export class RoomEngine {
     if (!parent) return
     const topY = this._topSurfaceY(parent)
     this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
-      child.mesh.position.y = topY
+      const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
+      const embed = childCat && childCat.embedRatio ? childCat.embedRatio * childCat.dims[2] : 0
+      child.mesh.position.y = topY - embed
       child.mesh.position.x = parent.mesh.position.x
       child.mesh.position.z = parent.mesh.position.z
       this._restackAbove(child.uid)
@@ -2066,7 +2091,10 @@ export class RoomEngine {
   _applyPose(group, cat, pose) {
     const pivot = group.userData.posePivot
     if (!pivot) return
-    const angle = POSE_ANGLES[pose] ?? 0
+    // poseFlip (see catalog.js — pillowBest.glb needs it, throwPillow.glb doesn't) mirrors the
+    // lean/stand direction for a model whose own "front" faces the opposite local way, so the same
+    // diagonal/upright angles still tip it the correct direction instead of the wrong one.
+    const angle = (POSE_ANGLES[pose] ?? 0) * (cat.poseFlip ? -1 : 1)
     const [, d, h] = cat.dims
     pivot.rotation.x = angle
     pivot.position.y = (h / 2) * Math.abs(Math.cos(angle)) + (d / 2) * Math.abs(Math.sin(angle))
