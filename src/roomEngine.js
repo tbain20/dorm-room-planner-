@@ -56,6 +56,10 @@ const COLLISION_EPSILON = 0.01
 const WALL_OPACITY_NORMAL = 0.4
 const WALL_OPACITY_NEAR = 0.05
 
+// Pillow pose presets (see catalog.js's hasPoseOptions / setItemPose below) — rotation around
+// local X applied to a pose pivot wrapping the loaded model.
+const POSE_ANGLES = { flat: 0, diagonal: -Math.PI / 6, upright: -Math.PI / 2 }
+
 const SELECTION_COLOR = 0xc1502e // normal selection outline
 const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, distinct from both
 // the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
@@ -65,13 +69,16 @@ const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, di
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
 export class RoomEngine {
-  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange, onMeasureChange, unitSystem }) {
+  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange, onMeasureChange, onNotice, unitSystem }) {
     this.container = container
     this.onCartChange = onCartChange || (() => {})
     this.onSelectionChange = onSelectionChange || (() => {})
     this.onFeatureSelectionChange = onFeatureSelectionChange || (() => {})
     this.onStackPickModeChange = onStackPickModeChange || (() => {})
     this.onMeasureChange = onMeasureChange || (() => {})
+    // Fired for a user-facing transient notice that isn't tied to the selection panel — currently
+    // just "no bed in the room yet" when a bedOnly item (see catalog.js) can't auto-place itself.
+    this.onNotice = onNotice || (() => {})
     // Display unit for every on-model/measuring-tool label (see units.js) — App.jsx's Units
     // selector calls setUnitSystem() to change this later; the labels it currently controls get
     // redrawn immediately (see setUnitSystem below) so switching updates on-screen text right away.
@@ -625,7 +632,24 @@ export class RoomEngine {
           // opaque floor occludes anything below y=0 and the camera can never see under it (phi is
           // clamped well above straight-down in _initInteraction).
           if (cat.floorNudge) gltf.scene.position.y -= cat.floorNudge
-          group.add(gltf.scene)
+          // Kept so later per-instance operations (matchBaseFootprint's _refitFootprint, the
+          // color swatch picker's setItemColor) can find the real model root without guessing
+          // child order/wrapping.
+          group.userData.primaryModel = gltf.scene
+          // hasPoseOptions (a pillow with flat/diagonal/upright poses — see catalog.js) wraps the
+          // model in its own pivot group, recentered on its own half-height, so setItemPose can
+          // rotate it around its center without disturbing the outer group's own Y-rotation (used
+          // for room placement) or its floor alignment.
+          if (cat.hasPoseOptions) {
+            const pivot = new THREE.Group()
+            gltf.scene.position.y -= cat.dims[2] / 2
+            pivot.add(gltf.scene)
+            group.userData.posePivot = pivot
+            group.add(pivot)
+            this._applyPose(group, cat, 'flat')
+          } else {
+            group.add(gltf.scene)
+          }
 
           // extraModels fuses additional models onto this one as a single placeable item — e.g. a
           // bed's slat base + mattress, or the bunk bed's top frame — each sized to its own real
@@ -836,6 +860,39 @@ export class RoomEngine {
     mesh.position.z = Math.max(baseZ - halfDiffD, Math.min(baseZ + halfDiffD, mesh.position.z))
   }
 
+  // Resizes a matchBaseFootprint item's own footprint (w,d) in place, keeping its own authored
+  // thickness (cat.dims[2]) — used whenever it's (re)stacked (see stackItemOn) so a topper/sheet
+  // always matches the exact mattress/surface underneath it.
+  //
+  // fitModelToDims isn't idempotent — it derives scale from the object's *current* world-space
+  // size (see modelFit.js), so calling it again on an already-fitted model without first resetting
+  // scale/position back to identity would compound instead of landing on the new target size.
+  _refitFootprint(item, cat, [w, d]) {
+    const h = cat.dims[2]
+    if (cat.modelUrl) {
+      const model = item.mesh.userData.primaryModel
+      if (model) {
+        model.position.set(0, 0, 0)
+        model.scale.set(1, 1, 1)
+        if (cat.modelRotationY) model.rotation.y = cat.modelRotationY
+        this._fitModelToDims(model, [w, d, h])
+        if (cat.floorNudge) model.position.y -= cat.floorNudge
+      }
+    } else {
+      // Box placeholder (e.g. sheet-set, which has no model) — swap geometry directly rather than
+      // rescaling, and rebuild the edge outline so it isn't left showing the old footprint's size.
+      item.mesh.geometry.dispose()
+      item.mesh.geometry = new THREE.BoxGeometry(w, h, d)
+      const oldEdges = item.mesh.children.find((c) => c.isLineSegments)
+      if (oldEdges) {
+        item.mesh.remove(oldEdges)
+        oldEdges.geometry.dispose()
+      }
+      item.mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(item.mesh.geometry), new THREE.LineBasicMaterial({ color: 0x1b2a38 })))
+    }
+    item.mesh.userData.dims = [w, d, h]
+  }
+
   // Alignment aid for dragging a floor item near another one — independent X and Z snapping, each
   // only considered when the item's footprint on the *other* axis would actually overlap the
   // other item's (so it only kicks in when they're plausibly sliding into side-by-side contact,
@@ -879,9 +936,59 @@ export class RoomEngine {
     return { x, z }
   }
 
+  // A bed's mattress footprint, "which bed still needs this item", and "what's currently the
+  // topmost layer on a given bed" — the three pieces addItem needs to auto-snap a bedOnly item
+  // (mattress topper, sheets, comforter, pillows, throw blanket — see catalog.js) straight onto a
+  // bed instead of dropping it loose on the floor.
+  _findBedAutoStackTarget(cat) {
+    const beds = this.placedItems.filter((p) => {
+      const c = ALL_ITEMS.find((x) => x.id === p.catalogId)
+      return c && c.isBed
+    })
+    if (!beds.length) return null
+    // Prefer a bed that doesn't already have this concept (groupId) dressed on it, so adding e.g.
+    // a second comforter to a two-bed room dresses the *other* bed rather than double-stacking.
+    const undressed = beds.find((bed) => !this._stackChainHasGroup(bed.uid, cat.groupId))
+    return this._topOfStack((undressed || beds[beds.length - 1]).uid)
+  }
+
+  _stackChainHasGroup(uid, groupId) {
+    if (!groupId) return false
+    let current = this.placedItems.find((p) => p.uid === uid)
+    while (current) {
+      const cat = ALL_ITEMS.find((c) => c.id === current.catalogId)
+      if (cat && cat.groupId === groupId) return true
+      current = this.placedItems.find((p) => p.stackedOnUid === current.uid)
+    }
+    return false
+  }
+
+  _topOfStack(uid) {
+    let current = this.placedItems.find((p) => p.uid === uid)
+    while (current) {
+      const child = this.placedItems.find((p) => p.stackedOnUid === current.uid)
+      if (!child) return current
+      current = child
+    }
+    return null
+  }
+
   addItem(catId) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
+    if (cat.bedOnly) {
+      const target = this._findBedAutoStackTarget(cat)
+      if (!target) {
+        this.onNotice('Add a bed to the room first.')
+        return
+      }
+      this._loadItemMesh(cat, (mesh) => {
+        const uid = this._registerItem(mesh, cat)
+        this.stackItemOn(uid, target.uid)
+        this.selectItem(uid)
+      })
+      return
+    }
     this._loadItemMesh(cat, (mesh) => {
       if (cat.wallMountable) {
         this._defaultWallPlacement(mesh, cat)
@@ -1114,7 +1221,11 @@ export class RoomEngine {
     // wallMounted only ever flips true for a cat.canWallMount item (e.g. the TV) via
     // setWallMounted below — a plain cat.wallMountable item (poster, mirror, ...) is wall-placed
     // from the moment it's added and never reads this field at all (see _isWallMounted).
-    this.placedItems.push({ mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false, wallMounted: false })
+    this.placedItems.push({
+      mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false, wallMounted: false,
+      pillowPose: cat.hasPoseOptions ? 'flat' : undefined,
+      colorHex: cat.colorable ? cat.color : undefined,
+    })
     this._clampItemToRoom(mesh)
     this._emitCart()
     return uid
@@ -1188,6 +1299,13 @@ export class RoomEngine {
       src.mesh.rotation.y,
       (uid) => {
         if (src.bedHeightLevel && src.bedHeightLevel !== 'standard') this.setBedHeight(uid, src.bedHeightLevel)
+        if (src.colorHex != null) this.setItemColor(uid, src.colorHex)
+        if (src.pillowPose && src.pillowPose !== 'flat') this.setItemPose(uid, src.pillowPose)
+        // bedOnly items (see catalog.js) can't exist un-stacked — re-attach the duplicate to
+        // whatever the original was resting on instead of leaving it floating on the floor.
+        if (cat.bedOnly && src.stackedOnUid != null && this.placedItems.find((p) => p.uid === src.stackedOnUid)) {
+          this.stackItemOn(uid, src.stackedOnUid)
+        }
         this.selectItem(uid)
       },
       this._isWallMounted(src, cat) ? src.mesh.position.y : undefined
@@ -1208,6 +1326,9 @@ export class RoomEngine {
       rotY: src.mesh.rotation.y,
       bedHeightLevel: src.bedHeightLevel,
       wallMounted: src.wallMounted,
+      colorHex: src.colorHex,
+      pillowPose: src.pillowPose,
+      stackedOnUid: src.stackedOnUid,
     }
   }
 
@@ -1223,6 +1344,11 @@ export class RoomEngine {
     const OFFSET = 1
     this.addItemAt(c.catalogId, c.x + OFFSET, c.z + OFFSET, c.rotY, (uid) => {
       if (c.bedHeightLevel && c.bedHeightLevel !== 'standard') this.setBedHeight(uid, c.bedHeightLevel)
+      if (c.colorHex != null) this.setItemColor(uid, c.colorHex)
+      if (c.pillowPose && c.pillowPose !== 'flat') this.setItemPose(uid, c.pillowPose)
+      if (cat.bedOnly && c.stackedOnUid != null && this.placedItems.find((p) => p.uid === c.stackedOnUid)) {
+        this.stackItemOn(uid, c.stackedOnUid)
+      }
       this.selectItem(uid)
     }, this._isWallMounted(c, cat) ? c.y : undefined)
     c.x += OFFSET
@@ -1547,6 +1673,18 @@ export class RoomEngine {
   //    wanted layout, not a fit problem — its backrest is routinely taller than the desk itself,
   //    so no height crop could ever make that pair stop registering as touching. These pairs are
   //    exempted outright in _updateCollisions rather than modeled geometrically.
+  // True if `item` sits somewhere in `maybeAncestor`'s stack (its direct base, or its base's base,
+  // and so on) — used by _updateCollisions below to exempt an entire stacking chain, not just
+  // adjacent pairs, from the collision tint.
+  _isStackedRelative(item, maybeAncestor) {
+    let cur = item
+    while (cur && cur.stackedOnUid != null) {
+      if (cur.stackedOnUid === maybeAncestor.uid) return true
+      cur = this.placedItems.find((p) => p.uid === cur.stackedOnUid)
+    }
+    return false
+  }
+
   // A cheap whole-object broad-phase check still runs first so the per-submesh narrow phase only
   // runs for pairs that are anywhere near each other at all — see the Your Room testing note on
   // checking this stays smooth with 10+ items placed.
@@ -1558,10 +1696,15 @@ export class RoomEngine {
     const colliding = new Array(n).fill(false)
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
-        // A stacked item resting directly on its base (e.g. a pillow on a bed) touches it by
-        // design — Box3.intersectsBox() counts touching boundaries as intersecting, so without
-        // this exclusion every legitimately stacked pair would permanently show as "doesn't fit."
-        if (items[i].stackedOnUid === items[j].uid || items[j].stackedOnUid === items[i].uid) continue
+        // A stacked item resting on its base (e.g. a pillow on a bed) touches it by design —
+        // Box3.intersectsBox() counts touching boundaries as intersecting, so without this
+        // exclusion every legitimately stacked pair would permanently show as "doesn't fit." Walks
+        // the whole ancestor chain, not just the immediate parent — a multi-layer bedding stack
+        // (bed → topper → sheet → comforter → pillow, see catalog.js's bedOnly/matchBaseFootprint)
+        // means a sheet's *direct* base is the topper, but it still isn't "colliding" with the bed
+        // two levels down; only checking direct parents left every non-adjacent pair in a stack
+        // falsely tinted red.
+        if (this._isStackedRelative(items[i], items[j]) || this._isStackedRelative(items[j], items[i])) continue
         // A desk chair slid in under a desk — see the note above on why height clearance can't
         // model this pair, so it's exempted outright instead.
         if ((cats[i]?.isChair && cats[j]?.hasLegroom) || (cats[j]?.isChair && cats[i]?.hasLegroom)) continue
@@ -1748,6 +1891,8 @@ export class RoomEngine {
       bedHeightLevel: this.selected.bedHeightLevel,
       locked: this.selected.locked,
       wallMounted: this.selected.wallMounted,
+      colorHex: this.selected.colorHex,
+      pillowPose: this.selected.pillowPose,
     })
   }
 
@@ -1791,6 +1936,14 @@ export class RoomEngine {
       const topOffset = movable.reduce((max, m) => Math.max(max, m.stackOffset + m.thickness), 0)
       return placedItem.mesh.position.y + cat.bedHeights[level] + topOffset
     }
+    // A bed with no bedHeights (e.g. bed-bunk) still has a real fused mattress sitting below the
+    // top of its overall footprint — isMattressSurface (see catalog.js) flags which fixed-yOffset
+    // extraModels entry that is, so stacking lands on the actual sleep surface instead of the top
+    // of the whole frame (which, for a bunk, would be the top bunk's headboard).
+    if (cat && cat.extraModels) {
+      const surface = cat.extraModels.find((e) => e.isMattressSurface)
+      if (surface) return placedItem.mesh.position.y + surface.yOffset + surface.dims[2]
+    }
     return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2]
   }
 
@@ -1808,6 +1961,19 @@ export class RoomEngine {
     while (ancestor) {
       if (ancestor.uid === sourceUid) return
       ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
+    }
+    const sourceCat = ALL_ITEMS.find((c) => c.id === source.catalogId)
+    // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
+    // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
+    if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
+    // matchBaseFootprint (mattress topper, sheets) always resizes to the exact surface it's
+    // currently resting on — the bed's real mattressDims if stacked directly on a bed, or whatever
+    // the base's own current footprint is (e.g. a topper already matched, for sheets stacked atop
+    // it) otherwise.
+    if (sourceCat && sourceCat.matchBaseFootprint) {
+      const targetCat = ALL_ITEMS.find((c) => c.id === target.catalogId)
+      const surfaceDims = (targetCat && targetCat.mattressDims) || target.mesh.userData.dims
+      this._refitFootprint(source, sourceCat, surfaceDims)
     }
     source.mesh.position.y = this._topSurfaceY(target)
     source.mesh.position.x = target.mesh.position.x
@@ -1864,6 +2030,45 @@ export class RoomEngine {
     if (this.selected && this.selected.uid === uid) this._emitSelection()
   }
 
+  // Pillow pose presets (flat/diagonal/upright — see catalog.js's hasPoseOptions and POSE_ANGLES
+  // near the top of this file). Rotates the pivot set up in _loadItemMesh around local X, then
+  // lifts it so the model's bottom stays flush with whatever surface it's resting on at any angle
+  // — a box approximation (half-height/half-depth swept by the rotation) rather than a true mesh-
+  // specific bound, close enough for a pillow-shaped model and avoids re-measuring the loaded
+  // geometry on every pose change.
+  _applyPose(group, cat, pose) {
+    const pivot = group.userData.posePivot
+    if (!pivot) return
+    const angle = POSE_ANGLES[pose] ?? 0
+    const [, d, h] = cat.dims
+    pivot.rotation.x = angle
+    pivot.position.y = (h / 2) * Math.abs(Math.cos(angle)) + (d / 2) * Math.abs(Math.sin(angle))
+  }
+
+  setItemPose(uid, pose) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (!cat || !cat.hasPoseOptions || POSE_ANGLES[pose] === undefined) return
+    this._applyPose(item.mesh, cat, pose)
+    item.pillowPose = pose
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
+  }
+
+  // Per-instance color override (comforter/pillows/sheets/throw blanket — see catalog.js's
+  // colorable) — tintModel's traverse works generically whether the target is a glTF Group
+  // (primaryModel) or a bare placeholder Mesh (sheet-set has no model), so one code path covers
+  // every colorable item.
+  setItemColor(uid, hex) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (!cat || !cat.colorable) return
+    this._tintModel(item.mesh.userData.primaryModel || item.mesh, hex)
+    item.colorHex = hex
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
+  }
+
   _emitCart() {
     const items = this.placedItems.map((p) => ({
       uid: p.uid,
@@ -1896,6 +2101,8 @@ export class RoomEngine {
           stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
           bedHeightLevel: p.bedHeightLevel,
           locked: p.locked,
+          colorHex: p.colorHex,
+          pillowPose: p.pillowPose,
         }
       }),
       features: this.wallFeatures.map((f) => ({
@@ -1980,6 +2187,8 @@ export class RoomEngine {
             const placed = this.placedItems.find((p) => p.uid === uid)
             if (placed) placed.locked = true
           }
+          if (it.colorHex != null) this.setItemColor(uid, it.colorHex)
+          if (it.pillowPose && it.pillowPose !== 'flat') this.setItemPose(uid, it.pillowPose)
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
         }, it.y)

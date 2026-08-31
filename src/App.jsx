@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
@@ -238,6 +238,9 @@ export default function App() {
   const [selection, setSelection] = useState(null)
   const [featureSelection, setFeatureSelection] = useState(null)
   const [relatedNotice, setRelatedNotice] = useState('')
+  // Transient toast for engine-level notices not tied to any selection (currently just "add a bed
+  // first" when a bedOnly item — see catalog.js — can't auto-place itself). Auto-clears itself.
+  const [notice, setNotice] = useState('')
   const [showDimensions, setShowDimensions] = useState(false)
   // Collapses the selection panel's body down to just its header (name + meta), leaving the rest
   // of the 3D view visible — matters most on mobile, where the panel becomes a bottom sheet (see
@@ -391,6 +394,10 @@ export default function App() {
       onFeatureSelectionChange: setFeatureSelection,
       onStackPickModeChange: setStackPickForUid,
       onMeasureChange: setMeasureState,
+      onNotice: (msg) => {
+        setNotice(msg)
+        setTimeout(() => setNotice(''), 3000)
+      },
       unitSystem,
     })
     engineRef.current = engine
@@ -1270,6 +1277,17 @@ export default function App() {
   return (
     <div id="app">
       <div id="canvas-wrap" ref={canvasWrapRef}>
+        {notice && (
+          <div
+            style={{
+              position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 50,
+              background: '#2b2118', color: '#fff', padding: '8px 16px', borderRadius: 999,
+              fontSize: 12.5, fontWeight: 600, boxShadow: '0 4px 14px rgba(0,0,0,0.25)', pointerEvents: 'none',
+            }}
+          >
+            {notice}
+          </div>
+        )}
         <div id="titleblock">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <h1 style={{ margin: roomPlannerCollapsed ? 0 : undefined }}>Room Planner</h1>
@@ -1593,6 +1611,55 @@ export default function App() {
               </div>
             )}
 
+            {selection.cat.colorable && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Color
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {BEDDING_COLOR_SWATCHES.map((hex) => {
+                    const active = (selection.colorHex ?? selection.cat.color) === hex
+                    return (
+                      <button
+                        key={hex}
+                        onClick={() => engineRef.current.setItemColor(selection.uid, hex)}
+                        title={`#${hex.toString(16).padStart(6, '0')}`}
+                        style={{
+                          width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                          background: `#${hex.toString(16).padStart(6, '0')}`,
+                          border: active ? '2px solid var(--accent)' : '1px solid var(--paper-shadow)',
+                          boxShadow: active ? '0 0 0 2px var(--accent-soft)' : 'none',
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {selection.cat.hasPoseOptions && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Pose
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['flat', 'diagonal', 'upright'].map((pose) => (
+                    <button
+                      key={pose}
+                      onClick={() => engineRef.current.setItemPose(selection.uid, pose)}
+                      style={{
+                        flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
+                        background: (selection.pillowPose || 'flat') === pose ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: (selection.pillowPose || 'flat') === pose ? '#fff' : 'var(--ink-soft)',
+                      }}
+                    >
+                      {pose}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selection.cat.canWallMount && (
               <>
                 <button
@@ -1614,30 +1681,39 @@ export default function App() {
               </>
             )}
 
-            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              {selection.stackedOnUid != null ? (
-                <button
-                  style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
-                  onClick={() => engineRef.current.unstackItem(selection.uid)}
-                >
-                  ⬇ Place on floor
-                </button>
-              ) : (
-                <button
-                  style={{
-                    background: stackPickForUid === selection.uid ? 'var(--accent)' : 'var(--paper-shadow)',
-                    color: stackPickForUid === selection.uid ? '#fff' : 'var(--ink-soft)',
-                    flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer',
-                  }}
-                  onClick={() => handleToggleStackPick(selection.uid)}
-                >
-                  {stackPickForUid === selection.uid ? 'Cancel picking…' : '⬆ Put on top of…'}
-                </button>
-              )}
-            </div>
-            {stackPickForUid === selection.uid && (
+            {!selection.cat.bedOnly && (
+              <>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  {selection.stackedOnUid != null ? (
+                    <button
+                      style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
+                      onClick={() => engineRef.current.unstackItem(selection.uid)}
+                    >
+                      ⬇ Place on floor
+                    </button>
+                  ) : (
+                    <button
+                      style={{
+                        background: stackPickForUid === selection.uid ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: stackPickForUid === selection.uid ? '#fff' : 'var(--ink-soft)',
+                        flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer',
+                      }}
+                      onClick={() => handleToggleStackPick(selection.uid)}
+                    >
+                      {stackPickForUid === selection.uid ? 'Cancel picking…' : '⬆ Put on top of…'}
+                    </button>
+                  )}
+                </div>
+                {stackPickForUid === selection.uid && (
+                  <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
+                    Click another item in the room to place {selection.cat.name} on top of it.
+                  </div>
+                )}
+              </>
+            )}
+            {selection.cat.bedOnly && (
               <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
-                Click another item in the room to place {selection.cat.name} on top of it.
+                Drag to slide it around the bed — it stays on the bed and can't be moved off.
               </div>
             )}
             <button onClick={() => engineRef.current.removeItem(selection.uid)}>Remove item</button>

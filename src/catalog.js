@@ -119,6 +119,25 @@ export function resolveRelatedItems(cat) {
 const COLGATE_BED_HEIGHTS = { low: 0.5, standard: 1.0, lofted: 2.2 } // colgate-bed: 3.0ft frame
 const FULL_BED_HEIGHTS = { low: 0.4, standard: 0.8, lofted: 1.6 } // bed-full: 2.2ft frame
 
+// Bed-only bedding flags (Tyler's real 3D scans of a topper/comforter/pillows/throw blanket —
+// see public/models/{MatTopper,comforter,pillowBest,throwPillow,throwBlanket}.glb):
+// - isBed / mattressDims: which catalog items are beds, and the exact footprint of their fused
+//   mattress (see extraModels below) — lets bedding auto-size/auto-target a real bed instead of
+//   guessing from the frame's own (larger) footprint.
+// - bedOnly: this item can only ever be added by auto-stacking onto a bed (see addItem/
+//   _findBedForAutoPlacement in roomEngine.js) — no floor placement, no unstacking, matching
+//   Tyler's "should not be able to be moved off of it" requirement (drag is still allowed *within*
+//   the bed's footprint via the existing _clampStackedItem).
+// - matchBaseFootprint: this item's own w/d is recomputed to exactly match whatever it's currently
+//   stacked on (the bed's mattressDims, or another matched layer already resized) every time it's
+//   (re)stacked — see _refitFootprint in roomEngine.js. Only the topper and sheets get this; a
+//   comforter/throw are meant to be a fixed size (with a bit of drape overhang), not mattress-exact.
+// - colorable: shows the BEDDING_COLOR_SWATCHES picker in the selection panel (see App.jsx) and
+//   lets setItemColor() re-tint the model at runtime.
+// - hasPoseOptions: shows the flat/diagonal/upright pose picker (see setItemPose in
+//   roomEngine.js) — a pillow-specific "how is it resting on the bed" control.
+export const BEDDING_COLOR_SWATCHES = [0xf2ede1, 0x8a8f94, 0x2f4257, 0x8a9a7b, 0xd9a6a1, 0x7a2e2e, 0x2a2a2a]
+
 export const CATALOG = [
   // ---- Bedding ----
   // No standalone "mattress" prop — every bed frame (colgate-bed, bed-full, bed-bunk) now fuses
@@ -129,28 +148,36 @@ export const CATALOG = [
   // thin placeholder boxes sized to a twin mattress footprint, except the pillow, which reuses the
   // existing pillow.glb (distinct catalog entry from Decor's 'throw-pillow' — same model,
   // different price/category/relatedIds).
-  // Mattress Topper — ✅ fully researched (see curated-research-FINAL.md).
-  { id: 'mattress-topper-budget', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'budget', name: 'Serta ThermaGel 2" Mattress Topper', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08897N2KB', dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
-  { id: 'mattress-topper', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'moderate', name: 'ViscoSoft Select 3" Mattress Topper', price: 136, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B01MSL0UA3', dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
-  { id: 'mattress-topper-premium', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'premium', name: 'Tempur-Adapt Supreme Mattress Topper', price: 269, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00HEODIZY', dims: [3.3, 6.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  // Mattress Topper — ✅ fully researched (see curated-research-FINAL.md). dims are a cosmetic
+  // default only (shown before it's ever placed) — matchBaseFootprint resizes it to the exact
+  // mattress it's stacked on every time (see roomEngine.js's _refitFootprint), long-first to match
+  // the beds' own dims convention (dims[0] = head-to-foot length, see bed-full/colgate-bed below).
+  { id: 'mattress-topper-budget', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'budget', name: 'Serta ThermaGel 2" Mattress Topper', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08897N2KB', dims: [6.3, 3.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/MatTopper.glb', tintMaterial: true, bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  { id: 'mattress-topper', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'moderate', name: 'ViscoSoft Select 3" Mattress Topper', price: 136, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B01MSL0UA3', dims: [6.3, 3.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/MatTopper.glb', tintMaterial: true, bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
+  { id: 'mattress-topper-premium', groupId: 'mattress-topper', groupLabel: 'Mattress Topper', tier: 'premium', name: 'Tempur-Adapt Supreme Mattress Topper', price: 269, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00HEODIZY', dims: [6.3, 3.3, 0.3], color: 0xe8e0cf, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/MatTopper.glb', tintMaterial: true, bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['mattress-protector', 'sheet-set', 'bed-full', 'colgate-bed'] },
   // Mattress Protector — ⚠️ reasonable pick, not tiered (research: budget/moderate are
   // "effectively interchangeable" in this category, no real premium tier) — single entry.
   { id: 'mattress-protector', name: 'SafeRest Waterproof Mattress Protector', price: 25, retailer: 'Amazon', productUrl: null, dims: [3.3, 6.3, 0.15], color: 0xf2efe6, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['mattress-topper', 'sheet-set', 'bed-full', 'colgate-bed'] },
   // Twin XL Sheets — ✅ fully researched. Retailer switched Target → Amazon for all three tiers:
   // the researched products (Amazon Basics/Mellanni/LuxClub) are all primarily Amazon listings.
-  { id: 'sheet-set-budget', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'budget', name: 'Amazon Basics Microfiber Sheet Set', price: 23, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00Q7O9OIM', dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
-  { id: 'sheet-set', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'moderate', name: 'Mellanni Microfiber Sheet Set', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00NLLUMOE', dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
-  { id: 'sheet-set-premium', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'premium', name: 'Pure Bamboo Sheets', price: 34, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07DZTQ4JC', dims: [3.3, 6.3, 0.1], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  // Sheets — no dedicated model file, stays a thin placeholder box (per Tyler: "a very thin model
+  // that could cover the mattress or mattress topper") — matchBaseFootprint sizes it exactly like
+  // the topper above; dims long-first for the same reason.
+  { id: 'sheet-set-budget', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'budget', name: 'Amazon Basics Microfiber Sheet Set', price: 23, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00Q7O9OIM', dims: [6.3, 3.3, 0.05], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  { id: 'sheet-set', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'moderate', name: 'Mellanni Microfiber Sheet Set', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00NLLUMOE', dims: [6.3, 3.3, 0.05], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
+  { id: 'sheet-set-premium', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'premium', name: 'Pure Bamboo Sheets', price: 34, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07DZTQ4JC', dims: [6.3, 3.3, 0.05], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', bedOnly: true, matchBaseFootprint: true, colorable: true, relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
   // Comforter — ✅ fully researched. Retailer switched Target → Amazon, same reasoning as sheets.
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [3.5, 5.5, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  // dims sized long-first with a bit of drape overhang past every bed's mattressDims (see below).
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [6.6, 4.3, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [6.6, 4.3, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [6.6, 4.3, 0.5], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
-  // normalizing to a per-pillow rate.
-  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillow.glb', relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —
+  // see hasPoseOptions/setItemPose in roomEngine.js for flat/diagonal/upright.
+  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   // Pillowcases — ✅ final-links pass (2026-08-25). Previously a single untiered stub; Tyler
   // supplied real budget/moderate/premium links so it's now a proper tiered group like the other
   // Bedding items above. Prices are market estimates (Amazon's rendered price wasn't visible via
@@ -159,18 +186,20 @@ export const CATALOG = [
   { id: 'pillowcase-set-budget', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'budget', name: 'Pillow Cases Queen Size Set of 4', price: 10, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07RZSGV99', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
   { id: 'pillowcase-set', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'moderate', name: 'Pillow Cases Queen Size Set of 12', price: 18, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00XK9CXSA', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
   { id: 'pillowcase-set-premium', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'premium', name: 'Boll & Branch Signature Hemmed Pillowcase Set', price: 59, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DTBTCL9X', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
-  // Blanket/Throw — ✅ final-links pass. New tiered group, layered on top of the comforter the
-  // same way the comforter itself layers onto the sheet set.
-  { id: 'blanket-throw-budget', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'budget', name: 'Bedsure Fleece Throw Blanket', price: 15, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0C1YZJJ5L', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'blanket-throw', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'moderate', name: 'SAMIAH LUXE Chunky Knit Throw Blanket', price: 40, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08RRPQHLC', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'blanket-throw-premium', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'premium', name: 'Cozy Earth Cuddle Blanket', price: 199, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DSGLSN1R', dims: [3.3, 4.2, 0.2], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  // Decorative Pillows — ✅ final-links pass. Only budget has a specific product; moderate/premium
-  // share one generic Target search link (no specific product identified for those two tiers) —
-  // per Tyler's instruction, both point at the same target.com search rather than a fabricated
-  // product pick. Still a real 3-entry tiered group so the tier-picker UI renders normally.
-  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CVVVNB9L', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/pillow.glb', relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  // Blanket/Throw — ✅ final-links pass. Layers on top of whatever's currently topmost on the bed
+  // (comforter, if present — see _findBedForAutoPlacement/_topOfStack in roomEngine.js), sized
+  // smaller than the mattress like a real folded throw. Uses throwBlanket.glb (Tyler's real scan).
+  { id: 'blanket-throw-budget', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'budget', name: 'Bedsure Fleece Throw Blanket', price: 15, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0C1YZJJ5L', dims: [5.0, 2.5, 0.15], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/throwBlanket.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'blanket-throw', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'moderate', name: 'SAMIAH LUXE Chunky Knit Throw Blanket', price: 40, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08RRPQHLC', dims: [5.0, 2.5, 0.15], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/throwBlanket.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'blanket-throw-premium', groupId: 'blanket-throw', groupLabel: 'Blanket/Throw', tier: 'premium', name: 'Cozy Earth Cuddle Blanket', price: 199, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DSGLSN1R', dims: [5.0, 2.5, 0.15], color: 0xd8c9a8, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/throwBlanket.glb', tintMaterial: true, bedOnly: true, colorable: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  // Decorative Pillows (throw pillows) — ✅ final-links pass. Only budget has a specific product;
+  // moderate/premium share one generic Target search link (no specific product identified for
+  // those two tiers) — per Tyler's instruction, both point at the same target.com search rather
+  // than a fabricated product pick. Still a real 3-entry tiered group so the tier-picker UI renders
+  // normally. Uses throwPillow.glb (Tyler's real scan) with the same pose options as bed-pillow.
+  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CVVVNB9L', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
   // Blanket/Comforter Organizer — new addition from the final-links pass (not part of the
   // original researched category list). Filed under Bedding/Storage since it's meant to pair
   // with the comforter/sheet items above (off-season storage), not general room storage. Price
@@ -218,7 +247,7 @@ export const CATALOG = [
   {
     id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0xc9a876,
     category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true, floorNudge: 0.25,
-    bedHeights: FULL_BED_HEIGHTS,
+    bedHeights: FULL_BED_HEIGHTS, isBed: true, mattressDims: [6.2, 4.2],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
       { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
@@ -236,9 +265,10 @@ export const CATALOG = [
   {
     id: 'bed-bunk', name: 'Bunk Bed Frame', price: 349, retailer: 'Amazon', dims: [6.5, 3.4, 5.5], primaryModelFitDims: [6.5, 3.4, 2.75], color: 0xc9a876,
     category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/ColgateBed.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
+    isBed: true, mattressDims: [6.2, 3.2], // bottom bunk — see isMattressSurface below, and _topSurfaceY in roomEngine.js
     extraModels: [
       { modelUrl: '/models/ColgateBed.glb', dims: [6.5, 3.4, 2.75], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 2.75 }, // top bunk's own frame
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9 }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9, isMattressSurface: true }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with; auto-stack target
       { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 3.65 }, // top bunk mattress — fixed, same reason
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
@@ -486,7 +516,7 @@ export const PROVIDED_CATALOG = [
   {
     id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876,
     category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', tintMaterial: true, floorNudge: 0.35,
-    bedHeights: COLGATE_BED_HEIGHTS,
+    bedHeights: COLGATE_BED_HEIGHTS, isBed: true, mattressDims: [6.67, 3.08],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
       { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
