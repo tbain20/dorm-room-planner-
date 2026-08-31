@@ -60,6 +60,10 @@ const WALL_OPACITY_NEAR = 0.05
 // local X applied to a pose pivot wrapping the loaded model.
 const POSE_ANGLES = { flat: 0, diagonal: -Math.PI / 6, upright: -Math.PI / 2 }
 
+// How far (feet) a stacked bedding item sinks into whatever it's resting on — see _topSurfaceY's
+// comment for why a soft/rounded model needs this to avoid a visible gap at its edges.
+const STACK_SINK = 0.05
+
 const SELECTION_COLOR = 0xc1502e // normal selection outline
 const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, distinct from both
 // the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
@@ -1277,8 +1281,22 @@ export class RoomEngine {
   rotateSelected(deltaRad = Math.PI / 2) {
     if (!this.selected) return
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
+    // Anything stacked on the selected item — directly, or several layers up a bedding stack —
+    // shares its x/z center (see stackItemOn/_restackAbove), so rotating around that shared center
+    // needs no repositioning, just the same turn applied to each descendant's own rotation. Without
+    // this, rotating a bed that already has a topper/comforter/pillow on it (a routine "turn the bed
+    // to fit the room" action, done well after the bedding was added) left all of that bedding
+    // facing the frame's old orientation — looking rotated 90°/180° wrong relative to the bed.
+    this._rotateDescendants(this.selected.uid, deltaRad)
     if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
     else this._clampItemToRoom(this.selected.mesh)
+  }
+
+  _rotateDescendants(uid, deltaRad) {
+    this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
+      child.mesh.rotation.y = (child.mesh.rotation.y + deltaRad) % (Math.PI * 2)
+      this._rotateDescendants(child.uid, deltaRad)
+    })
   }
 
   // Instant clone of the selected item, offset a bit from the original so the two don't land
@@ -1926,6 +1944,15 @@ export class RoomEngine {
   // currently sliding on, so stacking directly onto a bed (e.g. a mattress topper on top of the
   // fused mattress) lands on top of the actual mattress instead of floating at headboard height or
   // clipping into it.
+  //
+  // STACK_SINK pulls that resting Y down by a hair before returning it — every piece of bedding
+  // (topper, comforter, pillows) is a soft/rounded model, not a flat-bottomed box, so floor-
+  // aligning to its single lowest vertex (see fitModelToDims in modelFit.js) leaves the rest of its
+  // underside — anywhere the model curves or rounds off before that one lowest point — hovering
+  // just above the surface it's supposedly resting on, a visible sliver of daylight at the edges
+  // even though the numbers say "flush." Letting it sink slightly into its base instead closes that
+  // sliver; it's safe to overlap because a stacked item and its own base are already exempted from
+  // the red collision tint at any overlap depth (see _isStackedRelative in _updateCollisions).
   _topSurfaceY(placedItem) {
     const cat = ALL_ITEMS.find((c) => c.id === placedItem.catalogId)
     if (cat && cat.bedHeights) {
@@ -1934,7 +1961,7 @@ export class RoomEngine {
       // The topmost movable piece's own top (stackOffset + its thickness) — e.g. the mattress
       // fused on top of the slat, not the slat itself — regardless of how many pieces are stacked.
       const topOffset = movable.reduce((max, m) => Math.max(max, m.stackOffset + m.thickness), 0)
-      return placedItem.mesh.position.y + cat.bedHeights[level] + topOffset
+      return placedItem.mesh.position.y + cat.bedHeights[level] + topOffset - STACK_SINK
     }
     // A bed with no bedHeights (e.g. bed-bunk) still has a real fused mattress sitting below the
     // top of its overall footprint — isMattressSurface (see catalog.js) flags which fixed-yOffset
@@ -1942,9 +1969,9 @@ export class RoomEngine {
     // of the whole frame (which, for a bunk, would be the top bunk's headboard).
     if (cat && cat.extraModels) {
       const surface = cat.extraModels.find((e) => e.isMattressSurface)
-      if (surface) return placedItem.mesh.position.y + surface.yOffset + surface.dims[2]
+      if (surface) return placedItem.mesh.position.y + surface.yOffset + surface.dims[2] - STACK_SINK
     }
-    return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2]
+    return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2] - STACK_SINK
   }
 
   // Stacking is arbitrary-depth (a topper, then a sheet set, then a comforter, then a pillow can
@@ -2067,6 +2094,25 @@ export class RoomEngine {
     this._tintModel(item.mesh.userData.primaryModel || item.mesh, hex)
     item.colorHex = hex
     if (this.selected && this.selected.uid === uid) this._emitSelection()
+  }
+
+  // A pillowcase (see catalog.js's recolorsPillows) isn't a placeable object of its own — it's a
+  // covering for whatever pillow(s) are already in the room — so clicking it re-tints every placed
+  // pillow (hasPoseOptions is the "this is a pillow" signal — both bed-pillow and decorative-pillow
+  // carry it, nothing else does) to this color instead of adding a new item. Reports what happened
+  // via onNotice (same transient-toast mechanism _findBedForAutoPlacement below uses for "no bed in
+  // the room yet") since otherwise nothing visibly gets added to the room for the user to react to.
+  applyPillowcaseColor(hex) {
+    const pillows = this.placedItems.filter((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      return cat && cat.hasPoseOptions && cat.colorable
+    })
+    if (pillows.length === 0) {
+      this.onNotice('Add a pillow to the room first.')
+      return
+    }
+    pillows.forEach((p) => this.setItemColor(p.uid, hex))
+    this.onNotice(`Updated ${pillows.length} pillow${pillows.length === 1 ? '' : 's'} in your room.`)
   }
 
   _emitCart() {
@@ -2586,9 +2632,14 @@ export class RoomEngine {
           // (see the pointermove handler and _clampStackedItem below). Only the explicit "Place on
           // floor" button (unstackItem) sends it back down — dragging alone never does. Anything
           // resting on *this* item — directly, or several layers up a bedding stack — still falls
-          // to the floor when this item itself gets picked up, though: the surface it was on is
-          // about to move out from under it, and following it in real time isn't supported.
-          this._dropDescendants(item.uid)
+          // to the floor when this item itself actually gets picked up and moved, though: the
+          // surface it was on is about to move out from under it, and following it in real time
+          // isn't supported. Deferred to the first real pointermove of the drag (see
+          // _pendingDropDescendantsUid below) rather than fired here on pointerdown — pointerdown
+          // fires on a plain click too (click-to-select is a zero-movement drag that never reaches
+          // pointermove), and dropping descendants right away meant merely selecting a bed with a
+          // topper/comforter/pillow already on it sent all of that straight to the floor.
+          this._pendingDropDescendantsUid = item.uid
           this.selectItem(item.uid)
           const floorPt = getFloorPoint()
           // floorPt is only unreliable right at the top of the viewport (see
@@ -2642,6 +2693,12 @@ export class RoomEngine {
         const factor = this.camState.radius * 0.0016
         this._panCamera(-dx * factor, dy * factor)
       } else if (this.mode === 'drag-item' && this.selected) {
+        // The item is actually being moved now (not just clicked) — this is the deferred drop from
+        // pointerdown above, fired once per pick-up rather than on every move event.
+        if (this._pendingDropDescendantsUid != null) {
+          this._dropDescendants(this._pendingDropDescendantsUid)
+          this._pendingDropDescendantsUid = null
+        }
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         // A null floorPt (see _intersectFloorPlane) means the cursor drifted into the unreliable

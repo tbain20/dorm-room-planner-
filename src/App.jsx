@@ -737,8 +737,22 @@ export default function App() {
       })
   }
 
-  function handleAddRelatedToRoom(catalogId) {
+  // Single entry point for "add this catalog item" clicks (the main catalog list, its tiered
+  // group cards, and the "GOES WELL WITH"/+Room suggestions) — a pillowcase (see catalog.js's
+  // recolorsPillows) isn't a placeable object of its own, it's a covering for whatever pillow(s)
+  // are already in the room, so it re-tints those instead of dropping a new floating box into the
+  // scene. Every other catalog item is unaffected and just adds normally.
+  function handleAddCatalogItem(catalogId) {
+    const cat = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === catalogId)
+    if (cat && cat.recolorsPillows) {
+      engineRef.current.applyPillowcaseColor(cat.color)
+      return
+    }
     engineRef.current.addItem(catalogId)
+  }
+
+  function handleAddRelatedToRoom(catalogId) {
+    handleAddCatalogItem(catalogId)
   }
 
   // Custom items (Session 1) — a user's own catalog entries. Creating one registers it into the
@@ -1957,9 +1971,9 @@ export default function App() {
                           {subcategory !== 'General' && <div className="subcategory-label">{subcategory}</div>}
                           {items.map((cat) =>
                             cat.isGroup ? (
-                              <TierGroupCard key={cat.groupId} group={cat} onAdd={(id) => engineRef.current.addItem(id)} />
+                              <TierGroupCard key={cat.groupId} group={cat} onAdd={handleAddCatalogItem} />
                             ) : (
-                              <div key={cat.id} className="cat-item" onClick={() => engineRef.current.addItem(cat.id)}>
+                              <div key={cat.id} className="cat-item" onClick={() => handleAddCatalogItem(cat.id)}>
                                 <CatalogThumb cat={cat} />
                                 <div className="cat-info">
                                   <div className="name">{cat.name}</div>

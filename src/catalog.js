@@ -183,9 +183,14 @@ export const CATALOG = [
   // Bedding items above. Prices are market estimates (Amazon's rendered price wasn't visible via
   // fetch) — flagged for double-check once real pricing is confirmed, same as other estimated
   // items noted at the top of this file.
-  { id: 'pillowcase-set-budget', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'budget', name: 'Pillow Cases Queen Size Set of 4', price: 10, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07RZSGV99', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
-  { id: 'pillowcase-set', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'moderate', name: 'Pillow Cases Queen Size Set of 12', price: 18, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00XK9CXSA', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
-  { id: 'pillowcase-set-premium', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'premium', name: 'Boll & Branch Signature Hemmed Pillowcase Set', price: 59, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DTBTCL9X', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', relatedIds: ['bed-pillow', 'sheet-set'] },
+  // recolorsPillows (rather than a placeable 3D model of its own): a pillowcase isn't a separate
+  // object you'd position in the room, it's a covering for whatever pillow(s) are already there —
+  // so clicking it re-tints every already-placed pillow (see hasPoseOptions above — bed-pillow and
+  // decorative-pillow are the only two "pillow" catalog items) to this item's color instead of
+  // dropping a new floating placeholder box into the scene (see App.jsx's handleAddCatalogItem).
+  { id: 'pillowcase-set-budget', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'budget', name: 'Pillow Cases Queen Size Set of 4', price: 10, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07RZSGV99', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', recolorsPillows: true, relatedIds: ['bed-pillow', 'sheet-set'] },
+  { id: 'pillowcase-set', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'moderate', name: 'Pillow Cases Queen Size Set of 12', price: 18, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00XK9CXSA', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', recolorsPillows: true, relatedIds: ['bed-pillow', 'sheet-set'] },
+  { id: 'pillowcase-set-premium', groupId: 'pillowcase-set', groupLabel: 'Pillowcases', tier: 'premium', name: 'Boll & Branch Signature Hemmed Pillowcase Set', price: 59, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DTBTCL9X', dims: [1.7, 2.3, 0.1], color: 0xe0d8c4, category: 'Bedding', subcategory: 'Essentials', recolorsPillows: true, relatedIds: ['bed-pillow', 'sheet-set'] },
   // Blanket/Throw — ✅ final-links pass. Layers on top of whatever's currently topmost on the bed
   // (comforter, if present — see _findBedForAutoPlacement/_topOfStack in roomEngine.js), sized
   // smaller than the mattress like a real folded throw. Uses throwBlanket.glb (Tyler's real scan).
@@ -197,9 +202,11 @@ export const CATALOG = [
   // those two tiers) — per Tyler's instruction, both point at the same target.com search rather
   // than a fabricated product pick. Still a real 3-entry tiered group so the tier-picker UI renders
   // normally. Uses throwPillow.glb (Tyler's real scan) with the same pose options as bed-pillow.
-  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CVVVNB9L', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  // dims bumped from a cosmetic 1.3' cube to 1.6' (~19") — closer to a real decorative throw
+  // pillow's size and less easily lost/hidden under a comforter or bed-pillow at the old scale.
+  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CVVVNB9L', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Target', productUrl: 'https://www.target.com/s?searchTerm=decorative+pillows', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
   // Blanket/Comforter Organizer — new addition from the final-links pass (not part of the
   // original researched category list). Filed under Bedding/Storage since it's meant to pair
   // with the comforter/sheet items above (off-season storage), not general room storage. Price
@@ -250,7 +257,7 @@ export const CATALOG = [
     bedHeights: FULL_BED_HEIGHTS, isBed: true, mattressDims: [6.2, 4.2],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25 },
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'],
   },
@@ -268,8 +275,8 @@ export const CATALOG = [
     isBed: true, mattressDims: [6.2, 3.2], // bottom bunk — see isMattressSurface below, and _topSurfaceY in roomEngine.js
     extraModels: [
       { modelUrl: '/models/ColgateBed.glb', dims: [6.5, 3.4, 2.75], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 2.75 }, // top bunk's own frame
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 0.9, isMattressSurface: true }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with; auto-stack target
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0xd8cbb0, yOffset: 3.65 }, // top bunk mattress — fixed, same reason
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0x1e2f4f, yOffset: 0.9, isMattressSurface: true }, // bottom bunk mattress — fixed, no bedHeights on this item to move it with; auto-stack target
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 3.2, 0.5], color: 0x1e2f4f, yOffset: 3.65 }, // top bunk mattress — fixed, same reason
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
@@ -519,7 +526,7 @@ export const PROVIDED_CATALOG = [
     bedHeights: COLGATE_BED_HEIGHTS, isBed: true, mattressDims: [6.67, 3.08],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0xd8cbb0, movesWithHeight: true, stackOffset: 0.25 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25 },
     ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter', 'bed-risers'],
   },
