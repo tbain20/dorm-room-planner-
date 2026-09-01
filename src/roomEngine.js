@@ -1037,7 +1037,7 @@ export class RoomEngine {
     // Prefer a bed that doesn't already have this concept (groupId) dressed on it, so adding e.g.
     // a second comforter to a two-bed room dresses the *other* bed rather than double-stacking.
     const undressed = beds.find((bed) => !this._stackChainHasGroup(bed.uid, cat.groupId))
-    return this._topOfStack((undressed || beds[beds.length - 1]).uid)
+    return this._topOfStack((undressed || beds[beds.length - 1]).uid, cat)
   }
 
   _stackChainHasGroup(uid, groupId) {
@@ -1051,11 +1051,19 @@ export class RoomEngine {
     return false
   }
 
-  _topOfStack(uid) {
+  // sourceCat is the item about to be auto-stacked, not the stack being walked — skipsComforter
+  // (a sleeping pillow — see catalog.js) stops one layer short of an isComforterLayer child
+  // (the comforter) instead of continuing on to whatever's stacked above it, so the pillow lands
+  // on the mattress/topper/sheets level rather than perched on top of the comforter.
+  _topOfStack(uid, sourceCat) {
     let current = this.placedItems.find((p) => p.uid === uid)
     while (current) {
       const child = this.placedItems.find((p) => p.stackedOnUid === current.uid)
       if (!child) return current
+      if (sourceCat && sourceCat.skipsComforter) {
+        const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
+        if (childCat && childCat.isComforterLayer) return current
+      }
       current = child
     }
     return null

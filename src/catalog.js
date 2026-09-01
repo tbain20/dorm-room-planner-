@@ -126,14 +126,15 @@ export function resolveRelatedItems(cat) {
 // different peg together, each keeping its own stackOffset above the peg (the mattress's equals
 // the slat's own thickness, 0.25ft, so it always sits right on top of the slat).
 //
-// COLGATE_BED_HEIGHTS are Tyler's own explicit picks for the Low/Standard/Lofted underbed
-// clearance (round 1ft/2ft/3ft steps), superseding the real-spec-derived 1.96ft standard/2.25ft
-// lofted values this used to carry. See the colgate-bed entry below for how the headboard/
-// footboard's own fit height (4.0ft) was raised to stay taller than the mattress even at the
-// 3.75ft mattress-top height the 3.0ft lofted peg now produces. FULL_BED_HEIGHTS (bed-full, a
-// generic purchasable full/double frame, not the specific Colgate twin XL above) keeps its own
-// older, unrelated values.
-const COLGATE_BED_HEIGHTS = { low: 1.0, standard: 2.0, lofted: 3.0 } // colgate-bed — see above
+// COLGATE_BED_HEIGHTS is keyed by the slat's own base Y (see above), but Tyler's explicit
+// Low/Standard/Lofted picks are round 1ft/2ft/3ft steps of the resulting MATTRESS-TOP height —
+// slat Y + slat thickness + mattress thickness (0.25 + 0.5 = 0.75ft) — to land Lofted's sleeping
+// surface exactly level with the top of the 3.0ft headboard/footboard (see the colgate-bed entry
+// below), the same way the old real-spec-derived 2.25ft lofted value happened to. So each slat Y
+// here is (target mattress-top height − 0.75): low 0.25 → 1.0ft, standard 1.25 → 2.0ft, lofted
+// 2.25 → 3.0ft. FULL_BED_HEIGHTS (bed-full, a generic purchasable full/double frame, not the
+// specific Colgate twin XL above) keeps its own older, unrelated values.
+const COLGATE_BED_HEIGHTS = { low: 0.25, standard: 1.25, lofted: 2.25 } // colgate-bed — see above
 const FULL_BED_HEIGHTS = { low: 0.4, standard: 0.8, lofted: 1.6 } // bed-full: 2.2ft frame
 
 // Bed-only bedding flags (Tyler's real 3D scans of a topper/comforter/pillows/throw blanket —
@@ -214,33 +215,47 @@ export const CATALOG = [
   // one mesh) that dressed a placed bed outright instead of stacking (see git history) — Tyler's
   // replaced it again with a real scan of just a comforter, so this is back to a plain bedOnly
   // stacking layer on top of whatever's currently topmost on the bed's mattress, same as the
-  // mattress topper above. dims[0] (5.4', shorter than the twin mattress's own 6.67'/6.2' length —
+  // mattress topper above. dims[0] (6.0', shorter than the twin mattress's own 6.67'/6.2' length —
   // see mattressDims on colgate-bed/bed-full below) leaves the head end of the mattress bare for a
-  // pillow instead of running the comforter edge-to-edge; footEndOffset (0.6') shifts it toward the
+  // pillow instead of running the comforter edge-to-edge; footEndOffset (0.9') shifts it toward the
   // foot end in stackItemOn so that gap lands at the head rather than splitting evenly across both
-  // ends, while the foot edge stays roughly flush with (colgate-bed) or slightly past (bed-full)
-  // the mattress's own foot edge, same as before this was shortened. height (0.45') is a cosmetic
-  // "how poofy does it look" choice, not to-scale. embedRatio sinks it half its own height into its
-  // base, same reasoning as the sheets model used to have: a soft/rounded comforter scan needs more
-  // than the universal edge-only STACK_SINK to avoid a visible gap at its edges.
+  // ends, while the foot edge overhangs past the mattress's own foot edge for a draped look.
+  // dims[1] (4.4', notably wider than the mattress's own 3.08'/4.2' width) drapes it well past the
+  // mattress's sides rather than just barely covering them. height (0.45') is a cosmetic "how poofy
+  // does it look" choice, not to-scale.
+  //
+  // embedRatio is deliberately small (0.15, not a deeper sink) — comforter.glb's own scanned shape
+  // already dips down 0.1-0.15ft (raw-to-world scaled) at its two long edges, where a real
+  // comforter drapes down the sides of the mattress, well short of its flatter, higher-riding
+  // middle; fitModelToDims floor-aligns to the model's single lowest vertex (one of those edge
+  // dips), so a bigger embedRatio pushed that already-low edge geometry deep enough to sink INTO
+  // the solid mattress mesh at the same (x,z) instead of just meeting its surface — the "phases
+  // through the mattress" clipping. A small embed just closes the ordinary sliver-of-daylight gap
+  // (same reasoning the sheets model used to have) without also re-embedding geometry that's
+  // already modeled low.
   // modelRotationY: comforter.glb's own head-to-foot axis came in on local Z, not X — without the
   // rotation, _fitModelToDims (which always maps local X onto dims[0]/length at rotation 0) would
   // stretch the model's naturally-short axis out to the full length and squash its naturally-long
   // axis down into the width, i.e. exactly backwards. Same fix, same reason, on the throw blanket
   // below (throwBlanket.glb shares this same axis convention).
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.4, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, footEndOffset: 0.6, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.4, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, footEndOffset: 0.6, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.4, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, footEndOffset: 0.6, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [6.0, 4.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [6.0, 4.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [6.0, 4.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
   // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —
   // see hasPoseOptions/setItemPose in roomEngine.js for flat/diagonal/upright.
+  // skipsComforter (paired with the comforter's own isComforterLayer above): a sleeping pillow
+  // belongs against the mattress/sheets, not perched on top of a poofy comforter — unlike a
+  // decorative accent pillow (see decorative-pillow below, which doesn't set this and so still
+  // auto-stacks on whatever's topmost), so _findBedAutoStackTarget in roomEngine.js walks past any
+  // comforter layer already on the bed when placing one of these.
   // poseFlip: pillowBest.glb's own "front" faces the opposite local direction from throwPillow.glb
   // (see decorative-pillow below, which needs no flip) — same diagonal/upright pose math, mirrored,
   // so this model leans/stands the correct way instead of tipping toward the wrong side.
-  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   // Pillowcases — ✅ final-links pass (2026-08-25). Previously a single untiered stub; Tyler
   // supplied real budget/moderate/premium links so it's now a proper tiered group like the other
   // Bedding items above. Prices are market estimates (Amazon's rendered price wasn't visible via
@@ -567,25 +582,24 @@ export const PROVIDED_CATALOG = [
   // clean scan instead of two halves of a warped one. primaryModelFitDims fits it to a thin
   // head-to-foot slice rather than cat.dims' full footprint depth, and primaryModelOffsetX/the
   // extraModels entry's xOffset push the two copies out to opposite ends of the frame (see
-  // _loadItemMesh in roomEngine.js). The fit height (4.0ft) is taller than cat.dims' own 3.0ft
-  // frame height so the posts still stand above the mattress even at the Lofted peg, where the
-  // mattress top (COLGATE_BED_HEIGHTS.lofted + slat + mattress thickness = 3.0 + 0.25 + 0.5 =
-  // 3.75ft) would otherwise poke up past a headboard fit to the frame's nominal height. No
-  // tintMaterial here: unlike the old scan, this one carries its own real diffuse/normal texture.
-  // The slat base + mattress fuse on via extraModels' movesWithHeight so they can slide to a
-  // Low/Standard/Lofted peg (bedHeights, below) independent of the fixed headboard/footboard
-  // posts. dims/mattressDims come straight from Tyler's real spec for this frame: 84"W x 37"D x
-  // 36"H overall (÷12 → 7.0 x 3.08 x 3.0, matching what was already here) with a 6.67ft mattress
-  // (a few inches short of the frame's own 7.0ft to leave room for the head/footboard).
+  // _loadItemMesh in roomEngine.js). The fit height (3.0ft) matches cat.dims' own frame height —
+  // COLGATE_BED_HEIGHTS.lofted is tuned (see above) so the mattress top lands exactly level with
+  // the top of the headboard/footboard at the Lofted peg, not above it. No tintMaterial here:
+  // unlike the old scan, this one carries its own real diffuse/normal texture. The slat base +
+  // mattress fuse on via extraModels' movesWithHeight so they can slide to a Low/Standard/Lofted
+  // peg (bedHeights, below) independent of the fixed headboard/footboard posts. dims/mattressDims
+  // come straight from Tyler's real spec for this frame: 84"W x 37"D x 36"H overall (÷12 → 7.0 x
+  // 3.08 x 3.0, matching what was already here) with a 6.67ft mattress (a few inches short of the
+  // frame's own 7.0ft to leave room for the head/footboard).
   {
     id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876,
     category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2,
-    primaryModelFitDims: [0.2, 3.08, 4.0], primaryModelOffsetX: -3.4,
+    primaryModelFitDims: [0.2, 3.08, 3.0], primaryModelOffsetX: -3.4,
     bedHeights: COLGATE_BED_HEIGHTS, isBed: true, mattressDims: [6.67, 3.08],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
       { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25, isMattress: true },
-      { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 3.08, 4.0], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.4, yOffset: 0 },
+      { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 3.08, 3.0], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.4, yOffset: 0 },
     ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter', 'bed-risers'],
   },
