@@ -106,16 +106,37 @@ export function resolveRelatedItems(cat) {
     .filter(Boolean)
 }
 
-// colgate-bed/bed-full/bed-bunk all share one model now (public/models/colgateBed.glb — a single
-// fused mesh with the frame and mattress baked into one surface, replacing the old split
-// colgateHeadboard.glb + colgateSlat.glb + colgateMattress.glb pieces) so every bed in the app
-// renders identically. That used to support a Low/Standard/Lofted height picker (bedHeights —
-// sliding just the mattress+slat to a different peg while the frame's posts stayed grounded), but
-// a single fused mesh has no separate mattress piece left to slide independently of the frame — so
-// that picker is gone; every bed just renders at its one modeled height now. mattressTopY (see
-// below) replaces bedHeights/isMattressSurface for telling stacking (a topper, say) where the
-// baked-in mattress surface actually sits, since there's no longer a real mattress sub-object to
-// measure it from directly.
+// colgate-bed and bed-full went through a brief phase (see git history) where the whole frame and
+// mattress were consolidated into one fused mesh (colgateBed.glb) — no separate mattress piece
+// meant no way to slide it to a different peg, so the Low/Standard/Lofted height picker
+// (bedHeights) had to be dropped. Tyler's since split the pieces back out with new models —
+// colgateHeadboard.glb (frame, no mattress baked in) + colgateSlat.glb (slat base) +
+// colgateMattress.glb (mattress) fused on via extraModels, same as originally — so bedHeights is
+// back for both. bed-bunk never went through the fused-mesh phase's *removal* of bedHeights in the
+// first place (real Colgate bunks are a fixed configuration, no peg adjustment) — it still shares
+// colgateBed.glb (a single fused frame+mattress mesh, kept as-is; nobody's asked to split it) and
+// leans on mattressTopY (see below) to tell stacking where its baked-in mattress surface sits,
+// since it has no separate mattress sub-object to measure that from directly.
+//
+// bedHeights is the slat's own base Y (in feet, within the frame's own local space) at each peg —
+// the fixed local Y the fused mattress's *bottom* sits at, modeling how a real Colgate frame has a
+// few peg positions the mattress/rails attach at while the frame's own legs and posts stay on the
+// floor the whole time. The frame itself never moves; only the slat+mattress (fused on via
+// extraModels' movesWithHeight — see _loadItemMesh/setBedHeight in roomEngine.js) slide to a
+// different peg together, each keeping its own stackOffset above the peg (the mattress's equals
+// the slat's own thickness, 0.25ft, so it always sits right on top of the slat).
+//
+// COLGATE_BED_HEIGHTS.standard (1.96ft) comes straight from Tyler's real spec for the Colgate twin
+// XL frame: 84"W x 37"D x 36"H overall, 23.5" of clearance underneath at its normal setting —
+// 23.5" = 1.9583ft ≈ 1.96. low/lofted aren't separately specced; they're a reasonable ± step off
+// that real standard value (low ≈ half of standard, matching the original ratio from before this
+// number was replaced with the real spec; lofted keeps the mattress top — slat height + slat
+// thickness + mattress thickness, 2.25 + 0.25 + 0.5 = 3.0 — right at the frame's own 36"/3.0ft
+// overall height rather than poking up past the headboard). Flag these two for a real-measurement
+// pass if Tyler has the actual peg spacing. FULL_BED_HEIGHTS (bed-full, a generic purchasable
+// full/double frame, not the specific Colgate twin XL above) keeps its own older, unrelated values.
+const COLGATE_BED_HEIGHTS = { low: 1.0, standard: 1.96, lofted: 2.25 } // colgate-bed: 3.0ft frame — see above
+const FULL_BED_HEIGHTS = { low: 0.4, standard: 0.8, lofted: 1.6 } // bed-full: 2.2ft frame
 
 // Bed-only bedding flags (Tyler's real 3D scans of a topper/comforter/pillows/throw blanket —
 // see public/models/{MatTopper,comforter,pillowBest,throwPillow,throwBlanket}.glb):
@@ -129,23 +150,26 @@ export function resolveRelatedItems(cat) {
 //   top) and scaling that fraction (~35% of the model's total fitted height) to each bed's own
 //   height. roomEngine.js's _topSurfaceY reads it to know where a topper/pillow should land.
 // - isMattress (on a bed's own extraModels entry, not the bed item itself): flags which fused extra
-//   model is a separate mattress mesh, for roomEngine.js's applyMattressColor to re-tint — unused by
-//   any current bed (none has a separate mattress model anymore, see mattressTopY above), but kept
-//   as generic support in case a future bed model splits the mattress back out.
+//   model is the actual mattress mesh, so roomEngine.js's applyMattressColor (triggered by clicking
+//   a sheet-set tier — see recolorsMattress below) knows what to re-tint. colgate-bed and bed-full
+//   both flag their real mattress extraModel; bed-bunk has none (see mattressTopY above) since it's
+//   still a single fused frame+mattress mesh.
 // - bedOnly: this item can only ever be added by auto-stacking onto a bed (see addItem/
 //   _findBedForAutoPlacement in roomEngine.js) — no floor placement, no unstacking, matching
 //   Tyler's "should not be able to be moved off of it" requirement (drag is still allowed *within*
-//   the bed's footprint via the existing _clampStackedItem). The mattress topper and pillow still
-//   use this; sheets and the comforter/throw blanket don't anymore — see their own entries below.
+//   the bed's footprint via the existing _clampStackedItem). The mattress topper, pillow, and
+//   comforter all use this; sheets and the throw blanket don't — see their own entries below.
 // - matchBaseFootprint: this item's own w/d is recomputed to exactly match whatever it's currently
 //   stacked on (the bed's mattressDims, or another matched layer already resized) every time it's
 //   (re)stacked — see _refitFootprint in roomEngine.js. Only the mattress topper gets this now.
-// - dressesBed (comforter, throw blanket): instead of stacking onto a bed, clicking this tier swaps
-//   out the target bed's own frame model for this one (a real scan of an entire made bed — see
+// - dressesBed (throw blanket only): instead of stacking onto a bed, clicking this tier swaps out
+//   the target bed's own frame model for this one (a real scan of an entire made bed — see
 //   roomEngine.js's _applyBedDressing) rather than adding a loose layer. Requires an existing bed
-//   the same way bedOnly does, just via a different code path since there's no stacking involved;
-//   picking a second dressesBed tier (or a different group entirely) cross-fades the current one out
-//   for the new one instead of stacking the two.
+//   the same way bedOnly does, just via a different code path since there's no stacking involved.
+//   The comforter used to work this way too, back when comforter.glb was itself a whole-bed scan;
+//   now that it's back to being just a comforter, it's a plain bedOnly stacking layer instead (see
+//   above) — the two behaviors are independent per catalog item, so this is just the throw
+//   blanket's own thing now, not a shared "bedding dressing" concept.
 // - recolorsMattress (sheets only): no placeable model at all — mirrors recolorsPillows' "this
 //   isn't a real object, it's a covering for something already in the room" pattern. Clicking a
 //   sheet-set tier asks what color (see App.jsx) and re-tints every placed bed's mattress to it
@@ -188,22 +212,23 @@ export const CATALOG = [
   { id: 'sheet-set', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'moderate', name: 'Mellanni Microfiber Sheet Set', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00NLLUMOE', dims: [6.3, 3.3, 0.35], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', recolorsMattress: true, relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
   { id: 'sheet-set-premium', groupId: 'sheet-set', groupLabel: 'Twin XL Sheet Set', tier: 'premium', name: 'Pure Bamboo Sheets', price: 34, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B07DZTQ4JC', dims: [6.3, 3.3, 0.35], color: 0xc9d6e0, category: 'Bedding', subcategory: 'Essentials', recolorsMattress: true, relatedIds: ['comforter', 'bed-pillow', 'pillowcase-set', 'bed-full', 'colgate-bed'] },
   // Comforter — ✅ fully researched. Retailer switched Target → Amazon, same reasoning as sheets.
-  // comforter.glb is now Tyler's real scan of an entire made bed (frame + mattress + comforter +
-  // pillow fused into one mesh), not just a loose blanket layer — so instead of stacking onto an
-  // existing bed's mattress (the old behavior), picking a comforter tier now dresses a placed bed
-  // outright: it fades the bed frame's own model out and fades this whole-bed model in at the same
-  // spot (see roomEngine.js's _applyBedDressing/dressesBed), so the transition reads as the bed
-  // being "made" rather than a new object popping in on top of it. dims are a generic
-  // twin-XL-made-bed approximation (matched visually against colgate-bed's own [7.0, 3.08, 3.0]),
-  // used for every bed type since there's one shared model regardless of which bed it's dressing.
+  // comforter.glb briefly became a whole-made-bed scan (frame + mattress + comforter fused into
+  // one mesh) that dressed a placed bed outright instead of stacking (see git history) — Tyler's
+  // replaced it again with a real scan of just a comforter, so this is back to a plain bedOnly
+  // stacking layer on top of whatever's currently topmost on the bed's mattress, same as the
+  // mattress topper above. dims are sized long-first with a bit of drape overhang past the twin
+  // mattress's own mattressDims ([6.67, 3.08] — see colgate-bed below); height (0.45') is a cosmetic
+  // "how poofy does it look" choice, not to-scale. embedRatio sinks it half its own height into its
+  // base, same reasoning as the sheets model used to have: a soft/rounded comforter scan needs more
+  // than the universal edge-only STACK_SINK to avoid a visible gap at its edges.
   // modelRotationY: comforter.glb's own head-to-foot axis came in on local Z, not X — without the
   // rotation, _fitModelToDims (which always maps local X onto dims[0]/length at rotation 0) would
-  // stretch the model's naturally-short axis out to the full 7ft length and squash its naturally-
-  // long axis down into the 3.4ft width, i.e. exactly backwards. Same fix, same reason, on the
-  // throw blanket below (throwBlanket.glb shares this same axis convention).
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [7.0, 3.4, 3.0], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, dressesBed: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [7.0, 3.4, 3.0], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, dressesBed: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [7.0, 3.4, 3.0], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, dressesBed: true, colorable: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  // stretch the model's naturally-short axis out to the full length and squash its naturally-long
+  // axis down into the width, i.e. exactly backwards. Same fix, same reason, on the throw blanket
+  // below (throwBlanket.glb shares this same axis convention).
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [6.6, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [6.6, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [6.6, 3.6, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/comforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.5, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
   // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —
@@ -262,15 +287,24 @@ export const CATALOG = [
   // standard dorm frame, but plenty of this app's users aren't in a dorm at all (apartment,
   // off-campus) — see the "not every user is a Colgate student" note on the Colgate section below.
   //
-  // Renders as the real Colgate bed piece — colgateBed.glb, the same single fused frame+mattress
-  // model colgate-bed and bed-bunk use below (see the note above BEDDING_COLOR_SWATCHES), just
-  // scaled to a full/double footprint instead of a twin XL one. Same tintMaterial treatment and
-  // color as colgate-bed. mattressTopY is bed-full's own height (2.2ft) times the ~35% mattress-top
-  // fraction measured off the model (see the note above) — 2.2 × 0.35 ≈ 0.77.
+  // Renders as the real Colgate bed pieces — colgateHeadboard.glb (frame, no mattress baked in) is
+  // the primary model. Unlike the older headboard model this replaced, this one's head-to-foot
+  // axis came in on local Z, not X — modelRotationY corrects it the same way colgate-bed's own
+  // slat/mattress below need it (see _fitModelToDims), or the frame would stretch onto the wrong
+  // axis. The slat base + mattress fuse on via extraModels' movesWithHeight (same mechanism
+  // colgate-bed below uses — see _loadItemMesh/setBedHeight in roomEngine.js), sized to a
+  // full/double footprint here instead of colgate-bed's twin XL one. Same tintMaterial treatment
+  // and color as colgate-bed. See the note above BEDDING_COLOR_SWATCHES for why this frame keeps
+  // its own older FULL_BED_HEIGHTS values rather than the real Colgate spec (this is a generic
+  // purchasable frame, not the Colgate one).
   {
     id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
-    isBed: true, mattressDims: [6.2, 4.2], mattressTopY: 0.77,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
+    bedHeights: FULL_BED_HEIGHTS, isBed: true, mattressDims: [6.2, 4.2],
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25, isMattress: true },
+    ],
     relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'],
   },
   // Rendered as two Colgate frames stacked (bottom bunk's own frame, then a second copy fused on
@@ -501,31 +535,40 @@ export const CATALOG = [
 // - modelRotationY (bed-shaped models) — a model whose long axis came in on the wrong local axis
 //   would get its non-uniform scale-to-dims stretched sideways instead of lengthwise; a 90°
 //   pre-rotation before fitting swaps which local axis lands on width vs. depth. colgateBed.glb
-//   (colgate-bed/bed-full/bed-bunk's shared model — see the note above BEDDING_COLOR_SWATCHES)
-//   needs no such rotation — confirmed by measuring its own POSITION accessor bounds, its longest
-//   axis is already local X, the same convention _fitModelToDims expects with no rotation applied.
+//   (bed-bunk's shared frame+mattress model — see the note above BEDDING_COLOR_SWATCHES) needs no
+//   such rotation — confirmed by measuring its own POSITION accessor bounds, its longest axis is
+//   already local X, the same convention _fitModelToDims expects with no rotation applied.
+//   colgateHeadboard.glb and colgateSlat.glb (colgate-bed/bed-full's own pieces, below) both
+//   measure the *opposite* way — longest axis on local Z — so each needs the rotation.
+//   colgateMattress.glb measures that way too, but it's a plain rectangular slab with no
+//   directional detail, so whether it's rotated or not is visually indistinguishable — kept
+//   un-rotated, matching how it's always been configured, rather than changing something that
+//   already works.
 //
 // The Stackable Chest is deliberately NOT in this list — see 'stackable-chest' in CATALOG above.
 // Colgate doesn't guarantee every room gets one (the PDF's own wording is about variation between
 // rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
 // treated as purchasable.
 export const PROVIDED_CATALOG = [
-  // Was briefly split into colgateHeadboard.glb (head/footboard + posts) + colgateSlat.glb (base) +
-  // colgateMattress.glb (mattress), fused together via extraModels so the slat+mattress could slide
-  // to a Low/Standard/Lofted peg independent of the fixed headboard/footboard posts. Tyler has since
-  // gone back to a single colgateBed.glb (frame + mattress fused into one mesh, same file bed-full
-  // and bed-bunk use — see the note above BEDDING_COLOR_SWATCHES) so every bed in the app is the
-  // same model, which means that peg-adjustment is gone: a single fused mesh has no separate
-  // mattress piece left to slide independently of the frame, so this always renders at its one
-  // modeled height now (matching how bed-bunk already worked). mattressTopY (3.0 × ~0.35 ≈ 1.05)
-  // is this bed's own height times the mattress-top fraction measured by histogramming
-  // colgateBed.glb's vertex Y positions for the big flat plateau (the mattress surface) — same
-  // technique used to measure the old slat plateau before this consolidation, just re-run against
-  // the new mesh. Tells _topSurfaceY where a topper/pillow should land.
+  // Split into colgateHeadboard.glb (head/footboard + posts, no base — the primary model, stays
+  // put) + colgateSlat.glb (just the slat base) + colgateMattress.glb (mattress), fused together
+  // via extraModels' movesWithHeight so the slat+mattress can slide to a Low/Standard/Lofted peg
+  // (bedHeights, below) independent of the fixed headboard/footboard posts — this went through a
+  // brief single-fused-mesh phase (see git history / the note above BEDDING_COLOR_SWATCHES) that
+  // dropped the height picker entirely; Tyler's since re-split the pieces with new models and it's
+  // back. dims/mattressDims come straight from Tyler's real spec for this frame: 84"W x 37"D x
+  // 36"H overall (÷12 → 7.0 x 3.08 x 3.0, matching what was already here) with a 6.67ft mattress
+  // (a few inches short of the frame's own 7.0ft to leave room for the head/footboard). See
+  // COLGATE_BED_HEIGHTS above for where its 'standard' value (1.96ft) comes from — the same real
+  // spec's 23.5" of clearance underneath the frame at its normal setting.
   {
     id: 'colgate-bed', name: 'Twin XL Bed Frame', modelNo: '146RF', dims: [7.0, 3.08, 3.0], color: 0xc9a876,
-    category: 'Provided', isProvided: true, modelUrl: '/models/colgateBed.glb', tintMaterial: true,
-    isBed: true, mattressDims: [6.67, 3.08], mattressTopY: 1.05,
+    category: 'Provided', isProvided: true, modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2, tintMaterial: true,
+    bedHeights: COLGATE_BED_HEIGHTS, isBed: true, mattressDims: [6.67, 3.08],
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.7, 3.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 3.08, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25, isMattress: true },
+    ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter', 'bed-risers'],
   },
   { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, hasLegroom: true, relatedIds: ['lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },

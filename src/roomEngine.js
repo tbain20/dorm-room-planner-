@@ -1010,8 +1010,8 @@ export class RoomEngine {
 
   // A bed's mattress footprint, "which bed still needs this item", and "what's currently the
   // topmost layer on a given bed" — the three pieces addItem needs to auto-snap a bedOnly item
-  // (mattress topper, pillows — see catalog.js) straight onto a bed instead of dropping it loose on
-  // the floor. Sheets and the comforter/throw blanket don't go through this anymore — see
+  // (mattress topper, comforter, pillows — see catalog.js) straight onto a bed instead of dropping
+  // it loose on the floor. Sheets and the throw blanket don't go through this anymore — see
   // applyMattressColor/_findBedForDressing below.
   _findBedAutoStackTarget(cat) {
     const beds = this.placedItems.filter((p) => {
@@ -2172,11 +2172,11 @@ export class RoomEngine {
     return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2] - STACK_SINK
   }
 
-  // Stacking is arbitrary-depth (a topper, then a pillow can layer onto one bed frame via repeated
-  // "Put on top of…") rather than a single-level cap — the Y math already generalizes (targetTopY
-  // is computed off whatever's currently on top of the target), so the only real addition is the
-  // cycle guard below. Sheets and the comforter/throw blanket don't go through this anymore — see
-  // applyMattressColor/_applyBedDressing.
+  // Stacking is arbitrary-depth (a topper, then a comforter, then a pillow can all layer onto one
+  // bed frame via repeated "Put on top of…") rather than a single-level cap — the Y math already
+  // generalizes (targetTopY is computed off whatever's currently on top of the target), so the only
+  // real addition is the cycle guard below. Sheets and the throw blanket don't go through this
+  // anymore — see applyMattressColor/_applyBedDressing.
   stackItemOn(sourceUid, targetUid) {
     if (sourceUid === targetUid) return
     const source = this.placedItems.find((p) => p.uid === sourceUid)
@@ -2200,22 +2200,30 @@ export class RoomEngine {
       const surfaceDims = (targetCat && targetCat.mattressDims) || target.mesh.userData.dims
       this._refitFootprint(source, sourceCat, surfaceDims)
     }
-    source.mesh.position.y = this._topSurfaceY(target)
+    // embedRatio (the comforter) sinks a chunky, scanned-fabric model further into its base than
+    // the universal edge-rounding STACK_SINK alone would — a comforter is meant to hug the
+    // mattress/topper underneath it, not perch fully on top of it.
+    const embed = sourceCat && sourceCat.embedRatio ? sourceCat.embedRatio * sourceCat.dims[2] : 0
+    source.mesh.position.y = this._topSurfaceY(target) - embed
     source.mesh.position.x = target.mesh.position.x
     source.mesh.position.z = target.mesh.position.z
     source.stackedOnUid = target.uid
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
 
-  // Repositions everything directly stacked on uid to sit at its current top surface (and
-  // recurses so a whole multi-layer bedding stack rides along together) — used after something
-  // moves the base item's effective top without a drag (bed height changes, loading a save).
+  // Repositions everything directly stacked on uid to sit at its current top surface and x/z (and
+  // recurses so a whole multi-layer bedding stack rides along together) — used both after the base
+  // item's effective top changes without a drag (bed height changes, loading a save) and, every
+  // pointermove of a live drag (see the pointermove handler above), to carry the whole stack along
+  // as the base itself is dragged around the room.
   _restackAbove(uid) {
     const parent = this.placedItems.find((p) => p.uid === uid)
     if (!parent) return
     const topY = this._topSurfaceY(parent)
     this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
-      child.mesh.position.y = topY
+      const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
+      const embed = childCat && childCat.embedRatio ? childCat.embedRatio * childCat.dims[2] : 0
+      child.mesh.position.y = topY - embed
       child.mesh.position.x = parent.mesh.position.x
       child.mesh.position.z = parent.mesh.position.z
       this._restackAbove(child.uid)
@@ -2897,15 +2905,11 @@ export class RoomEngine {
           // whatever it's resting on, clamped to that item's footprint instead of the room's walls
           // (see the pointermove handler and _clampStackedItem below). Only the explicit "Place on
           // floor" button (unstackItem) sends it back down — dragging alone never does. Anything
-          // resting on *this* item — directly, or several layers up a bedding stack — still falls
-          // to the floor when this item itself actually gets picked up and moved, though: the
-          // surface it was on is about to move out from under it, and following it in real time
-          // isn't supported. Deferred to the first real pointermove of the drag (see
-          // _pendingDropDescendantsUid below) rather than fired here on pointerdown — pointerdown
-          // fires on a plain click too (click-to-select is a zero-movement drag that never reaches
-          // pointermove), and dropping descendants right away meant merely selecting a bed with a
-          // topper/comforter/pillow already on it sent all of that straight to the floor.
-          this._pendingDropDescendantsUid = item.uid
+          // resting on *this* item — directly, or several layers up a bedding stack (a topper, a
+          // comforter, a pillow) — rides along with it instead: the pointermove handler below calls
+          // _restackAbove after every position update, which keeps every descendant centered on its
+          // base at the base's *current* x/z, so a dragged bed carries its bedding with it rather
+          // than leaving it behind on the floor.
           this.selectItem(item.uid)
           const floorPt = getFloorPoint()
           // floorPt is only unreliable right at the top of the viewport (see
@@ -2959,12 +2963,6 @@ export class RoomEngine {
         const factor = this.camState.radius * 0.0016
         this._panCamera(-dx * factor, dy * factor)
       } else if (this.mode === 'drag-item' && this.selected) {
-        // The item is actually being moved now (not just clicked) — this is the deferred drop from
-        // pointerdown above, fired once per pick-up rather than on every move event.
-        if (this._pendingDropDescendantsUid != null) {
-          this._dropDescendants(this._pendingDropDescendantsUid)
-          this._pendingDropDescendantsUid = null
-        }
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         // A null floorPt (see _intersectFloorPlane) means the cursor drifted into the unreliable
@@ -2987,6 +2985,10 @@ export class RoomEngine {
             this.selected.mesh.position.z = snapped.z
             this._clampItemToRoom(this.selected.mesh)
           }
+          // Carries a whole bedding stack along with whatever it's resting on (a bed, say) as it's
+          // dragged — every direct/indirect descendant re-centers on this item's just-updated x/z
+          // (see _restackAbove) instead of being left behind on the floor.
+          this._restackAbove(this.selected.uid)
         }
       } else if (this.mode === 'drag-wall-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
