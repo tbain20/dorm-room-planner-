@@ -1093,13 +1093,23 @@ export class RoomEngine {
   // one is a clean, reversible swap (see removeItem). Picking the *other* dressesBed group (or a
   // different tier of the one already active) on an already-dressed bed cross-fades straight from
   // the old dressing model to the new one instead of revealing the frame in between.
-  _applyBedDressing(cat) {
+  //
+  // colorHex (optional — the throw blanket's own "what color?" prompt in App.jsx passes one; a
+  // plain comforter click doesn't) picks what color the new dressing renders as, in priority order:
+  // whatever was explicitly asked for > whatever the bed was already dressed in (so switching
+  // between comforter/throw-blanket, or tiers of either, doesn't reset the bed back to a stock
+  // color) > whatever the bed's own mattress is currently tinted (see applyMattressColor's own
+  // bed.colorHex bookkeeping, so dressing a bed you already picked sheets for matches instead of
+  // clashing) > the tier's own catalog default, same as any other colorable item.
+  _applyBedDressing(cat, colorHex) {
     const bed = this._findBedForDressing()
     if (!bed) {
       this.onNotice('Add a bed to the room first.')
       return
     }
     const previousDressingUid = bed.dressingUid
+    const previousDressing = previousDressingUid != null ? this.placedItems.find((p) => p.uid === previousDressingUid) : null
+    const inheritedHex = colorHex ?? previousDressing?.colorHex ?? bed.colorHex
     this._loadItemMesh(cat, (mesh) => {
       mesh.position.set(bed.mesh.position.x, 0, bed.mesh.position.z)
       mesh.rotation.y = bed.mesh.rotation.y
@@ -1107,6 +1117,7 @@ export class RoomEngine {
       const dressing = this.placedItems.find((p) => p.uid === uid)
       dressing.dressesBedUid = bed.uid
       bed.dressingUid = uid
+      if (inheritedHex != null) this.setItemColor(uid, inheritedHex)
       this._fadeMesh(dressing.mesh, { from: 0, to: 1 })
       if (previousDressingUid != null) {
         // Already dressed (switching comforter tiers) — cross-fade the old dressing model
@@ -1125,11 +1136,13 @@ export class RoomEngine {
     })
   }
 
-  addItem(catId) {
+  // colorHex is only ever passed for a dressesBed item (the throw blanket's "what color?" prompt
+  // in App.jsx — see _applyBedDressing) — every other catalog item ignores the second argument.
+  addItem(catId, colorHex) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
     if (cat.dressesBed) {
-      this._applyBedDressing(cat)
+      this._applyBedDressing(cat, colorHex)
       return
     }
     if (cat.bedOnly) {
@@ -1911,12 +1924,12 @@ export class RoomEngine {
     }
     for (let i = 0; i < n; i++) this._setCollisionTint(items[i], colliding[i])
 
-    // Doors/windows vs. floor items — every wall feature is tested, not just doors: a window only
-    // ever actually collides with something tall enough to reach its sill height (a wardrobe
-    // blocking it, say), which is correct physically-grounded behavior rather than a deliberate
-    // "windows never collide" rule. A door, sitting right at floor level, is the case that matters
-    // in practice — furniture genuinely can block a doorway.
+    // Doors vs. floor items — a door, sitting right at floor level, is the one wall feature
+    // furniture can actually block in practice, so it's the only one that gets the red collision
+    // tint. Windows are deliberately excluded: a window pane is meant to read as see-through glass,
+    // not a solid, collidable surface, so it never tints red no matter what's pushed up against it.
     this.wallFeatures.forEach((feature) => {
+      if (feature.type !== 'door') return
       const featureBox = this._featureCollisionBox(feature)
       const hit = items.some((item, i) => {
         if (!featureBox.intersectsBox(wholeBoxes[i])) return false
@@ -2331,6 +2344,11 @@ export class RoomEngine {
       } else {
         this._tintModel(bed.mesh.userData.primaryModel || bed.mesh, hex)
       }
+      // Recorded on the bed itself (even though colgate-bed/bed-full/bed-bunk aren't cat.colorable,
+      // so this is bookkeeping only, not a swatch-picker-visible field) so a comforter/throw
+      // blanket dressing this bed later — see _applyBedDressing — picks up the same color instead
+      // of resetting to its own tier default.
+      bed.colorHex = hex
       mattressCount += 1
     })
     const toppers = this.placedItems.filter((p) => {
@@ -2563,8 +2581,11 @@ export class RoomEngine {
     const group = new THREE.Group()
     const { width, height } = feature
     if (feature.type === 'window') {
+      // Low opacity (a faint blue-glass tint, not a translucent block) so the window pane actually
+      // reads as see-through glass — you can tell there's a pane there, but it doesn't obscure
+      // whatever's on the other side of it the way the old, much more opaque fill did.
       const paneMat = new THREE.MeshStandardMaterial({
-        color: 0xaad4e8, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
+        color: 0xaad4e8, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide,
       })
       const pane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), paneMat)
       group.add(pane)

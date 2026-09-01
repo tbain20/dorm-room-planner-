@@ -355,10 +355,14 @@ export default function App() {
   const [publishRoomType, setPublishRoomType] = useState('')
   const [publishTags, setPublishTags] = useState([])
   const [publishTagDraft, setPublishTagDraft] = useState('')
-  // The clicked sheet-set catalog item (see catalog.js's recolorsMattress) while the "what color?"
-  // prompt is open — null when it's closed. Sheets have no placeable model of their own; picking a
-  // color here (see the modal below) re-tints every placed bed's mattress instead of adding an item.
-  const [sheetColorPrompt, setSheetColorPrompt] = useState(null)
+  // The clicked catalog item awaiting a "what color?" pick — { cat, kind } where kind is
+  // 'sheets' | 'pillowcases' | 'throw-blanket', each routing to a different engine call once a
+  // swatch is picked (see the modal below) — null when the prompt is closed. Sheets and
+  // pillowcases have no placeable model of their own (they re-tint something already in the
+  // room); the throw blanket does dress the bed with a real model (see catalog.js's dressesBed)
+  // but still asks first so the new dressing renders in the color the user actually wants instead
+  // of always defaulting to the tier's own stock color.
+  const [colorPrompt, setColorPrompt] = useState(null)
   // { type: 'layout'|'comment'|'profile', id, label } of whatever's currently being reported, or
   // null when the report modal is closed.
   const [reportTarget, setReportTarget] = useState(null)
@@ -742,22 +746,24 @@ export default function App() {
   }
 
   // Single entry point for "add this catalog item" clicks (the main catalog list, its tiered
-  // group cards, and the "GOES WELL WITH"/+Room suggestions) — a pillowcase (see catalog.js's
-  // recolorsPillows) isn't a placeable object of its own, it's a covering for whatever pillow(s)
-  // are already in the room, so it re-tints those instead of dropping a new floating box into the
-  // scene. Every other catalog item is unaffected and just adds normally.
+  // group cards, and the "GOES WELL WITH"/+Room suggestions). Three groups ask what color before
+  // doing anything (see the colorPrompt modal below, and its own comment above the state
+  // declaration): pillowcases and sheets have no placeable model of their own (they re-tint
+  // something already in the room — pillows, a bed's mattress), and the throw blanket dresses the
+  // bed with a real model but still asks first so it renders in the chosen color instead of its
+  // own tier default. Every other catalog item is unaffected and just adds normally.
   function handleAddCatalogItem(catalogId) {
     const cat = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === catalogId)
     if (cat && cat.recolorsPillows) {
-      engineRef.current.applyPillowcaseColor(cat.color)
+      setColorPrompt({ cat, kind: 'pillowcases' })
       return
     }
-    // Sheets (see catalog.js's recolorsMattress) have no placeable model either, but unlike a
-    // pillowcase's single fixed color, real sheets come in a real choice of colors — so this opens
-    // a prompt (rendered below) instead of silently applying cat.color, and the actual recolor
-    // happens once the user picks a swatch there.
     if (cat && cat.recolorsMattress) {
-      setSheetColorPrompt(cat)
+      setColorPrompt({ cat, kind: 'sheets' })
+      return
+    }
+    if (cat && cat.dressesBed && cat.groupId === 'blanket-throw') {
+      setColorPrompt({ cat, kind: 'throw-blanket' })
       return
     }
     engineRef.current.addItem(catalogId)
@@ -2750,20 +2756,31 @@ export default function App() {
         </div>
       </div>
 
-      {sheetColorPrompt && (
-        <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setSheetColorPrompt(null)}>
+      {colorPrompt && (
+        <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setColorPrompt(null)}>
           <div id="receipt">
-            <h2>Choose a sheet color</h2>
+            <h2>
+              {colorPrompt.kind === 'sheets' && 'Choose a sheet color'}
+              {colorPrompt.kind === 'pillowcases' && 'Choose a pillowcase color'}
+              {colorPrompt.kind === 'throw-blanket' && 'Choose a throw blanket color'}
+            </h2>
             <div className="rsub">
-              {sheetColorPrompt.name} has no shape of its own to place — pick a color and it recolors your mattress, and clears any mattress topper so the sheets actually show.
+              {colorPrompt.kind === 'sheets' &&
+                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors your mattress, and clears any mattress topper so the sheets actually show.`}
+              {colorPrompt.kind === 'pillowcases' &&
+                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors every pillow already in your room.`}
+              {colorPrompt.kind === 'throw-blanket' &&
+                `Pick a color for ${colorPrompt.cat.name} before it dresses your bed.`}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               {BEDDING_COLOR_SWATCHES.map((hex) => (
                 <button
                   key={hex}
                   onClick={() => {
-                    engineRef.current.applyMattressColor(hex)
-                    setSheetColorPrompt(null)
+                    if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex)
+                    else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex)
+                    else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    setColorPrompt(null)
                   }}
                   title={`#${hex.toString(16).padStart(6, '0')}`}
                   style={{
@@ -2775,7 +2792,7 @@ export default function App() {
               ))}
             </div>
             <button
-              onClick={() => setSheetColorPrompt(null)}
+              onClick={() => setColorPrompt(null)}
               style={{ width: '100%', background: 'var(--paper-shadow)', color: 'var(--ink-soft)', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
             >
               Cancel
