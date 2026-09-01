@@ -355,6 +355,10 @@ export default function App() {
   const [publishRoomType, setPublishRoomType] = useState('')
   const [publishTags, setPublishTags] = useState([])
   const [publishTagDraft, setPublishTagDraft] = useState('')
+  // The clicked sheet-set catalog item (see catalog.js's recolorsMattress) while the "what color?"
+  // prompt is open — null when it's closed. Sheets have no placeable model of their own; picking a
+  // color here (see the modal below) re-tints every placed bed's mattress instead of adding an item.
+  const [sheetColorPrompt, setSheetColorPrompt] = useState(null)
   // { type: 'layout'|'comment'|'profile', id, label } of whatever's currently being reported, or
   // null when the report modal is closed.
   const [reportTarget, setReportTarget] = useState(null)
@@ -746,6 +750,14 @@ export default function App() {
     const cat = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === catalogId)
     if (cat && cat.recolorsPillows) {
       engineRef.current.applyPillowcaseColor(cat.color)
+      return
+    }
+    // Sheets (see catalog.js's recolorsMattress) have no placeable model either, but unlike a
+    // pillowcase's single fixed color, real sheets come in a real choice of colors — so this opens
+    // a prompt (rendered below) instead of silently applying cat.color, and the actual recolor
+    // happens once the user picks a swatch there.
+    if (cat && cat.recolorsMattress) {
+      setSheetColorPrompt(cat)
       return
     }
     engineRef.current.addItem(catalogId)
@@ -1695,7 +1707,7 @@ export default function App() {
               </>
             )}
 
-            {!selection.cat.bedOnly && (
+            {!selection.cat.bedOnly && !selection.cat.dressesBed && (
               <>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                   {selection.stackedOnUid != null ? (
@@ -1728,6 +1740,11 @@ export default function App() {
             {selection.cat.bedOnly && (
               <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
                 Drag to slide it around the bed — it stays on the bed and can't be moved off.
+              </div>
+            )}
+            {selection.cat.dressesBed && (
+              <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
+                This dresses the bed underneath it — remove it to bring the bed frame back.
               </div>
             )}
             <button onClick={() => engineRef.current.removeItem(selection.uid)}>Remove item</button>
@@ -2732,6 +2749,40 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {sheetColorPrompt && (
+        <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setSheetColorPrompt(null)}>
+          <div id="receipt">
+            <h2>Choose a sheet color</h2>
+            <div className="rsub">
+              {sheetColorPrompt.name} has no shape of its own to place — pick a color and it recolors your mattress, and clears any mattress topper so the sheets actually show.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+              {BEDDING_COLOR_SWATCHES.map((hex) => (
+                <button
+                  key={hex}
+                  onClick={() => {
+                    engineRef.current.applyMattressColor(hex)
+                    setSheetColorPrompt(null)
+                  }}
+                  title={`#${hex.toString(16).padStart(6, '0')}`}
+                  style={{
+                    width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                    background: `#${hex.toString(16).padStart(6, '0')}`,
+                    border: '1px solid var(--paper-shadow)',
+                  }}
+                />
+              ))}
+            </div>
+            <button
+              onClick={() => setSheetColorPrompt(null)}
+              style={{ width: '100%', background: 'var(--paper-shadow)', color: 'var(--ink-soft)', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {reportTarget && (
         <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setReportTarget(null)}>

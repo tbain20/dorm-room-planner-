@@ -48,13 +48,24 @@ const ITEM_SNAP_DISTANCE = 0.28
 // but comfortably above the floating-point noise a flush snap can leave in a box's min/max.
 const COLLISION_EPSILON = 0.01
 
-// Wall opacity when a wall isn't the one currently facing the camera (unchanged from the original
-// single shared material) vs. when it is — see _updateNearWall. Kept far apart (0.4 vs. 0.05, not
-// just "less opaque") since the whole point is that the near wall reads as "basically not there"
-// so it stops visually competing with — and stops fielding accidental clicks meant for — whatever
-// is mounted on the far wall behind it.
-const WALL_OPACITY_NORMAL = 0.4
+// Wall opacity when a wall isn't the one currently facing the camera vs. when it is — see
+// _updateNearWall. Every other wall is fully solid (opaque walls read as a real room, matching
+// the residence-hall reference look) while the wall nearest the camera fades almost to nothing so
+// it stops visually competing with — and stops fielding accidental clicks meant for — whatever is
+// mounted on the far wall behind it.
+const WALL_OPACITY_NORMAL = 1
 const WALL_OPACITY_NEAR = 0.05
+
+const WALL_COLOR = 0xffffff // white — kept a true white (rather than off-white) so it reads as
+// a distinct wall against the scene's warm cream page background (0xf7f3ec) instead of blending
+// into it
+const FLOOR_COLOR = 0xa8895f // wood floor, one shade darker than the old 0xd7be99
+const TRIM_COLOR = 0x8f9296 // gray baseboard/door-casing trim
+const TRIM_HEIGHT = 0.35 // feet — baseboard height
+const DOOR_CASING_WIDTH = 0.22 // feet — gray door-casing width around a door opening
+const DOOR_COLOR = 0xceb37e // light wood door leaf
+const DOOR_EDGE_COLOR = 0x8a7148
+const DOOR_HANDLE_COLOR = 0xb9b9b3
 
 // Pillow pose presets (see catalog.js's hasPoseOptions / setItemPose below) — rotation around
 // local X applied to a pose pivot wrapping the loaded model.
@@ -214,7 +225,44 @@ export class RoomEngine {
     this._updateCollisions()
     this._updateNearWall()
     this._updateWallMountClips()
+    this._updateFades(now)
     this.renderer.render(this.scene, this.camera)
+  }
+
+  // Smooth opacity cross-fades (bed frame ↔ comforter dressing — see _applyBedDressing) — plain
+  // material.opacity tweens driven off the existing render loop rather than a separate timer, so
+  // they never run while the tab is backgrounded/rAF is paused. Each entry fades every material
+  // found under `mesh` from `from` to `to` over `duration` ms; `onComplete` (if given) fires once,
+  // right as the fade finishes — e.g. to flip `mesh.visible = false` once a fade-out reaches 0
+  // rather than leaving a fully-transparent-but-still-raycastable mesh sitting in the scene.
+  _fadeMesh(mesh, { from, to, duration = 400, onComplete } = {}) {
+    const materials = []
+    mesh.traverse((o) => {
+      if (o.isMesh && o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material]
+        mats.forEach((m) => materials.push(m))
+      }
+    })
+    // Set the starting opacity synchronously (not just queued for next frame) so a fade-in never
+    // flashes at whatever opacity the material happened to be left at before.
+    materials.forEach((m) => { m.transparent = true; m.opacity = from })
+    this._activeFades = this._activeFades || []
+    this._activeFades.push({ materials, from, to, start: performance.now(), duration, onComplete })
+  }
+
+  _updateFades(now) {
+    if (!this._activeFades || !this._activeFades.length) return
+    this._activeFades = this._activeFades.filter((f) => {
+      const t = Math.min(1, (now - f.start) / f.duration)
+      const opacity = f.from + (f.to - f.from) * t
+      f.materials.forEach((m) => { m.opacity = opacity })
+      if (t < 1) return true
+      // Faded fully in: drop back to a plain opaque material (transparent:true costs a little
+      // render-order/depth-sort correctness for no benefit once opacity is back at 1).
+      if (f.to === 1) f.materials.forEach((m) => { m.transparent = false; m.opacity = 1 })
+      if (f.onComplete) f.onComplete()
+      return false
+    })
   }
 
   _updateCameraPosition() {
@@ -452,7 +500,7 @@ export class RoomEngine {
     shape.closePath()
     const floor = new THREE.Mesh(
       new THREE.ShapeGeometry(shape),
-      new THREE.MeshStandardMaterial({ color: 0xd7be99, side: THREE.DoubleSide, roughness: 0.9 })
+      new THREE.MeshStandardMaterial({ color: FLOOR_COLOR, side: THREE.DoubleSide, roughness: 0.9 })
     )
     floor.rotation.x = -Math.PI / 2
     this.roomGroup.add(floor)
@@ -469,17 +517,31 @@ export class RoomEngine {
       const geo = new THREE.PlaneGeometry(width, height)
       // Each wall gets its own material instance (not a shared one) so _updateNearWall can fade
       // just the one currently facing the camera without dimming every other wall along with it.
-      const mat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, transparent: true, opacity: WALL_OPACITY_NORMAL, side: THREE.DoubleSide })
+      // Basic (unlit) rather than Standard — a lit wall's brightness swings with which way it
+      // happens to face relative to the scene's directional lights, so a wall facing away from
+      // both would render dim/gray instead of the flat, evenly-white look a real dorm wall (and
+      // the reference photo) actually has.
+      const mat = new THREE.MeshBasicMaterial({ color: WALL_COLOR, opacity: WALL_OPACITY_NORMAL, side: THREE.DoubleSide })
       const mesh = new THREE.Mesh(geo, mat)
       mesh.position.set(x, height / 2, z)
       mesh.rotation.y = rotY
       this.roomGroup.add(mesh)
-      this.wallMeshes.push({ mesh, normal })
       const edges = new THREE.EdgesGeometry(geo)
       const line = new THREE.LineSegments(edges, wallEdgeMat)
       line.position.copy(mesh.position)
       line.rotation.copy(mesh.rotation)
       this.roomGroup.add(line)
+
+      // Gray baseboard trim along the wall's bottom edge — shares the wall's own fade so it
+      // vanishes along with the wall when this segment is the one nearest the camera, instead of
+      // leaving a floating gray strip once the wall above it fades away.
+      const trimMat = new THREE.MeshBasicMaterial({ color: TRIM_COLOR, opacity: WALL_OPACITY_NORMAL, side: THREE.DoubleSide })
+      const trim = new THREE.Mesh(new THREE.PlaneGeometry(width, TRIM_HEIGHT), trimMat)
+      trim.position.set(x + normal.x * 0.015, TRIM_HEIGHT / 2, z + normal.z * 0.015)
+      trim.rotation.y = rotY
+      this.roomGroup.add(trim)
+
+      this.wallMeshes.push({ mesh, trimMesh: trim, normal })
     }
     // Walls follow the room's outline polygon edge by edge — a plain rectangle produces exactly
     // the original 4 wall segments (back/left/front/right, matching the old fixed calls); a
@@ -613,7 +675,7 @@ export class RoomEngine {
             gltf.scene.traverse((o) => { if (cat.hideNodes.includes(o.name)) o.visible = false })
           }
           // modelRotationY corrects models authored with their axes rotated 90° from the
-          // catalog's [width, depth, height] convention — e.g. ColgateBed.glb's headboard/
+          // catalog's [width, depth, height] convention — e.g. colgateBed.glb's headboard/
           // footboard rail panels came in spanning the model's long axis instead of its short
           // one. Applying the rotation before _fitModelToDims (which measures the object's
           // current world-space bounding box) is what makes the non-uniform width/depth scale
@@ -669,6 +731,10 @@ export class RoomEngine {
           //   in group.userData.movableObjs for setBedHeight() to reach later.
           if (cat.extraModels) {
             group.userData.movableObjs = []
+            // isMattress (see catalog.js) flags which fused extra model is the real mattress mesh
+            // — tracked here so applyMattressColor (triggered by clicking a sheet-set tier) knows
+            // what to re-tint without having to guess by node name or position.
+            group.userData.mattressModels = []
             for (const extra of cat.extraModels) {
               try {
                 const extraGltf = await this._loadGltf(extra.modelUrl)
@@ -683,6 +749,7 @@ export class RoomEngine {
                 } else {
                   extraGltf.scene.position.y += extra.yOffset
                 }
+                if (extra.isMattress) group.userData.mattressModels.push(extraGltf.scene)
                 group.add(extraGltf.scene)
               } catch (err) {
                 console.warn(`Extra model failed to load for "${cat.name}".`, err)
@@ -865,8 +932,8 @@ export class RoomEngine {
   }
 
   // Resizes a matchBaseFootprint item's own footprint (w,d) in place, keeping its own authored
-  // thickness (cat.dims[2]) — used whenever it's (re)stacked (see stackItemOn) so a topper/sheet
-  // always matches the exact mattress/surface underneath it.
+  // thickness (cat.dims[2]) — used whenever it's (re)stacked (see stackItemOn) so the mattress
+  // topper always matches the exact mattress/surface underneath it.
   //
   // fitModelToDims isn't idempotent — it derives scale from the object's *current* world-space
   // size (see modelFit.js), so calling it again on an already-fitted model without first resetting
@@ -883,8 +950,9 @@ export class RoomEngine {
         if (cat.floorNudge) model.position.y -= cat.floorNudge
       }
     } else {
-      // Box placeholder (e.g. sheet-set, which has no model) — swap geometry directly rather than
-      // rescaling, and rebuild the edge outline so it isn't left showing the old footprint's size.
+      // Box placeholder fallback for a matchBaseFootprint item with no model — swap geometry
+      // directly rather than rescaling, and rebuild the edge outline so it isn't left showing the
+      // old footprint's size.
       item.mesh.geometry.dispose()
       item.mesh.geometry = new THREE.BoxGeometry(w, h, d)
       const oldEdges = item.mesh.children.find((c) => c.isLineSegments)
@@ -942,8 +1010,9 @@ export class RoomEngine {
 
   // A bed's mattress footprint, "which bed still needs this item", and "what's currently the
   // topmost layer on a given bed" — the three pieces addItem needs to auto-snap a bedOnly item
-  // (mattress topper, sheets, comforter, pillows, throw blanket — see catalog.js) straight onto a
-  // bed instead of dropping it loose on the floor.
+  // (mattress topper, pillows — see catalog.js) straight onto a bed instead of dropping it loose on
+  // the floor. Sheets and the comforter/throw blanket don't go through this anymore — see
+  // applyMattressColor/_findBedForDressing below.
   _findBedAutoStackTarget(cat) {
     const beds = this.placedItems.filter((p) => {
       const c = ALL_ITEMS.find((x) => x.id === p.catalogId)
@@ -977,9 +1046,92 @@ export class RoomEngine {
     return null
   }
 
+  // Finds which placed bed a comforter click should dress — prefers one that isn't already dressed
+  // (so a second dressesBed pick in a two-bed room dresses the *other* bed, same spirit as
+  // _findBedAutoStackTarget's "undressed" preference), else re-dresses the most recent bed (the
+  // switch case: clicking a comforter/throw-blanket tier when every bed is already dressed).
+  // Every placed item's mesh EXCEPT a bed currently dressed (see _applyBedDressing) — that bed's
+  // own mesh sits exactly under its dressing model, hidden but still fully real geometry (fading it
+  // out only tweens opacity/visible, it doesn't remove it from the scene), and THREE.Raycaster
+  // doesn't skip invisible objects on its own (it only checks layers, not .visible) — so without
+  // this exclusion, clicking or measuring against a dressed bed could hit its hidden frame instead
+  // of the dressing model actually shown there.
+  _raycastableItemMeshes() {
+    return this.placedItems.filter((p) => p.dressingUid == null).map((p) => p.mesh)
+  }
+
+  _findBedForDressing() {
+    const beds = this.placedItems.filter((p) => {
+      const c = ALL_ITEMS.find((x) => x.id === p.catalogId)
+      return c && c.isBed
+    })
+    if (!beds.length) return null
+    return beds.find((bed) => bed.dressingUid == null) || beds[beds.length - 1]
+  }
+
+  // Fades a bed's own frame model (the whole `bed.mesh` group, fused frame+mattress and all) in or
+  // out — used both sides of a dressing swap: out when a comforter/throw-blanket model takes over
+  // the bed's look, back in once that dressing is removed. mesh.visible is flipped only at the
+  // *end* of a fade-out (see _fadeMesh's onComplete)
+  // so it stays raycastable/rendered while still visibly fading, and flipped true immediately for
+  // a fade-in so it's visible (at opacity 0, climbing) from the very first frame.
+  _fadeBedFrame(bed, show) {
+    if (show) {
+      bed.mesh.visible = true
+      this._fadeMesh(bed.mesh, { from: 0, to: 1 })
+    } else {
+      this._fadeMesh(bed.mesh, { from: 1, to: 0, onComplete: () => { bed.mesh.visible = false } })
+    }
+  }
+
+  // Comforter and throw blanket (see catalog.js's dressesBed) — both are now real scans of an
+  // entire made bed (frame + mattress + comforter, and frame + mattress + comforter + throw blanket
+  // respectively, each fused into one mesh), not a loose layer, so clicking either one no longer
+  // stacks it onto a bed's mattress. Instead it swaps the target bed's own visible model out for
+  // this one: the frame fades out, this model fades in at the exact same spot, and the two
+  // placedItems entries stay linked (bed.dressingUid / dressing.dressesBedUid) so removing either
+  // one is a clean, reversible swap (see removeItem). Picking the *other* dressesBed group (or a
+  // different tier of the one already active) on an already-dressed bed cross-fades straight from
+  // the old dressing model to the new one instead of revealing the frame in between.
+  _applyBedDressing(cat) {
+    const bed = this._findBedForDressing()
+    if (!bed) {
+      this.onNotice('Add a bed to the room first.')
+      return
+    }
+    const previousDressingUid = bed.dressingUid
+    this._loadItemMesh(cat, (mesh) => {
+      mesh.position.set(bed.mesh.position.x, 0, bed.mesh.position.z)
+      mesh.rotation.y = bed.mesh.rotation.y
+      const uid = this._registerItem(mesh, cat)
+      const dressing = this.placedItems.find((p) => p.uid === uid)
+      dressing.dressesBedUid = bed.uid
+      bed.dressingUid = uid
+      this._fadeMesh(dressing.mesh, { from: 0, to: 1 })
+      if (previousDressingUid != null) {
+        // Already dressed (switching comforter tiers) — cross-fade the old dressing model
+        // straight out instead of also fading the (already-hidden) frame back in and out again.
+        const oldIdx = this.placedItems.findIndex((p) => p.uid === previousDressingUid)
+        if (oldIdx !== -1) {
+          const old = this.placedItems[oldIdx]
+          this.placedItems.splice(oldIdx, 1)
+          this._fadeMesh(old.mesh, { from: 1, to: 0, onComplete: () => this.itemsGroup.remove(old.mesh) })
+          this._emitCart()
+        }
+      } else {
+        this._fadeBedFrame(bed, false)
+      }
+      this.selectItem(uid)
+    })
+  }
+
   addItem(catId) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
+    if (cat.dressesBed) {
+      this._applyBedDressing(cat)
+      return
+    }
     if (cat.bedOnly) {
       const target = this._findBedAutoStackTarget(cat)
       if (!target) {
@@ -1229,6 +1381,11 @@ export class RoomEngine {
       mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false, wallMounted: false,
       pillowPose: cat.hasPoseOptions ? 'flat' : undefined,
       colorHex: cat.colorable ? cat.color : undefined,
+      // dressesBedUid (a comforter — see catalog.js) / dressingUid (a bed): the two-way link
+      // _applyBedDressing sets up between a bed and whatever's currently dressing it, so removing
+      // either one through removeItem below can cleanly undo the pairing on the other side.
+      dressesBedUid: null,
+      dressingUid: null,
     })
     this._clampItemToRoom(mesh)
     this._emitCart()
@@ -1239,8 +1396,21 @@ export class RoomEngine {
     this._cancelStackPickIfActive()
     const idx = this.placedItems.findIndex((p) => p.uid === uid)
     if (idx === -1) return
-    this.itemsGroup.remove(this.placedItems[idx].mesh)
+    const removed = this.placedItems[idx]
+    this.itemsGroup.remove(removed.mesh)
     this.placedItems.splice(idx, 1)
+    // Undo a comforter/bed dressing link (see _applyBedDressing) in whichever direction applies:
+    // removing the comforter brings the bed frame's own model back into view; removing the bed
+    // itself takes its comforter down too, rather than leaving an orphaned "made bed" model with
+    // no frame underneath it tracking a now-nonexistent bed.
+    if (removed.dressesBedUid != null) {
+      const bed = this.placedItems.find((p) => p.uid === removed.dressesBedUid)
+      if (bed) {
+        bed.dressingUid = null
+        this._fadeBedFrame(bed, true)
+      }
+    }
+    if (removed.dressingUid != null) this.removeItem(removed.dressingUid)
     // Anything resting on the removed item — directly, or several layers up a bedding stack —
     // falls back to the floor rather than floating in place or disappearing along with it.
     const affected = this._collectDescendantUids(uid)
@@ -1602,7 +1772,7 @@ export class RoomEngine {
     this.pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1
     this.pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1
     this.raycaster.setFromCamera(this.pointerNDC, this.camera)
-    const itemMeshes = this.placedItems.map((p) => p.mesh)
+    const itemMeshes = this._raycastableItemMeshes()
     const hits = this.raycaster.intersectObjects(itemMeshes, true)
     let point
     if (hits.length) {
@@ -1718,11 +1888,17 @@ export class RoomEngine {
         // Box3.intersectsBox() counts touching boundaries as intersecting, so without this
         // exclusion every legitimately stacked pair would permanently show as "doesn't fit." Walks
         // the whole ancestor chain, not just the immediate parent — a multi-layer bedding stack
-        // (bed → topper → sheet → comforter → pillow, see catalog.js's bedOnly/matchBaseFootprint)
-        // means a sheet's *direct* base is the topper, but it still isn't "colliding" with the bed
-        // two levels down; only checking direct parents left every non-adjacent pair in a stack
+        // (bed → topper → pillow, say — see catalog.js's bedOnly/matchBaseFootprint) means a
+        // pillow's *direct* base is the topper, but it still isn't "colliding" with the bed two
+        // levels down; only checking direct parents left every non-adjacent pair in a stack
         // falsely tinted red.
         if (this._isStackedRelative(items[i], items[j]) || this._isStackedRelative(items[j], items[i])) continue
+        // A comforter dressing a bed (see _applyBedDressing) sits exactly on top of that bed's own
+        // hidden frame — same footprint, same spot, by design — so without this exclusion the two
+        // would permanently read as "colliding" with each other. Box3.setFromObject doesn't skip
+        // invisible objects, so the bed's own hidden mesh still contributes a real bounding box here
+        // even though nothing is actually rendered there.
+        if (items[i].dressesBedUid === items[j].uid || items[j].dressesBedUid === items[i].uid) continue
         // A desk chair slid in under a desk — see the note above on why height clearance can't
         // model this pair, so it's exempted outright instead.
         if ((cats[i]?.isChair && cats[j]?.hasLegroom) || (cats[j]?.isChair && cats[i]?.hasLegroom)) continue
@@ -1776,16 +1952,27 @@ export class RoomEngine {
       }
     }
     if (best !== this.nearWallEntry) {
-      if (this.nearWallEntry) this.nearWallEntry.mesh.material.opacity = WALL_OPACITY_NORMAL
+      if (this.nearWallEntry) this._setWallNear(this.nearWallEntry, false)
       this.nearWallEntry = best
     }
-    if (best) best.mesh.material.opacity = WALL_OPACITY_NEAR
+    if (best) this._setWallNear(best, true)
+  }
+
+  // A wall is opaque (transparent: false) by default so it renders solid without the depth-sort
+  // quirks transparent materials can bring; only the one wall nearest the camera switches into
+  // transparent mode so it can fade almost to nothing. Applies to both the wall and its baseboard
+  // trim so the two fade together instead of the trim floating visible after the wall vanishes.
+  _setWallNear(entry, near) {
+    for (const mat of [entry.mesh.material, entry.trimMesh.material]) {
+      mat.transparent = near
+      mat.opacity = near ? WALL_OPACITY_NEAR : WALL_OPACITY_NORMAL
+    }
   }
 
   // A feature (door/window) has no reliable solid mesh to test against — _buildFeatureMesh draws
-  // a door as pure line art (an opening outline + floor swing-arc symbol, no fill, so it reads as
-  // a gap in the wall) with nothing for _collectLeafBoxes's mesh traversal to find at all. Its
-  // collidable volume is computed directly from its own known width/height instead, positioned
+  // both as flat, zero-depth panels overlaid on the wall (no real geometric volume for
+  // _collectLeafBoxes's mesh traversal to find). Its collidable volume is computed directly from
+  // its own known width/height instead, positioned
   // and oriented exactly like its visual mesh (feature.mesh's own matrixWorld already has the
   // right wall position + rotation from _repositionFeature) — a thin box standing in for "the
   // door/window opening," since that's the actual physical thing furniture can't block.
@@ -1798,11 +1985,11 @@ export class RoomEngine {
     return box.applyMatrix4(feature.mesh.matrixWorld)
   }
 
-  // Mirrors _setCollisionTint, but a feature's materials aren't all MeshStandardMaterial with an
-  // emissive channel the way an item's are — a window's pane is, but a door has none at all (see
-  // _buildFeatureMesh: pure LineBasicMaterial line art), and a window's own frame/mullion lines
-  // are LineBasicMaterial too. Those only have a plain .color to work with, so this remembers each
-  // material's real color the first time (in userData, since unlike emissive there's no separate
+  // Mirrors _setCollisionTint, but not every feature material is a MeshStandardMaterial with an
+  // emissive channel the way an item's are — the door's casing/leaf/handle and the window's pane
+  // are, but a window's own frame/mullion lines are plain LineBasicMaterial line art. Those only
+  // have a plain .color to work with, so this remembers each material's real color the first time
+  // (in userData, since unlike emissive there's no separate
   // "off" channel to reset to) and swaps between that and collision red instead.
   _setFeatureCollisionTint(feature, on) {
     if (feature._collisionTinted === on) return
@@ -1963,21 +2150,20 @@ export class RoomEngine {
       const topOffset = movable.reduce((max, m) => Math.max(max, m.stackOffset + m.thickness), 0)
       return placedItem.mesh.position.y + cat.bedHeights[level] + topOffset - STACK_SINK
     }
-    // A bed with no bedHeights (e.g. bed-bunk) still has a real fused mattress sitting below the
-    // top of its overall footprint — isMattressSurface (see catalog.js) flags which fixed-yOffset
-    // extraModels entry that is, so stacking lands on the actual sleep surface instead of the top
-    // of the whole frame (which, for a bunk, would be the top bunk's headboard).
-    if (cat && cat.extraModels) {
-      const surface = cat.extraModels.find((e) => e.isMattressSurface)
-      if (surface) return placedItem.mesh.position.y + surface.yOffset + surface.dims[2] - STACK_SINK
-    }
+    // Every bed (colgate-bed, bed-full, bed-bunk) is one fused frame+mattress mesh now, with no
+    // separate mattress piece left to derive a resting surface from — mattressTopY (see catalog.js)
+    // is the fixed local Y its own baked-in mattress surface sits at, measured once per bed model,
+    // so stacking lands on the actual sleep surface instead of the top of the whole frame (which,
+    // for a bunk, would be the top bunk's headboard).
+    if (cat && cat.mattressTopY != null) return placedItem.mesh.position.y + cat.mattressTopY - STACK_SINK
     return placedItem.mesh.position.y + placedItem.mesh.userData.dims[2] - STACK_SINK
   }
 
-  // Stacking is arbitrary-depth (a topper, then a sheet set, then a comforter, then a pillow can
-  // all layer onto one bed frame via repeated "Put on top of…") rather than the single-level cap
-  // this used to have — the Y math already generalizes (targetTopY is computed off whatever's
-  // currently on top of the target), so the only real addition is the cycle guard below.
+  // Stacking is arbitrary-depth (a topper, then a pillow can layer onto one bed frame via repeated
+  // "Put on top of…") rather than a single-level cap — the Y math already generalizes (targetTopY
+  // is computed off whatever's currently on top of the target), so the only real addition is the
+  // cycle guard below. Sheets and the comforter/throw blanket don't go through this anymore — see
+  // applyMattressColor/_applyBedDressing.
   stackItemOn(sourceUid, targetUid) {
     if (sourceUid === targetUid) return
     const source = this.placedItems.find((p) => p.uid === sourceUid)
@@ -1990,42 +2176,18 @@ export class RoomEngine {
       ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
     }
     const sourceCat = ALL_ITEMS.find((c) => c.id === source.catalogId)
-    // A comforter fully covers whatever fitted sheet is underneath it in real life, so stacking one
-    // on top of already-placed sheets (same groupId concept as catalog.js's undressed-bed check)
-    // would just show two redundant "made bed" layers. Remove the sheets instead and attach the
-    // comforter exactly where they were — walking the whole chain down from target, not just target
-    // itself, since the sheets are usually but not necessarily the current top of the stack.
-    if (sourceCat && sourceCat.groupId === 'comforter') {
-      let cur = target
-      while (cur) {
-        const curCat = ALL_ITEMS.find((c) => c.id === cur.catalogId)
-        if (curCat && curCat.groupId === 'sheet-set') {
-          const sheetBaseUid = cur.stackedOnUid
-          this.removeItem(cur.uid)
-          target = this.placedItems.find((p) => p.uid === sheetBaseUid)
-          break
-        }
-        cur = cur.stackedOnUid != null ? this.placedItems.find((p) => p.uid === cur.stackedOnUid) : null
-      }
-      if (!target) return
-    }
     // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
     // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
     if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
-    // matchBaseFootprint (mattress topper, sheets) always resizes to the exact surface it's
-    // currently resting on — the bed's real mattressDims if stacked directly on a bed, or whatever
-    // the base's own current footprint is (e.g. a topper already matched, for sheets stacked atop
-    // it) otherwise.
+    // matchBaseFootprint (the mattress topper) always resizes to the exact surface it's currently
+    // resting on — the bed's real mattressDims if stacked directly on a bed, or whatever the base's
+    // own current footprint is otherwise.
     if (sourceCat && sourceCat.matchBaseFootprint) {
       const targetCat = ALL_ITEMS.find((c) => c.id === target.catalogId)
       const surfaceDims = (targetCat && targetCat.mattressDims) || target.mesh.userData.dims
       this._refitFootprint(source, sourceCat, surfaceDims)
     }
-    // embedRatio (sheets, comforter — see catalog.js) sinks a chunky, scanned-fabric model further
-    // into its base than the universal edge-rounding STACK_SINK alone would — a fitted sheet or
-    // comforter is meant to hug the mattress/topper underneath it, not perch fully on top of it.
-    const embed = sourceCat && sourceCat.embedRatio ? sourceCat.embedRatio * sourceCat.dims[2] : 0
-    source.mesh.position.y = this._topSurfaceY(target) - embed
+    source.mesh.position.y = this._topSurfaceY(target)
     source.mesh.position.x = target.mesh.position.x
     source.mesh.position.z = target.mesh.position.z
     source.stackedOnUid = target.uid
@@ -2040,9 +2202,7 @@ export class RoomEngine {
     if (!parent) return
     const topY = this._topSurfaceY(parent)
     this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
-      const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
-      const embed = childCat && childCat.embedRatio ? childCat.embedRatio * childCat.dims[2] : 0
-      child.mesh.position.y = topY - embed
+      child.mesh.position.y = topY
       child.mesh.position.x = parent.mesh.position.x
       child.mesh.position.z = parent.mesh.position.z
       this._restackAbove(child.uid)
@@ -2143,6 +2303,45 @@ export class RoomEngine {
     this.onNotice(`Updated ${pillows.length} pillow${pillows.length === 1 ? '' : 's'} in your room.`)
   }
 
+  // Sheets (see catalog.js's recolorsMattress) have no placeable model either — real fitted sheets
+  // are invisible under whatever's covering the mattress anyway, so clicking a sheet-set tier
+  // (after the "what color?" prompt in App.jsx) re-tints every placed bed's actual mattress instead
+  // of adding an item. Every current bed model (colgate-bed/bed-full/bed-bunk — see catalog.js's
+  // note above BEDDING_COLOR_SWATCHES) fuses its frame and mattress into one mesh with no separate
+  // mattress piece to isolate (mattressModels, populated from any isMattress-flagged extraModels
+  // entry, comes back empty for all three), so this falls back to re-tinting the whole bed model —
+  // the closest real approximation once frame and mattress are the same surface. Also clears any
+  // placed mattress topper: a topper sits between the mattress and a fitted sheet in real life, so
+  // leaving one in place would hide the recolor completely, matching Tyler's "topper should leave
+  // the screen" requirement.
+  applyMattressColor(hex) {
+    const beds = this.placedItems.filter((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      return cat && cat.isBed
+    })
+    if (beds.length === 0) {
+      this.onNotice('Add a bed to the room first.')
+      return
+    }
+    let mattressCount = 0
+    beds.forEach((bed) => {
+      const mattressModels = bed.mesh.userData.mattressModels || []
+      if (mattressModels.length) {
+        mattressModels.forEach((model) => this._tintModel(model, hex))
+      } else {
+        this._tintModel(bed.mesh.userData.primaryModel || bed.mesh, hex)
+      }
+      mattressCount += 1
+    })
+    const toppers = this.placedItems.filter((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      return cat && cat.groupId === 'mattress-topper'
+    })
+    toppers.forEach((t) => this.removeItem(t.uid))
+    const message = `Updated ${mattressCount} bed${mattressCount === 1 ? '' : 's'}`
+    this.onNotice(toppers.length ? `${message} and removed the topper.` : `${message}.`)
+  }
+
   _emitCart() {
     const items = this.placedItems.map((p) => ({
       uid: p.uid,
@@ -2173,6 +2372,10 @@ export class RoomEngine {
           z: p.mesh.position.z,
           rotY: p.mesh.rotation.y,
           stackedOnIndex: p.stackedOnUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.stackedOnUid),
+          // Same array-position convention as stackedOnIndex, for the bed/comforter dressing link
+          // (see _applyBedDressing) — uids get re-minted on load, so an index into this same
+          // save's own items array is what actually survives the round trip.
+          dressesBedIndex: p.dressesBedUid == null ? null : this.placedItems.findIndex((q) => q.uid === p.dressesBedUid),
           bedHeightLevel: p.bedHeightLevel,
           locked: p.locked,
           colorHex: p.colorHex,
@@ -2288,14 +2491,25 @@ export class RoomEngine {
       if (childUid == null || parentUid == null) return
       this.stackItemOn(childUid, parentUid)
     })
+    // Re-link a saved comforter/bed dressing pair (see _applyBedDressing) and hide the bed frame
+    // instantly — no fade here, this is a load, not a live interaction the user should watch happen.
+    savedItems.forEach((it, i) => {
+      if (it.dressesBedIndex == null) return
+      const dressing = this.placedItems.find((p) => p.uid === uidsByIndex[i])
+      const bed = this.placedItems.find((p) => p.uid === uidsByIndex[it.dressesBedIndex])
+      if (!dressing || !bed) return
+      dressing.dressesBedUid = bed.uid
+      bed.dressingUid = dressing.uid
+      bed.mesh.visible = false
+    })
     this._emitCart()
   }
 
   // ---------- Wall features (doors & windows) ----------
   // Rendered as flat panels overlaid on the wall — a translucent light-blue rectangle for
-  // windows, an outlined opening + floor-level swing arc for doors — rather than actually
-  // cutting geometry out of the wall mesh (real CSG boolean subtraction would be a lot of
-  // complexity for not much visual payoff here). "wall" is one of 'back'/'front'/'left'/'right';
+  // windows, a solid door leaf with a gray casing for doors — rather than actually cutting
+  // geometry out of the wall mesh (real CSG boolean subtraction would be a lot of complexity for
+  // not much visual payoff here). "wall" is one of 'back'/'front'/'left'/'right';
   // "offset" is the distance in feet from that wall's start corner to the feature's center,
   // along the wall's length (back/front measured along x from x=-w/2; left/right along z from
   // z=-l/2) — see _wallConfig.
@@ -2363,32 +2577,35 @@ export class RoomEngine {
       ])
       group.add(new THREE.LineSegments(mullionGeo, frameMat))
     } else {
-      // Door: an outline of the opening (no fill, so it visually reads as a gap in the wall)
-      // plus a floor-level swing arc + leaf line — the standard architectural-plan door symbol,
-      // projected onto the floor since this is a 3D perspective view rather than a top-down plan.
-      const openingMat = new THREE.LineBasicMaterial({ color: 0x25211b })
-      const openingGeo = new THREE.PlaneGeometry(width, height)
-      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(openingGeo), openingMat))
+      // Door: a solid flush door leaf with a gray casing/frame around it — same "flat panel
+      // overlaid on the wall" approach as the window pane above, just filled in and colored to
+      // read as a real residence-hall door instead of architectural line art. The casing plane
+      // is taller/wider than the door and sits just behind it, so only the strip that sticks out
+      // past the door's edges is visible; it's shifted up by half its extra height so that strip
+      // shows on the left/right/top only, leaving the bottom flush with the floor like a real
+      // door casing (no casing under the door itself).
+      const casingMat = new THREE.MeshBasicMaterial({ color: TRIM_COLOR, side: THREE.DoubleSide })
+      const casing = new THREE.Mesh(
+        new THREE.PlaneGeometry(width + DOOR_CASING_WIDTH * 2, height + DOOR_CASING_WIDTH),
+        casingMat
+      )
+      casing.position.set(0, DOOR_CASING_WIDTH / 2, -0.01)
+      group.add(casing)
 
-      const swingMat = new THREE.LineBasicMaterial({ color: 0xc1502e })
-      const hingeX = -width / 2
-      const arcPoints = []
-      const segments = 24
-      for (let i = 0; i <= segments; i++) {
-        const t = (i / segments) * (Math.PI / 2)
-        arcPoints.push(new THREE.Vector3(hingeX + Math.sin(t) * width, -height / 2 + Math.cos(t) * width, 0))
-      }
-      const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints)
-      const arc = new THREE.Line(arcGeo, swingMat)
-      // The opening rectangle is vertical (XY plane); the swing arc needs to lie flat on the
-      // floor instead, sweeping from the hinge into the room — rotate it down from vertical.
-      arc.rotation.x = -Math.PI / 2
-      arc.position.y = -height / 2
-      group.add(arc)
-      const leafGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(width, 0, 0)])
-      const leaf = new THREE.Line(leafGeo, swingMat)
-      leaf.position.set(hingeX, -height / 2, 0)
-      group.add(leaf)
+      const doorMat = new THREE.MeshStandardMaterial({ color: DOOR_COLOR, roughness: 0.6 })
+      const doorGeo = new THREE.PlaneGeometry(width, height)
+      const door = new THREE.Mesh(doorGeo, doorMat)
+      group.add(door)
+      group.add(new THREE.LineSegments(new THREE.EdgesGeometry(doorGeo), new THREE.LineBasicMaterial({ color: DOOR_EDGE_COLOR })))
+
+      // Lever handle, offset toward the edge opposite the hinge (hinge assumed on the left, same
+      // convention the old swing-arc symbol used) — purely decorative, just enough to read as a door.
+      const handle = new THREE.Mesh(
+        new THREE.CircleGeometry(0.06, 16),
+        new THREE.MeshStandardMaterial({ color: DOOR_HANDLE_COLOR, metalness: 0.5, roughness: 0.4 })
+      )
+      handle.position.set(width / 2 - 0.35, 0, 0.01)
+      group.add(handle)
     }
     return group
   }
@@ -2604,7 +2821,7 @@ export class RoomEngine {
         return
       }
 
-      const itemMeshes = this.placedItems.map((p) => p.mesh)
+      const itemMeshes = this._raycastableItemMeshes()
       const featureMeshes = this.wallFeatures.map((f) => f.mesh)
       const hits = this.raycaster.intersectObjects([...itemMeshes, ...featureMeshes], true)
       let item = null
