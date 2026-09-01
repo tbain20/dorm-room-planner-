@@ -133,12 +133,16 @@ export class RoomEngine {
     // (or selecting something else) before you paste it.
     this.clipboardItem = null
 
-    // Whichever wall segment is currently most "facing" the camera — see _updateNearWall, called
-    // once per frame from _animate. Used both to fade that wall's material almost to nothing (so
-    // it doesn't visually block the view into the room from this angle) and, in the pointerdown
-    // handler below, to keep a wall-mounted item sitting on it from being picked up by an
-    // accidental drag meant for something on the wall behind it.
-    this.nearWallEntry = null
+    // Every wall segment currently "facing" the camera — see _updateNearWall, called once per
+    // frame from _animate. Used both to fade those walls' materials almost to nothing (so they
+    // don't visually block the view into the room from this angle) and, in the pointerdown
+    // handler below, to keep a wall-mounted item sitting on one of them from being picked up by
+    // an accidental drag meant for something on a wall behind it. A Set rather than a single
+    // entry: a notch/cutout splits one wall into several segments with different normals (see
+    // buildRoom), and looking at a corner means two full walls face the camera at once — either
+    // way, every segment that's actually in front of the camera needs to fade together, not just
+    // whichever single one happens to face it most directly.
+    this.nearWallEntries = new Set()
 
     this._initScene()
     this._initInteraction()
@@ -567,11 +571,11 @@ export class RoomEngine {
       addWall(segWidth, h, midX, midZ, rotY, new THREE.Vector3(nx, 0, nz))
     }
 
-    // Room just got rebuilt from scratch, so any previously-computed "nearest wall" reference is
-    // dangling (points at a disposed mesh) — _updateNearWall (called every frame) picks a fresh
-    // one before it's ever read again, but nulling it here avoids one stale frame where a wall
+    // Room just got rebuilt from scratch, so any previously-computed "near walls" reference
+    // dangling (disposed) meshes — _updateNearWall (called every frame) recomputes the set fresh
+    // before it's ever read again, but clearing it here avoids one stale frame where a wall
     // material that no longer exists in the scene would otherwise get touched.
-    this.nearWallEntry = null
+    this.nearWallEntries = new Set()
     this._buildWallLabels()
     this.fitCamera()
     this._repositionAllFeatures()
@@ -689,6 +693,12 @@ export class RoomEngine {
           // (room clamping, the selection panel, stacking) — falls back to cat.dims for every
           // other item, unchanged from before.
           this._fitModelToDims(gltf.scene, cat.primaryModelFitDims || cat.dims)
+          // primaryModelOffsetX (real-world feet, within the group's own local space) shifts the
+          // primary model off-center along X after fitting — e.g. a headboard-only model (see
+          // catalog.js's colgate-bed) that fitModelToDims would otherwise center in the middle of
+          // the mattress; this pushes it out to the head end instead, pairing with an extraModels
+          // entry's own xOffset for the footboard copy at the other end.
+          if (cat.primaryModelOffsetX) gltf.scene.position.x += cat.primaryModelOffsetX
           // floorNudge (real-world feet) is a per-item stopgap for a source model whose contact
           // points aren't all quite level (see catalog.js) — _fitModelToDims floor-aligns to the
           // model's single lowest vertex, so if that vertex belongs to one outlier leg/post, every
@@ -747,8 +757,13 @@ export class RoomEngine {
                   extraGltf.scene.position.y += standardY
                   group.userData.movableObjs.push({ obj: extraGltf.scene, stackOffset, thickness: extra.dims[2] })
                 } else {
-                  extraGltf.scene.position.y += extra.yOffset
+                  extraGltf.scene.position.y += extra.yOffset || 0
                 }
+                // xOffset (real-world feet) places this extra model off-center along X instead of
+                // stacked on the primary model's own footprint — e.g. a second headboard-model
+                // copy standing in as the footboard at the opposite end of the bed (see
+                // primaryModelOffsetX above and catalog.js's colgate-bed/bed-full).
+                if (extra.xOffset) extraGltf.scene.position.x += extra.xOffset
                 if (extra.isMattress) group.userData.mattressModels.push(extraGltf.scene)
                 group.add(extraGltf.scene)
               } catch (err) {
@@ -1476,8 +1491,19 @@ export class RoomEngine {
   }
 
   _rotateDescendants(uid, deltaRad) {
+    const parent = this.placedItems.find((p) => p.uid === uid)
     this.placedItems.filter((p) => p.stackedOnUid === uid).forEach((child) => {
       child.mesh.rotation.y = (child.mesh.rotation.y + deltaRad) % (Math.PI * 2)
+      // footEndOffset (the comforter — see catalog.js/stackItemOn) isn't centered on its parent,
+      // so unlike the shared-center case above, its position has to be re-derived from the new
+      // rotation too, or it'd stay offset toward whatever direction was "the foot end" before the
+      // turn instead of tracking the bed around.
+      const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
+      if (childCat && childCat.footEndOffset && parent) {
+        const rot = child.mesh.rotation.y
+        child.mesh.position.x = parent.mesh.position.x + childCat.footEndOffset * Math.cos(rot)
+        child.mesh.position.z = parent.mesh.position.z - childCat.footEndOffset * Math.sin(rot)
+      }
       this._rotateDescendants(child.uid, deltaRad)
     })
   }
@@ -1939,13 +1965,21 @@ export class RoomEngine {
     })
   }
 
-  // Figures out which wall is currently "in front of" the camera — the one an orbit would have to
-  // pass through to see the room from outside — and fades just that wall's material down to
-  // WALL_OPACITY_NEAR so it stops visually blocking (and stops fielding accidental clicks meant
-  // for) whatever's mounted on the wall(s) behind it. Every other wall stays at the normal
-  // opacity. The room is always centered at world (0,0), so "toward the camera" in the floor
-  // plane is just the camera's own XZ position, normalized — no need to go through camState.target
-  // (panning moves the orbit target, but the walls themselves never move off-center).
+  // Figures out which wall segments are currently "in front of" the camera — the ones an orbit
+  // would have to pass through to see the room from outside — and fades each of their materials
+  // down to WALL_OPACITY_NEAR so they stop visually blocking (and stop fielding accidental clicks
+  // meant for) whatever's mounted on the wall(s) behind them. Every other segment stays at the
+  // normal opacity. The room is always centered at world (0,0), so "toward the camera" in the
+  // floor plane is just the camera's own XZ position, normalized — no need to go through
+  // camState.target (panning moves the orbit target, but the walls themselves never move off-
+  // center).
+  //
+  // Every segment is judged independently by its own outward-facing dot product rather than
+  // picking a single "most facing" winner — a notch/cutout (see buildRoom) splits one wall into
+  // several segments with different normals, so a winner-take-all pick would fade only one of
+  // them and leave the rest of that same wall (or the cutout's own return walls) opaque; looking
+  // into a corner likewise faces two full walls toward the camera at once, and both should go
+  // transparent together rather than just whichever one edges out the other.
   _updateNearWall() {
     if (!this.wallMeshes || this.wallMeshes.length === 0) return
     const camX = this.camera.position.x
@@ -1953,22 +1987,17 @@ export class RoomEngine {
     const len = Math.hypot(camX, camZ) || 1
     const dirX = camX / len
     const dirZ = camZ / len
-    let best = null
-    let bestDot = -Infinity
     for (const entry of this.wallMeshes) {
-      // entry.normal points INTO the room; the wall facing the camera is the one whose outward
-      // face — the negation of that — points most toward the camera.
+      // entry.normal points INTO the room; a segment is "in front of" the camera whenever its
+      // outward face — the negation of that — points at least partly toward the camera.
       const dot = -entry.normal.x * dirX - entry.normal.z * dirZ
-      if (dot > bestDot) {
-        bestDot = dot
-        best = entry
+      const near = dot > 0
+      if (near !== this.nearWallEntries.has(entry)) {
+        this._setWallNear(entry, near)
+        if (near) this.nearWallEntries.add(entry)
+        else this.nearWallEntries.delete(entry)
       }
     }
-    if (best !== this.nearWallEntry) {
-      if (this.nearWallEntry) this._setWallNear(this.nearWallEntry, false)
-      this.nearWallEntry = best
-    }
-    if (best) this._setWallNear(best, true)
   }
 
   // A wall is opaque (transparent: false) by default so it renders solid without the depth-sort
@@ -2207,6 +2236,15 @@ export class RoomEngine {
     source.mesh.position.y = this._topSurfaceY(target) - embed
     source.mesh.position.x = target.mesh.position.x
     source.mesh.position.z = target.mesh.position.z
+    // footEndOffset (the comforter — see catalog.js) shifts it toward the foot end along its own
+    // local X (head-to-foot) axis after the rotation above, rather than centering it on the
+    // mattress — a comforter authored short enough to leave the head end (and the pillow sitting
+    // there) uncovered would otherwise just leave an equal, unrealistic gap at the foot end too.
+    if (sourceCat && sourceCat.footEndOffset) {
+      const rot = source.mesh.rotation.y
+      source.mesh.position.x += sourceCat.footEndOffset * Math.cos(rot)
+      source.mesh.position.z -= sourceCat.footEndOffset * Math.sin(rot)
+    }
     source.stackedOnUid = target.uid
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
@@ -2226,6 +2264,13 @@ export class RoomEngine {
       child.mesh.position.y = topY - embed
       child.mesh.position.x = parent.mesh.position.x
       child.mesh.position.z = parent.mesh.position.z
+      // footEndOffset — see stackItemOn above, same reasoning: keep the comforter shifted toward
+      // the foot end instead of snapping back to centered on every drag/height-change cascade.
+      if (childCat && childCat.footEndOffset) {
+        const rot = child.mesh.rotation.y
+        child.mesh.position.x += childCat.footEndOffset * Math.cos(rot)
+        child.mesh.position.z -= childCat.footEndOffset * Math.sin(rot)
+      }
       this._restackAbove(child.uid)
     })
   }
@@ -2883,7 +2928,7 @@ export class RoomEngine {
           // behaves exactly like dragging empty floor instead of doing nothing/feeling stuck.
           this.mode = 'orbit'
           this.selectItem(item.uid)
-        } else if (this._isWallMounted(item, itemCat) && this._nearestWallMeshTo(item.mesh) === this.nearWallEntry) {
+        } else if (this._isWallMounted(item, itemCat) && this.nearWallEntries.has(this._nearestWallMeshTo(item.mesh))) {
           // This item is mounted on whichever wall is currently nearly-invisible because it's
           // facing the camera (see _updateNearWall) — exactly the wall a click aimed at something
           // on the *far* wall behind it is liable to land on by accident, since it's physically

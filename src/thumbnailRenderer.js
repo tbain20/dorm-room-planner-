@@ -71,6 +71,7 @@ export async function renderModelThumbnail(cat, size = 128) {
   if (cat.modelRotationY) object3d.rotation.y = cat.modelRotationY
   if (cat.tintMaterial) tintModel(object3d, cat.color)
   fitModelToDims(object3d, cat.primaryModelFitDims || cat.dims)
+  if (cat.primaryModelOffsetX) object3d.position.x += cat.primaryModelOffsetX
   const group = new THREE.Group()
   group.add(object3d)
 
@@ -81,7 +82,8 @@ export async function renderModelThumbnail(cat, size = 128) {
         if (extra.rotationY) extraGltf.scene.rotation.y = extra.rotationY
         if (extra.color) tintModel(extraGltf.scene, extra.color)
         fitModelToDims(extraGltf.scene, extra.dims)
-        extraGltf.scene.position.y += extra.yOffset
+        extraGltf.scene.position.y += extra.yOffset || 0
+        if (extra.xOffset) extraGltf.scene.position.x += extra.xOffset
         group.add(extraGltf.scene)
       } catch (err) {
         console.warn(`Extra model failed to load for thumbnail "${cat.name}".`, err)
