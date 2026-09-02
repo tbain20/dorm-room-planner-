@@ -250,12 +250,12 @@ export const CATALOG = [
   // decorative accent pillow (see decorative-pillow below, which doesn't set this and so still
   // auto-stacks on whatever's topmost), so _findBedAutoStackTarget in roomEngine.js walks past any
   // comforter layer already on the bed when placing one of these.
-  // poseFlip: pillowBest.glb's own "front" faces the opposite local direction from throwPillow.glb
-  // (see decorative-pillow below, which needs no flip) — same diagonal/upright pose math, mirrored,
-  // so this model leans/stands the correct way instead of tipping toward the wrong side.
-  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, poseFlip: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  // No poseFlip here (unlike an earlier version of this entry) — pillowBest.glb's diagonal/upright
+  // pose actually leans/stands correctly using the same unmirrored POSE_ANGLES math as
+  // throwPillow.glb below; the flip had it tipping toward the wrong side.
+  { id: 'bed-pillow-budget', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'budget', name: 'Beckham Hotel Collection Pillow (2-Pack)', price: 38, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0D9WWKGDF', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'moderate', name: 'Coop Home Goods Memory Foam Pillow', price: 27, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B00EINBSEW', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'bed-pillow-premium', groupId: 'bed-pillow', groupLabel: 'Pillow', tier: 'premium', name: 'Tempur-Pedic TEMPUR-Cloud Pillow (2-Pack)', price: 65, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FJZT5841', dims: [1.7, 2.3, 0.5], color: 0xfaf6ec, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/pillowBest.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['pillowcase-set', 'comforter', 'bed-full', 'colgate-bed'] },
   // Pillowcases — ✅ final-links pass (2026-08-25). Previously a single untiered stub; Tyler
   // supplied real budget/moderate/premium links so it's now a proper tiered group like the other
   // Bedding items above. Prices are market estimates (Amazon's rendered price wasn't visible via
@@ -298,11 +298,16 @@ export const CATALOG = [
   // ---- Furniture & Organization ----
   // No plain "Twin XL Bed Frame" here anymore — colgate-bed (below, in PROVIDED_CATALOG) already
   // covers the twin XL need with a real fused mattress, so a separate purchasable twin using a
-  // different (Kenney-kit) model was redundant. bed-full and bed-bunk below fill out
-  // the purchasable side for students who want a bigger bed or a bunk. Same category/id-suffix
-  // convention as the Colgate-chest/purchasable-chest split elsewhere: full/double doesn't fit a
-  // standard dorm frame, but plenty of this app's users aren't in a dorm at all (apartment,
-  // off-campus) — see the "not every user is a Colgate student" note on the Colgate section below.
+  // different (Kenney-kit) model was redundant. bed-bunk below fills out the purchasable side for
+  // students who want a bunk instead.
+  //
+  // bed-full is the Colgate Full XL — a real size some rooms come with, not something a student
+  // buys — so like colgate-bed/desk/chair/wardrobe below it's isProvided (no price/retailer/link,
+  // shown as "Included by Colgate"/a COLGATE badge instead — see App.jsx's cat.isProvided checks).
+  // It's kept here in CATALOG (not moved into PROVIDED_CATALOG) rather than folded into the "Add
+  // Colgate furniture" one-click set, since not every room has one — same reasoning as the
+  // stackable chest below: a student with this size bed clicks it in manually from the regular
+  // browse list instead.
   //
   // Renders as the real Colgate bed pieces — colgateHeadboard.glb is now a single headboard-shaped
   // panel (Tyler replaced the old two-ended fused headboard+footboard scan, which had the head and
@@ -317,10 +322,9 @@ export const CATALOG = [
   // extraModels' movesWithHeight (same mechanism colgate-bed below uses — see
   // _loadItemMesh/setBedHeight in roomEngine.js), sized to a full/double footprint here instead of
   // colgate-bed's twin XL one. See the note above BEDDING_COLOR_SWATCHES for why this frame keeps
-  // its own older FULL_BED_HEIGHTS values rather than the real Colgate spec (this is a generic
-  // purchasable frame, not the Colgate one).
+  // its own older FULL_BED_HEIGHTS values rather than the real Colgate spec.
   {
-    id: 'bed-full', name: 'Full-Size Bed Frame', price: 229, retailer: 'IKEA', dims: [6.4, 4.5, 2.2], color: 0xc9a876,
+    id: 'bed-full', name: 'Colgate Full XL Bed Frame', isProvided: true, dims: [6.4, 4.5, 2.2], color: 0xc9a876,
     category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2,
     primaryModelFitDims: [0.2, 4.5, 2.2], primaryModelOffsetX: -3.1,
     bedHeights: FULL_BED_HEIGHTS, isBed: true, mattressDims: [6.2, 4.2],
@@ -369,13 +373,14 @@ export const CATALOG = [
   { id: 'bed-risers', name: 'EclatBain Adjustable Bed Risers (4-Pack)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DLNBJ6K9', dims: [0.4, 0.4, 0.4], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', relatedIds: ['bed-full', 'colgate-bed', 'storage-drawers'] },
   { id: 'bedside-caddy', name: 'Lazzanto Bedside Caddy', price: 50, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DMRNCLFK', dims: [1.2, 1.0, 1.8], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', relatedIds: ['bed-full', 'colgate-bed', 'nightstand'] },
   { id: 'dresser', name: 'Dresser', price: 129, retailer: 'IKEA', dims: [2.6, 2.0, 2.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/kitchenCabinetDrawer.glb', relatedIds: ['mirror'] },
-  // Same real item/model as Colgate's provided "Stackable Chest" (see PROVIDED_CATALOG below) —
-  // this is the purchasable version, for a student who wants a second one or whose room didn't
-  // come with one. Unlike the provided furniture, this one has a price and counts toward the
-  // shopping list, since it's genuinely something you'd buy. tintMaterial: true because
+  // A real Colgate-provided item — not every room gets one, so instead of folding it into the
+  // "Add Colgate furniture" one-click set (see PROVIDED_CATALOG/colgateDefaultLayout below) it's
+  // kept here in the regular browse list for a student whose room did come with one to click in
+  // manually. isProvided (no price/retailer/link) shows it as "Included by Colgate"/a COLGATE
+  // badge instead — same treatment as colgate-bed/desk/chair/wardrobe. tintMaterial: true because
   // colgateChest.glb (like the rest of Tyler's Colgate models) came out of Blender as flat gray
   // with no material color — see the note above PROVIDED_CATALOG.
-  { id: 'stackable-chest', name: 'Stackable Chest', price: 79, retailer: 'IKEA', dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateChest.glb', tintMaterial: true, relatedIds: ['dresser'] },
+  { id: 'stackable-chest', name: 'Colgate Stackable Chest', isProvided: true, dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateChest.glb', tintMaterial: true, relatedIds: ['dresser'] },
   { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'closet-organizer', 'chk:hangers', 'chk:vacuum-storage-bags'] },
   { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', relatedIds: ['wardrobe', 'chk:command-hooks'] },
   // Closet Organizer — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
@@ -393,7 +398,7 @@ export const CATALOG = [
   // hasLegroom/isChair: lets the collision check (_updateCollisions in roomEngine.js) exempt a
   // desk chair slid in under a desk outright — a chair's backrest is routinely taller than the
   // desk itself, so no height-clearance math could make that pair stop registering as "touching."
-  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', hasLegroom: true, relatedIds: ['chair', 'lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },
+  { id: 'desk', name: 'Compact Desk', price: 99, retailer: 'IKEA', dims: [3.9, 2.0, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/desk.glb', hasLegroom: true, relatedIds: ['chair', 'lamp', 'shelf', 'desk-organizer', 'chk:pencil-holder'] },
   { id: 'desk-corner', name: 'Corner Desk', price: 149, retailer: 'IKEA', dims: [4.5, 4.5, 2.4], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/deskCorner.glb', hasLegroom: true, relatedIds: ['chair', 'lamp', 'shelf'] },
   { id: 'chair', name: 'Desk Chair', price: 79, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0x3a3a3a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairDesk.glb', isChair: true, relatedIds: ['desk'] },
   { id: 'chair-cushion', name: 'Cushioned Desk Chair', price: 89, retailer: 'Target', dims: [1.9, 1.9, 3.1], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/chairCushion.glb', isChair: true, relatedIds: ['desk'] },
@@ -401,18 +406,12 @@ export const CATALOG = [
   { id: 'shelf', name: 'Bookshelf', price: 59, retailer: 'IKEA', dims: [2.5, 1.0, 4.0], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseOpen.glb', relatedIds: ['desk', 'chk:books'] },
   { id: 'shelf-closed', name: 'Closed Bookshelf', price: 79, retailer: 'IKEA', dims: [2.5, 1.2, 4.0], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseClosed.glb', relatedIds: ['desk'] },
   { id: 'shelf-wide', name: 'Wide Bookshelf', price: 99, retailer: 'IKEA', dims: [3.5, 1.2, 3.6], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', modelUrl: '/models/bookcaseClosedWide.glb', relatedIds: ['desk'] },
-  // Desk Organizer/Monitor Stand/Cable Management Box/Desk Hutch — long-tail commodity pass (see
-  // remaining-longtail-picks.md). Desk Organizer and Monitor Stand replace what used to be
-  // checklist-only stubs (desk/colgate-desk's relatedIds pointed at 'chk:desk-organizer') now
-  // that the doc named real, well-reviewed products worth actually placing on the desk — same
-  // "graduate it to a real catalog entry" treatment earlier sessions gave other items. Cable
-  // Management Box and Desk Hutch are the two extra product ideas flagged at the bottom of that
-  // doc, not part of the original master list, added here since both are well-reviewed dorm-
-  // specific products with a genuine physical footprint worth placing.
+  // Desk Organizer — long-tail commodity pass (see remaining-longtail-picks.md). Replaces what
+  // used to be a checklist-only stub (desk/colgate-desk's relatedIds pointed at
+  // 'chk:desk-organizer') now that the doc named a real, well-reviewed product worth actually
+  // placing on the desk — same "graduate it to a real catalog entry" treatment earlier sessions
+  // gave other items.
   { id: 'desk-organizer', name: 'Poppin All-In-One Desktop Organizer', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.2, 0.7, 0.6], color: 0x6f8a9c, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'chk:pencil-holder'] },
-  { id: 'monitor-stand', name: 'Wood Desk Riser w/ Storage Shelf', price: 30, retailer: 'Amazon', productUrl: null, dims: [2.0, 1.0, 0.5], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'desk-lamp'] },
-  { id: 'cable-management-box', name: 'Bamboo Cable Management Box', price: 25, retailer: 'Amazon', productUrl: null, dims: [1.3, 0.6, 0.5], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'desk-hutch'] },
-  { id: 'desk-hutch', name: 'Smart Charging Desk Hutch', price: 89, retailer: 'Amazon', productUrl: null, dims: [2.5, 0.8, 1.8], color: 0xe8e0cf, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk', 'cable-management-box'] },
   { id: 'rolling-cart', name: 'Rolling Storage Cart', price: 39, retailer: 'Amazon', dims: [1.3, 1.3, 2.8], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'General Storage', relatedIds: ['chk:fabric-bins'] },
   // Storage Ottoman — Type C generic search (no specific product per Tyler's final-links pass);
   // retailer switched Target → Amazon so catalogItemLink()'s generic-search fallback matches.
@@ -445,8 +444,8 @@ export const CATALOG = [
   // (or a dedicated wall-mount model); this is damage control until then.
   { id: 'tv', name: 'TV (43")', price: 249, retailer: 'Amazon', productUrl: null, dims: [3.2, 0.3, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/televisionModern.glb', canWallMount: true, wallMountClipFraction: 0.4, relatedIds: ['chk:streaming-device', 'gaming-console', 'bluetooth-speaker'] },
   // Gaming Console — Type C generic search. Previously checklist-only ('chk:gaming-console');
-  // Tyler wants it as a real placeable entry now, same promotion desk-organizer/monitor-stand got
-  // in an earlier pass. No specific product — price is a rough market estimate.
+  // Tyler wants it as a real placeable entry now, same promotion desk-organizer got in an earlier
+  // pass. No specific product — price is a rough market estimate.
   { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.0, 0.3], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', relatedIds: ['tv', 'bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
@@ -531,10 +530,10 @@ export const CATALOG = [
   { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0FXXCCB7J', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08T7L23Z7', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['bev-cooler', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
-  // Vanity/Makeup Desk & Printer — placeholder link for now, per Tyler's final-links pass; new
-  // catalog entries purely to unblock modeling (see Type D note at the top of this file's session).
-  { id: 'vanity-desk', name: 'Vanity/Makeup Desk', price: 99, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [2.6, 1.3, 2.4], color: 0xe8e0cf, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['mirror', 'desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'printer', name: 'Printer', price: 79, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 0.8], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Desk', relatedIds: ['desk', 'colgate-desk'] }, // TODO: placeholder link, replace with real product/search link
+  // Makeup Mirror — placeholder link for now, per Tyler's final-links pass; wall-mountable like the
+  // Full-Length Mirror above, just smaller (a vanity/makeup mirror, not the desk it used to be sold
+  // as here).
+  { id: 'makeup-mirror', name: 'Makeup Mirror', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.3, 0.15, 1.6], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
   { id: 'bev-cooler', name: 'Beverage Cooler', price: 89, retailer: 'Best Buy', dims: [1.6, 1.6, 2.6], color: 0xe4e4e4, category: 'Optional Luxury Items', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['snack-cart'] },
 ]
 
@@ -571,8 +570,8 @@ export const CATALOG = [
 //
 // The Stackable Chest is deliberately NOT in this list — see 'stackable-chest' in CATALOG above.
 // Colgate doesn't guarantee every room gets one (the PDF's own wording is about variation between
-// rooms), so it isn't auto-placed as "provided", but it's the exact same real item/model, just
-// treated as purchasable.
+// rooms), so it isn't part of the "Add Colgate furniture" one-click set — it's still isProvided
+// (no price/link, same as everything below), just added manually from the regular browse list.
 export const PROVIDED_CATALOG = [
   // colgateHeadboard.glb is a single headboard-shaped panel (Tyler replaced the old two-ended
   // fused headboard+footboard scan, whose head and foot ends were mis-registered against each
@@ -603,7 +602,7 @@ export const PROVIDED_CATALOG = [
     ],
     relatedIds: ['chk:mattress-topper-memory-foam-gel-egg-crate', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter', 'bed-risers'],
   },
-  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, hasLegroom: true, relatedIds: ['lamp', 'shelf', 'desk-organizer', 'monitor-stand', 'chk:pencil-holder'] },
+  { id: 'colgate-desk', name: 'Panel Desk', modelNo: '205C42', dims: [3.5, 2.0, 2.5], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateDesk.glb', tintMaterial: true, hasLegroom: true, relatedIds: ['lamp', 'shelf', 'desk-organizer', 'chk:pencil-holder'] },
   { id: 'colgate-chair', name: 'Desk Chair', modelNo: '095', dims: [1.5, 1.83, 2.75], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateChair.glb', tintMaterial: true, isChair: true, relatedIds: ['colgate-desk'] },
   { id: 'colgate-wardrobe', name: 'Two Door Wardrobe', modelNo: '214-2', dims: [3.0, 2.08, 6.0], color: 0xc9a876, category: 'Provided', isProvided: true, modelUrl: '/models/colgateWardrobe.glb', tintMaterial: true, relatedIds: ['shoe-rack', 'cubes', 'chk:hangers', 'chk:vacuum-storage-bags'] },
 ]

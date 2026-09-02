@@ -71,6 +71,11 @@ const DOOR_HANDLE_COLOR = 0xb9b9b3
 // local X applied to a pose pivot wrapping the loaded model.
 const POSE_ANGLES = { flat: 0, diagonal: -Math.PI / 6, upright: -Math.PI / 2 }
 
+// How far (feet), along a bed's local width axis, each additional pillow landing on the same
+// bedding level (see stackItemOn's hasPoseOptions redirect) fans out from center — keeps a second
+// pillow from sitting exactly on top of (in the same x/z as) the first one.
+const PILLOW_SIDE_OFFSET = 0.4
+
 // How far (feet) a stacked bedding item sinks into whatever it's resting on — see _topSurfaceY's
 // comment for why a soft/rounded model needs this to avoid a visible gap at its edges.
 const STACK_SINK = 0.05
@@ -1512,6 +1517,13 @@ export class RoomEngine {
         child.mesh.position.x = parent.mesh.position.x + childCat.footEndOffset * Math.cos(rot)
         child.mesh.position.z = parent.mesh.position.z - childCat.footEndOffset * Math.sin(rot)
       }
+      // pillowSideOffset — same reasoning as footEndOffset above: a fanned-out pillow (see
+      // stackItemOn) isn't centered on its parent either, so its position tracks the new rotation.
+      if (child.pillowSideOffset && parent) {
+        const rot = child.mesh.rotation.y
+        child.mesh.position.x = parent.mesh.position.x + child.pillowSideOffset * Math.sin(rot)
+        child.mesh.position.z = parent.mesh.position.z + child.pillowSideOffset * Math.cos(rot)
+      }
       this._rotateDescendants(child.uid, deltaRad)
     })
   }
@@ -2219,13 +2231,23 @@ export class RoomEngine {
     const source = this.placedItems.find((p) => p.uid === sourceUid)
     let target = this.placedItems.find((p) => p.uid === targetUid)
     if (!source || !target) return
+    const sourceCat = ALL_ITEMS.find((c) => c.id === source.catalogId)
+    // Pillows (hasPoseOptions — see catalog.js) never stack on another pillow, whether picked here
+    // manually via "Put on top of…" or handed in by _findBedAutoStackTarget's auto-place: redirect
+    // onto whatever that pillow is itself resting on so a second pillow lands at the same bedding
+    // level instead of piling up above the first one.
+    if (sourceCat && sourceCat.hasPoseOptions) {
+      const targetCat = ALL_ITEMS.find((c) => c.id === target.catalogId)
+      if (targetCat && targetCat.hasPoseOptions && target.stackedOnUid != null) {
+        target = this.placedItems.find((p) => p.uid === target.stackedOnUid) || target
+      }
+    }
     // Refuse to stack an item onto one of its own descendants (would create a cycle).
     let ancestor = target
     while (ancestor) {
       if (ancestor.uid === sourceUid) return
       ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
     }
-    const sourceCat = ALL_ITEMS.find((c) => c.id === source.catalogId)
     // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
     // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
     if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
@@ -2253,6 +2275,19 @@ export class RoomEngine {
       source.mesh.position.x += sourceCat.footEndOffset * Math.cos(rot)
       source.mesh.position.z -= sourceCat.footEndOffset * Math.sin(rot)
     }
+    // Fan pillows sideways off center (see PILLOW_SIDE_OFFSET above) based on how many other
+    // pillows are already resting on this same target — persisted on the instance (rather than a
+    // one-time nudge) so _restackAbove/_rotateDescendants below can keep reapplying it as the bed
+    // moves/turns, the same way they already do for footEndOffset.
+    if (sourceCat && sourceCat.hasPoseOptions) {
+      const siblingCount = this.placedItems.filter(
+        (p) => p.uid !== sourceUid && p.stackedOnUid === target.uid && (ALL_ITEMS.find((c) => c.id === p.catalogId) || {}).hasPoseOptions
+      ).length
+      source.pillowSideOffset = siblingCount === 0 ? 0 : (siblingCount % 2 === 0 ? -1 : 1) * Math.ceil(siblingCount / 2) * PILLOW_SIDE_OFFSET
+      const rot = source.mesh.rotation.y
+      source.mesh.position.x += source.pillowSideOffset * Math.sin(rot)
+      source.mesh.position.z += source.pillowSideOffset * Math.cos(rot)
+    }
     source.stackedOnUid = target.uid
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
@@ -2278,6 +2313,13 @@ export class RoomEngine {
         const rot = child.mesh.rotation.y
         child.mesh.position.x += childCat.footEndOffset * Math.cos(rot)
         child.mesh.position.z -= childCat.footEndOffset * Math.sin(rot)
+      }
+      // pillowSideOffset — see stackItemOn above, same reasoning as footEndOffset: keep a fanned-
+      // out pillow shifted off center instead of snapping back to dead-center on every cascade.
+      if (child.pillowSideOffset) {
+        const rot = child.mesh.rotation.y
+        child.mesh.position.x += child.pillowSideOffset * Math.sin(rot)
+        child.mesh.position.z += child.pillowSideOffset * Math.cos(rot)
       }
       this._restackAbove(child.uid)
     })
@@ -2325,9 +2367,9 @@ export class RoomEngine {
   _applyPose(group, cat, pose) {
     const pivot = group.userData.posePivot
     if (!pivot) return
-    // poseFlip (see catalog.js — pillowBest.glb needs it, throwPillow.glb doesn't) mirrors the
-    // lean/stand direction for a model whose own "front" faces the opposite local way, so the same
-    // diagonal/upright angles still tip it the correct direction instead of the wrong one.
+    // poseFlip (see catalog.js) mirrors the lean/stand direction for a pose-capable model whose own
+    // "front" faces the opposite local way from the default POSE_ANGLES convention — unused by
+    // either current pillow catalog entry, but left available for a future model that needs it.
     const angle = (POSE_ANGLES[pose] ?? 0) * (cat.poseFlip ? -1 : 1)
     const [, d, h] = cat.dims
     pivot.rotation.x = angle

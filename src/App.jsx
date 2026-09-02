@@ -2001,10 +2001,17 @@ export default function App() {
                                 <div className="cat-info">
                                   <div className="name">{cat.name}</div>
                                   <div className="meta">
-                                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}' · <span className="retailer-tag">{cat.retailer}</span>
+                                    {cat.dims[0]}' × {cat.dims[1]}' × {cat.dims[2]}'
+                                    {!cat.isProvided && <> · <span className="retailer-tag">{cat.retailer}</span></>}
                                   </div>
                                 </div>
-                                <div className="cat-price">${cat.price}</div>
+                                {cat.isProvided ? (
+                                  <span style={{ background: 'var(--sage-soft)', color: 'var(--sage)', fontSize: 9.5, fontWeight: 600, letterSpacing: '0.03em', padding: '4px 9px', borderRadius: 999, flexShrink: 0 }}>
+                                    COLGATE
+                                  </span>
+                                ) : (
+                                  <div className="cat-price">${cat.price}</div>
+                                )}
                                 <button className="add-btn" title="Add">+</button>
                               </div>
                             )
