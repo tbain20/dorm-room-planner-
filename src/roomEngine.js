@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { ALL_CATALOG_ITEMS as ALL_ITEMS } from './catalog.js'
 import { fitModelToDims, tintModel } from './modelFit.js'
 import { formatLength, DEFAULT_UNIT_SYSTEM } from './units.js'
@@ -166,6 +167,7 @@ export class RoomEngine {
     window.removeEventListener('keyup', this._onKeyUp)
     window.removeEventListener('blur', this._onWindowBlur)
     this.renderer.dispose()
+    this.dracoLoader.dispose() // tears down its decoder worker pool
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement)
     }
@@ -205,7 +207,17 @@ export class RoomEngine {
 
     this.camState = { theta: Math.PI / 4, phi: 1.0, radius: 16, target: new THREE.Vector3(0, 0, 0) }
 
+    // Several models (Tyler's own real-world scans — see catalog.js) come in as raw, undecimated
+    // photogrammetry meshes; Draco-compressing them (see public/models/LICENSES.md-adjacent note —
+    // actually see the README's "Furniture sourcing" section) cuts their file size by ~90% for
+    // load time, but that only works if the loader can actually decode Draco geometry — hence the
+    // DRACOLoader wired in here, pointed at the decoder files copied into public/draco/gltf/ (from
+    // three's own node_modules/three/examples/jsm/libs/draco/gltf/) so decoding never depends on an
+    // external CDN being reachable.
+    this.dracoLoader = new DRACOLoader()
+    this.dracoLoader.setDecoderPath('/draco/gltf/')
     this.gltfLoader = new GLTFLoader()
+    this.gltfLoader.setDRACOLoader(this.dracoLoader)
   }
 
   _onResize() {
@@ -417,7 +429,10 @@ export class RoomEngine {
       // this) — a wall item's old x/z might now float in empty space or sit behind a wall that
       // moved, so it needs its own resnap to whichever wall is now closest, not the floor-item
       // rectangle clamp below (which doesn't know about "flush against a wall" at all).
-      if (this._isWallMounted(p, cat)) this._resnapWallItemToNearestWall(p.mesh, cat)
+      if (cat?.doorMountOnly) {
+        const door = this._nearestDoorFeature(p.mesh.position)
+        if (door) this._doorMountPlacement(p.mesh, cat, door)
+      } else if (this._isWallMounted(p, cat)) this._resnapWallItemToNearestWall(p.mesh, cat)
       else this._clampItemToRoom(p.mesh)
     })
     this.placedItems.filter((p) => p.stackedOnUid != null && !p.locked).forEach((p) => {
@@ -1186,6 +1201,19 @@ export class RoomEngine {
       })
       return
     }
+    if (cat.doorMountOnly) {
+      const door = this._firstDoorFeature()
+      if (!door) {
+        this.onNotice('Add a door to the room first.')
+        return
+      }
+      this._loadItemMesh(cat, (mesh) => {
+        this._doorMountPlacement(mesh, cat, door)
+        this._registerItem(mesh, cat)
+        this.selectItem(mesh.userData.uid)
+      })
+      return
+    }
     this._loadItemMesh(cat, (mesh) => {
       if (cat.wallMountable) {
         this._defaultWallPlacement(mesh, cat)
@@ -1219,6 +1247,12 @@ export class RoomEngine {
       if (cat.wallMountable) {
         if (y != null) mesh.position.y = y
         else this._defaultWallPlacement(mesh, cat)
+      } else if (cat.doorMountOnly) {
+        if (y != null) mesh.position.y = y
+        else {
+          const door = this._nearestDoorFeature(mesh.position)
+          if (door) this._doorMountPlacement(mesh, cat, door)
+        }
       } else if (cat.canWallMount && y != null) {
         mesh.position.y = y
       }
@@ -1255,6 +1289,113 @@ export class RoomEngine {
     mesh.rotation.y = wallMesh.rotation.y
   }
 
+  // Outward-facing (into-the-room) normal for one of the 4 *named* walls a door/window can sit
+  // on (see _wallConfig) — a fixed, hand-derived counterpart to wallMeshes' per-segment `normal`,
+  // which has no name attached (see buildRoom's outline loop) and so can't be looked up by
+  // 'back'/'front'/'left'/'right' the way a feature's own wall needs to be. Signs match
+  // _wallConfig's own inset direction (and buildRoom's centroid-derived normals) for each wall.
+  _wallNormal(wall) {
+    switch (wall) {
+      case 'front': return { x: 0, z: -1 }
+      case 'left': return { x: 1, z: 0 }
+      case 'right': return { x: -1, z: 0 }
+      default: return { x: 0, z: 1 } // 'back'
+    }
+  }
+
+  // Every door currently in the room (there's usually just one, but nothing stops adding more) —
+  // used by a doorMountOnly item (see catalog.js's closet-organizer) to find something to hang on.
+  _doorFeatures() {
+    return this.wallFeatures.filter((f) => f.type === 'door')
+  }
+
+  _firstDoorFeature() {
+    return this._doorFeatures()[0] || null
+  }
+
+  // Whichever door sits closest (by its own world-space center) to `point` — lets a doorMountOnly
+  // item re-associate with the right door when more than one exists, e.g. while dragging near a
+  // different door than the one it's currently on, or after the door it *was* on gets removed.
+  // Falls back to the first door when there's no point to compare yet (initial placement).
+  _nearestDoorFeature(point) {
+    const doors = this._doorFeatures()
+    if (!doors.length) return null
+    if (!point) return doors[0]
+    let best = doors[0]
+    let bestDist = Infinity
+    for (const d of doors) {
+      const [x, z] = this._wallConfig(d.wall).pos(d.offset)
+      const dist = Math.hypot(point.x - x, point.z - z)
+      if (dist < bestDist) {
+        bestDist = dist
+        best = d
+      }
+    }
+    return best
+  }
+
+  // The vertical anchor for a doorMountOnly item on a given door — hangs from near the top of the
+  // door leaf (like a real over-door organizer's hooks), rather than the eye-level default
+  // _defaultWallPlacement uses for a plain wallMountable item. Clamped the same way every other
+  // wall-item Y calculation here is (into [height/2, room.h - height/2]) so it can't poke through
+  // the ceiling on a door taller than the room, or (in practice never) go negative.
+  _doorHangY(cat, door) {
+    const height = cat.dims[2]
+    const candidate = door.height - height / 2
+    return Math.min(Math.max(candidate, height / 2), Math.max(height / 2, this.room.h - height / 2))
+  }
+
+  // Places/re-places a doorMountOnly item's mesh centered on `door`, flush against its wall (nudged
+  // out by half the item's own depth, same convention every other wall item uses) and hung from
+  // near the door's top — used for initial placement (addItem/addItemAt), and to re-glue the item
+  // to its door after anything moves the door itself (room resize, drag, wall reassignment) or
+  // moves the item and it needs to snap back (drag release).
+  _doorMountPlacement(mesh, cat, door) {
+    const [, depth] = cat.dims
+    const cfg = this._wallConfig(door.wall)
+    const [x, z] = cfg.pos(door.offset)
+    const normal = this._wallNormal(door.wall)
+    mesh.position.set(x + normal.x * (depth / 2), this._doorHangY(cat, door), z + normal.z * (depth / 2))
+    mesh.rotation.y = cfg.rotY
+  }
+
+  // Drag-time counterpart to _doorMountPlacement — a doorMountOnly item ignores the raw wall
+  // raycast hit (which could be any point on any wall) and instead slides along whichever door is
+  // nearest to it, clamped so it can't slide past the door's own edges (halfSlide accounts for the
+  // item's own width, same "keep the whole footprint inside the target" reasoning
+  // _clampFeatureOffset uses for door/window placement itself).
+  _snapToDoorHit(mesh, cat, hit) {
+    const door = this._nearestDoorFeature(hit.point)
+    if (!door) return
+    const [width, depth] = cat.dims
+    const cfg = this._wallConfig(door.wall)
+    const [x0, z0] = cfg.pos(door.offset)
+    const normal = this._wallNormal(door.wall)
+    const tangent = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cfg.rotY)
+    const rel = new THREE.Vector3(hit.point.x - x0, 0, hit.point.z - z0)
+    const t = rel.dot(tangent)
+    const halfSlide = Math.max(0, door.width / 2 - width / 2)
+    const clampedT = Math.max(-halfSlide, Math.min(halfSlide, t))
+    mesh.position.set(
+      x0 + tangent.x * clampedT + normal.x * (depth / 2),
+      this._doorHangY(cat, door),
+      z0 + tangent.z * clampedT + normal.z * (depth / 2)
+    )
+    mesh.rotation.y = cfg.rotY
+  }
+
+  // Keeps every doorMountOnly item glued to its own door while that door is being dragged along
+  // its wall — called from the drag-feature pointermove branch, not just on drag release, so the
+  // organizer visibly follows the door instead of only catching up once you let go.
+  _resyncDoorMountedItems() {
+    this.placedItems.forEach((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      if (!cat?.doorMountOnly) return
+      const door = this._nearestDoorFeature(p.mesh.position)
+      if (door) this._doorMountPlacement(p.mesh, cat, door)
+    })
+  }
+
   // Raycasts (using this.raycaster, already primed from the current pointer position by the
   // caller) against the room's actual wall meshes rather than an infinite floor plane — this is
   // what lets a wall item be dragged along an L-shaped notch/bump-out room's real wall layout
@@ -1279,6 +1420,10 @@ export class RoomEngine {
   // new wall automatically).
   _snapToWallHit(mesh, catalogId, hit) {
     const cat = ALL_ITEMS.find((c) => c.id === catalogId)
+    if (cat?.doorMountOnly) {
+      this._snapToDoorHit(mesh, cat, hit)
+      return
+    }
     const height = cat?.dims[2] || 1
     const depth = cat?.dims[1] || 0.05
     const halfHeight = height / 2
@@ -1340,7 +1485,7 @@ export class RoomEngine {
   // *this instance* has been toggled onto the wall via setWallMounted. Centralized here so every
   // site that used to check cat.wallMountable alone picks up the TV's toggle for free.
   _isWallMounted(item, cat) {
-    return !!(cat?.wallMountable || (cat?.canWallMount && item?.wallMounted))
+    return !!(cat?.wallMountable || cat?.doorMountOnly || (cat?.canWallMount && item?.wallMounted))
   }
 
   // Flips a placed cat.canWallMount item (the TV) between a normal floor item and a wall-mounted
@@ -2776,9 +2921,21 @@ export class RoomEngine {
   removeFeature(id) {
     const idx = this.wallFeatures.findIndex((f) => f.id === id)
     if (idx === -1) return
-    this.featuresGroup.remove(this.wallFeatures[idx].mesh)
+    const removed = this.wallFeatures[idx]
+    this.featuresGroup.remove(removed.mesh)
     this.wallFeatures.splice(idx, 1)
     if (this.selectedFeature && this.selectedFeature.id === id) this.deselectFeature()
+    // A doorMountOnly item (the hanging pocket organizer) can't exist off a door — re-glue it to
+    // whichever door is now nearest, or remove it outright if that was the last door in the room.
+    if (removed.type === 'door') {
+      ;[...this.placedItems].forEach((p) => {
+        const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+        if (!cat?.doorMountOnly) return
+        const door = this._nearestDoorFeature(p.mesh.position)
+        if (door) this._doorMountPlacement(p.mesh, cat, door)
+        else this.removeItem(p.uid)
+      })
+    }
   }
 
   // Re-reports the selected feature's current state to React — needed after any in-place
@@ -2814,6 +2971,7 @@ export class RoomEngine {
     feature.wall = wall
     feature.offset = this._wallConfig(wall).length / 2 // recenter on the new wall
     this._repositionFeature(feature)
+    if (feature.type === 'door') this._resyncDoorMountedItems()
     if (this.selectedFeature?.id === id) {
       this._updateFeatureSelectionHelper()
       this._emitFeatureSelection(feature)
@@ -3096,6 +3254,7 @@ export class RoomEngine {
         if (floorPt) {
           this.selectedFeature.offset = offsetForFeature(this.selectedFeature, floorPt) + this.dragOffset.x
           this._repositionFeature(this.selectedFeature)
+          if (this.selectedFeature.type === 'door') this._resyncDoorMountedItems()
           this._updateFeatureSelectionHelper()
         }
       }

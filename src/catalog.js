@@ -364,15 +364,18 @@ export const CATALOG = [
   { id: 'underbed-bins-premium', groupId: 'underbed-bins', groupLabel: 'Under-Bed Storage Bins', tier: 'premium', name: 'IRIS USA Stackable Storage Drawers', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B09C2QM669', dims: [2.2, 1.3, 1.0], color: 0xd6d0c4, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/storagebins.glb', tintMaterial: true, colorable: true, relatedIds: ['bed-full'] },
   // Under-bed Storage Drawers — ✅ final-links pass. Single confirmed product, one tier — real
   // link/name swapped in for the old generic "Rolling Storage Drawers" placeholder.
-  { id: 'storage-drawers', name: 'Sterilite Wide 3 Drawer Storage Tower', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0B7GRWSVJ', dims: [2.5, 1.5, 1.3], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/3drawerstorage.glb', tintMaterial: true, colorable: true, relatedIds: ['dresser'] },
+  // dims from the real product spec: 15.88"D x 21.88"W x 24"H.
+  { id: 'storage-drawers', name: 'Sterilite Wide 3 Drawer Storage Tower', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0B7GRWSVJ', dims: [1.82, 1.32, 2.0], color: 0x8a8a8a, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/3drawerstorage.glb', tintMaterial: true, colorable: true, relatedIds: ['dresser'] },
   { id: 'nightstand', name: 'Nightstand', price: 39, retailer: 'IKEA', dims: [1.5, 1.5, 2.0], color: 0x8a6b4f, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/sideTableDrawers.glb', relatedIds: ['bed-full', 'desk-lamp'] },
   // Bed Risers / Bedside Caddy — ✅ final-links pass. Both were checklist-only stubs before;
   // Tyler supplied real single-product links so they're promoted to real placeable entries, same
   // treatment desk-organizer/monitor-stand got in an earlier pass. Prices are market estimates
   // (Amazon's rendered price wasn't visible via fetch) — flagged for double-check.
   { id: 'bed-risers', name: 'EclatBain Adjustable Bed Risers (4-Pack)', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DLNBJ6K9', dims: [0.4, 0.4, 0.4], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', relatedIds: ['bed-full', 'colgate-bed', 'storage-drawers'] },
-  { id: 'bedside-caddy', name: 'Lazzanto Bedside Caddy', price: 50, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DMRNCLFK', dims: [1.2, 1.0, 1.8], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedsidecaddy.glb', tintMaterial: true, colorable: true, relatedIds: ['bed-full', 'colgate-bed', 'nightstand'] },
-  { id: 'dresser', name: 'Dresser', price: 129, retailer: 'IKEA', dims: [2.6, 2.0, 2.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/dresser.glb', tintMaterial: true, colorable: true, relatedIds: ['mirror'] },
+  // dims from the real product spec: 11.7"D x 15.9"W x 27.6"H.
+  { id: 'bedside-caddy', name: 'Lazzanto Bedside Caddy', price: 50, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0DMRNCLFK', dims: [1.33, 0.98, 2.3], color: 0x2b2b2b, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/bedsidecaddy.glb', tintMaterial: true, colorable: true, relatedIds: ['bed-full', 'colgate-bed', 'nightstand'] },
+  // height from the real product spec: 29 1/2"; width/depth kept as the existing estimate.
+  { id: 'dresser', name: 'Dresser', price: 129, retailer: 'IKEA', dims: [2.6, 2.0, 2.46], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/dresser.glb', tintMaterial: true, colorable: true, relatedIds: ['mirror'] },
   // A real Colgate-provided item — not every room gets one, so instead of folding it into the
   // "Add Colgate furniture" one-click set (see PROVIDED_CATALOG/colgateDefaultLayout below) it's
   // kept here in the regular browse list for a student whose room did come with one to click in
@@ -382,13 +385,22 @@ export const CATALOG = [
   // with no material color — see the note above PROVIDED_CATALOG.
   { id: 'stackable-chest', name: 'Colgate Stackable Chest', isProvided: true, dims: [2.58, 2.0, 1.58], color: 0xc9a876, category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateChest.glb', tintMaterial: true, relatedIds: ['dresser'] },
   { id: 'wardrobe', name: 'Portable Wardrobe', price: 69, retailer: 'Amazon', dims: [2.3, 1.5, 4.6], color: 0x6f7f8c, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/bookcaseClosedDoors.glb', relatedIds: ['shoe-rack', 'cubes', 'closet-organizer', 'chk:hangers', 'chk:vacuum-storage-bags'] },
-  { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.6, 1.1, 2.4], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/storagecubes.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe', 'chk:command-hooks'] },
+  // dims from the real product spec: 30"H x 29.84"W x 14.6"D.
+  { id: 'cubes', name: 'Storage Cubes (6)', price: 45, retailer: 'Target', dims: [2.49, 1.22, 2.5], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/storagecubes.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe', 'chk:command-hooks'] },
   // Closet Organizer — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
   // remaining-longtail-picks.md) — single entry, same "no productUrl yet" convention as every
-  // other unlinked item until Tyler grabs a real listing.
-  { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [1.5, 0.3, 4.0], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/hangingpocketorganizer.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
+  // other unlinked item until Tyler grabs a real listing. dims from the real product spec:
+  // 15"D x 6.5"W x 55.5"H. doorMountOnly (new): a real over-door organizer hangs off the top of
+  // a door leaf, not the floor or a plain wall — addItem/addItemAt route it through
+  // _doorMountPlacement instead of the normal floor-jitter/_defaultWallPlacement paths, dragging
+  // is clamped to whichever door is nearest (_snapToDoorHit), room-resize/door-drag/door-removal
+  // all keep it glued to (or remove it with) its door — see the doorMountOnly handling throughout
+  // roomEngine.js. Requires a door already in the room (see the 'Add a door to the room first.'
+  // onNotice in addItem) since there's nothing to hang it on otherwise.
+  { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [0.54, 1.25, 4.63], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/hangingpocketorganizer.glb', tintMaterial: true, colorable: true, doorMountOnly: true, relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
   // Shoe Rack — ✅ final-links pass, real single-product link (was generic-search-only before).
-  { id: 'shoe-rack', name: 'Bumusty 3-Tier Expandable Shoe Rack', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CRGSVFY7', dims: [2.5, 1.0, 2.5], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/shoerack.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe'] },
+  // dims from the real product spec: 8.86"D x 33.27"W x 17.1"H.
+  { id: 'shoe-rack', name: 'Bumusty 3-Tier Expandable Shoe Rack', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CRGSVFY7', dims: [2.77, 0.74, 1.43], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/shoerack.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe'] },
   // Laundry Hamper — ✅ fully researched, though the doc didn't list prices for any of the three
   // picks — the prices below are market estimates, not sourced (see the note at the top of this
   // file); double-check them along with productUrl.
@@ -415,13 +427,22 @@ export const CATALOG = [
   { id: 'rolling-cart', name: 'Rolling Storage Cart', price: 39, retailer: 'Amazon', dims: [1.3, 1.3, 2.8], color: 0xc9c9c9, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/rollingstoragecart.glb', tintMaterial: true, colorable: true, relatedIds: ['chk:fabric-bins'] },
   // Storage Ottoman — Type C generic search (no specific product per Tyler's final-links pass);
   // retailer switched Target → Amazon so catalogItemLink()'s generic-search fallback matches.
-  { id: 'ottoman', name: 'Folding Storage Ottoman', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/loungeSofaOttoman.glb', relatedIds: ['throw-pillow', 'rug'] },
+  // modelUrl swapped to Tyler's own real scan (public/models/ottoman.glb, added 2026-09-02) —
+  // replaces the old Kenney-kit loungeSofaOttoman.glb stand-in.
+  { id: 'ottoman', name: 'Storage Ottoman', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/ottoman.glb', tintMaterial: true, colorable: true, relatedIds: ['throw-pillow', 'rug'] },
   { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   { id: 'lamp-square', name: 'Square Floor Lamp', price: 39, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampSquareFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
-  // Desk Lamp — ✅ fully researched.
-  { id: 'desk-lamp-budget', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'budget', name: 'Clamp Lamp', price: 19, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08XQY5LY6', dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
-  { id: 'desk-lamp', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'moderate', name: 'BOHON USB-Charging Gooseneck Desk Lamp', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08SK4DMHR', dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
-  { id: 'desk-lamp-premium', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'premium', name: 'Govee Smart Desk Lamp', price: 55, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0GQXN36K5', dims: [0.8, 0.8, 1.6], color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
+  // Desk Lamp — ✅ fully researched. desklamp.glb's own arm/shade extends along its local Z axis
+  // (raw bounding box ~0.74 x 1.47 in X/Z — the arm side is ~2x the base side), not local X — the
+  // old square [0.8, 0.8, ...] dims were squishing that arm axis down to little more than half its
+  // natural length instead of giving the lit side real presence. modelRotationY: Math.PI/2 maps
+  // that long axis onto world X (dims[0], "width") — same fix/reason as comforter.glb/
+  // throwBlanket.glb above — so dims[0] now really is the light-facing side, and giving it 1.4'
+  // against 0.7' depth (close to the model's own ~1:2 ratio) makes it wider there like a real
+  // gooseneck lamp with its arm extended, instead of a squished square footprint.
+  { id: 'desk-lamp-budget', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'budget', name: 'Clamp Lamp', price: 19, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08XQY5LY6', dims: [1.4, 0.7, 1.6], modelRotationY: Math.PI / 2, color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
+  { id: 'desk-lamp', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'moderate', name: 'BOHON USB-Charging Gooseneck Desk Lamp', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B08SK4DMHR', dims: [1.4, 0.7, 1.6], modelRotationY: Math.PI / 2, color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
+  { id: 'desk-lamp-premium', groupId: 'desk-lamp', groupLabel: 'Desk Lamp', tier: 'premium', name: 'Govee Smart Desk Lamp', price: 55, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0GQXN36K5', dims: [1.4, 0.7, 1.6], modelRotationY: Math.PI / 2, color: 0xc9b18a, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/desklamp.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'nightstand'] },
   // Seating: no non-desk-chair option existed before this — a bean bag already lived under
   // Optional Luxury Items, but nothing here covered "an actual chair or small sofa to sit in
   // that isn't at the desk."
@@ -447,12 +468,15 @@ export const CATALOG = [
   // unlike 'tv' above it doesn't need the wallMountClipFraction stand-hiding hack — it's always
   // wall-mounted, same pattern as mirror/poster (wallMountable, no floor mode at all). Gives
   // students who know they're mounting it a cleaner model instead of the clipped floor-TV stand-in.
-  { id: 'tv-wall', name: 'Wall-Mounted TV (43")', price: 249, retailer: 'Amazon', productUrl: null, dims: [3.2, 0.15, 1.9], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/wallTV.glb', wallMountable: true, relatedIds: ['chk:streaming-device', 'gaming-console', 'bluetooth-speaker'] },
+  // tintMaterial + true-black color (Tyler wants the wall TV black): wallTV.glb otherwise renders
+  // with whatever material color came out of its own export.
+  { id: 'tv-wall', name: 'Wall-Mounted TV (43")', price: 249, retailer: 'Amazon', productUrl: null, dims: [3.2, 0.15, 1.9], color: 0x000000, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/wallTV.glb', tintMaterial: true, wallMountable: true, relatedIds: ['chk:streaming-device', 'gaming-console', 'bluetooth-speaker'] },
   // Gaming Console — Type C generic search. Previously checklist-only ('chk:gaming-console');
   // Tyler wants it as a real placeable entry now, same promotion desk-organizer got in an earlier
   // pass. No specific product — price is a rough market estimate. No colorable/tintMaterial — a
   // console's casing color is a fixed brand choice, not something a student picks per unit.
-  { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.0, 0.3], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/gameconsole.glb', relatedIds: ['tv', 'bluetooth-speaker'] },
+  // dims from the real product spec (Xbox Series X, standing upright): 11.85"H x 5.94"W x 5.94"D.
+  { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [0.5, 0.5, 0.99], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/gameconsole.glb', relatedIds: ['tv', 'bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.

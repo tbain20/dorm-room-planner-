@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { CATALOG, PROVIDED_CATALOG } from './catalog.js'
 import { fitModelToDims, tintModel } from './modelFit.js'
 
@@ -17,7 +18,12 @@ function getRenderer(size) {
   return sharedRenderer
 }
 
+// Several models are Draco-compressed (see roomEngine.js's own DRACOLoader wiring for why) — this
+// dev-only thumbnail path needs the same decoder or it fails to load exactly those items.
+const dracoLoader = new DRACOLoader()
+dracoLoader.setDecoderPath('/draco/gltf/')
 const gltfLoader = new GLTFLoader()
+gltfLoader.setDRACOLoader(dracoLoader)
 function loadGltf(url) {
   return new Promise((resolve, reject) => gltfLoader.load(url, resolve, undefined, reject))
 }
