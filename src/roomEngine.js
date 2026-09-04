@@ -914,6 +914,14 @@ export class RoomEngine {
   // (a feature wider than the room, say) can't spin this forever.
   _pushOutOfFeatures(mesh) {
     if (this.wallFeatures.length === 0) return
+    // A doorMountOnly item (the hanging pocket organizer) is *supposed* to overlap its own door's
+    // collision box — that's the whole point of hanging on it — so pushing it away would fight
+    // _doorMountPlacement/_snapToDoorHit's own carefully-flush positioning every time this runs
+    // (every _registerItem, every drag-release _clampItemToRoom). Left unguarded, it nudged the
+    // organizer an extra FEATURE_COLLISION_DEPTH/2 off the door plane, leaving a visible gap
+    // instead of sitting flush against it.
+    const cat = ALL_ITEMS.find((c) => c.id === mesh.userData.catalogId)
+    if (cat?.doorMountOnly) return
     for (let pass = 0; pass < 4; pass++) {
       const box = new THREE.Box3().setFromObject(mesh)
       let pushedAny = false
