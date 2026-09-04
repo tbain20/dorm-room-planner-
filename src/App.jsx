@@ -1649,7 +1649,7 @@ export default function App() {
                   Color
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  {BEDDING_COLOR_SWATCHES.map((hex) => {
+                  {(selection.cat.colorOptions || BEDDING_COLOR_SWATCHES).map((hex) => {
                     const active = (selection.colorHex ?? selection.cat.color) === hex
                     return (
                       <button

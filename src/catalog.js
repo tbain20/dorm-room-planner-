@@ -174,8 +174,10 @@ const FULL_BED_HEIGHTS = { low: 0.4, standard: 0.8, lofted: 1.6 } // bed-full: 2
 //   sheet-set tier asks what color (see App.jsx) and re-tints every placed bed's mattress to it
 //   (falling back to the whole fused model when there's no separate isMattress piece — see
 //   roomEngine.js's applyMattressColor), clearing any placed mattress topper in the process.
-// - colorable: shows the BEDDING_COLOR_SWATCHES picker in the selection panel (see App.jsx) and
-//   lets setItemColor() re-tint the model at runtime.
+// - colorable: shows a color-swatch picker in the selection panel (see App.jsx) and lets
+//   setItemColor() re-tint the model at runtime — BEDDING_COLOR_SWATCHES by default, or the
+//   item's own colorOptions array when it needs a different, smaller palette (e.g. gaming-console,
+//   which only ever ships in black/white, not the full bedding fabric palette).
 // - hasPoseOptions: shows the flat/diagonal/upright pose picker (see setItemPose in
 //   roomEngine.js) — a pillow-specific "how is it resting on the bed" control.
 export const BEDDING_COLOR_SWATCHES = [0xf2ede1, 0x8a8f94, 0x2f4257, 0x8a9a7b, 0xd9a6a1, 0x7a2e2e, 0x2a2a2a]
@@ -390,14 +392,16 @@ export const CATALOG = [
   // Closet Organizer — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
   // remaining-longtail-picks.md) — single entry, same "no productUrl yet" convention as every
   // other unlinked item until Tyler grabs a real listing. dims from the real product spec:
-  // 15"D x 6.5"W x 55.5"H. doorMountOnly (new): a real over-door organizer hangs off the top of
-  // a door leaf, not the floor or a plain wall — addItem/addItemAt route it through
-  // _doorMountPlacement instead of the normal floor-jitter/_defaultWallPlacement paths, dragging
-  // is clamped to whichever door is nearest (_snapToDoorHit), room-resize/door-drag/door-removal
-  // all keep it glued to (or remove it with) its door — see the doorMountOnly handling throughout
-  // roomEngine.js. Requires a door already in the room (see the 'Add a door to the room first.'
-  // onNotice in addItem) since there's nothing to hang it on otherwise.
-  { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [0.54, 1.25, 4.63], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/hangingpocketorganizer.glb', tintMaterial: true, colorable: true, doorMountOnly: true, relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
+  // 15"D x 6.5"W x 55.5"H, except width is tripled to 19.5" (0.54 -> 1.62) per Tyler's request so
+  // the model reads clearly in the room view instead of as a sliver. doorMountOnly (new): a real
+  // over-door organizer hangs off the top of a door leaf, not the floor or a plain wall —
+  // addItem/addItemAt route it through _doorMountPlacement instead of the normal floor-jitter/
+  // _defaultWallPlacement paths, dragging is clamped to whichever door is nearest
+  // (_snapToDoorHit), room-resize/door-drag/door-removal all keep it glued to (or remove it with)
+  // its door — see the doorMountOnly handling throughout roomEngine.js. Requires a door already
+  // in the room (see the 'Add a door to the room first.' onNotice in addItem) since there's
+  // nothing to hang it on otherwise.
+  { id: 'closet-organizer', name: 'Over-Door Hanging Pocket Organizer (24-Pocket)', price: 15, retailer: 'Amazon', productUrl: null, dims: [1.62, 1.25, 4.63], color: 0x9c8a6b, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/hangingpocketorganizer.glb', tintMaterial: true, colorable: true, doorMountOnly: true, relatedIds: ['wardrobe', 'colgate-wardrobe', 'chk:hangers'] },
   // Shoe Rack — ✅ final-links pass, real single-product link (was generic-search-only before).
   // dims from the real product spec: 8.86"D x 33.27"W x 17.1"H.
   { id: 'shoe-rack', name: 'Bumusty 3-Tier Expandable Shoe Rack', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CRGSVFY7', dims: [2.77, 0.74, 1.43], color: 0x6b4f36, category: 'Furniture & Organization', subcategory: 'Closet', modelUrl: '/models/shoerack.glb', tintMaterial: true, colorable: true, relatedIds: ['wardrobe'] },
@@ -473,10 +477,12 @@ export const CATALOG = [
   { id: 'tv-wall', name: 'Wall-Mounted TV (43")', price: 249, retailer: 'Amazon', productUrl: null, dims: [3.2, 0.15, 1.9], color: 0x000000, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/wallTV.glb', tintMaterial: true, wallMountable: true, relatedIds: ['chk:streaming-device', 'gaming-console', 'bluetooth-speaker'] },
   // Gaming Console — Type C generic search. Previously checklist-only ('chk:gaming-console');
   // Tyler wants it as a real placeable entry now, same promotion desk-organizer got in an earlier
-  // pass. No specific product — price is a rough market estimate. No colorable/tintMaterial — a
-  // console's casing color is a fixed brand choice, not something a student picks per unit.
-  // dims from the real product spec (Xbox Series X, standing upright): 11.85"H x 5.94"W x 5.94"D.
-  { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [0.5, 0.5, 0.99], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/gameconsole.glb', relatedIds: ['tv', 'bluetooth-speaker'] },
+  // pass. No specific product — price is a rough market estimate. dims from the real product spec
+  // (Xbox Series X, standing upright): 11.85"H x 5.94"W x 5.94"D, except height is shortened 3"
+  // (11.85" -> 8.85", 0.99ft -> 0.74ft) per Tyler's request. colorOptions restricts the picker to
+  // black (default, matching cat.color) and white — the two finishes consoles actually ship in —
+  // rather than the full BEDDING_COLOR_SWATCHES fabric palette.
+  { id: 'gaming-console', name: 'Gaming Console', price: 499, retailer: 'Amazon', productUrl: null, dims: [0.5, 0.5, 0.74], color: 0x1b1b1b, category: 'Furniture & Organization', subcategory: 'Entertainment', modelUrl: '/models/gameconsole.glb', tintMaterial: true, colorable: true, colorOptions: [0x1b1b1b, 0xffffff], relatedIds: ['tv', 'bluetooth-speaker'] },
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.

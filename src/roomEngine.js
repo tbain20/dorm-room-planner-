@@ -1334,15 +1334,19 @@ export class RoomEngine {
     return best
   }
 
-  // The vertical anchor for a doorMountOnly item on a given door — hangs from near the top of the
-  // door leaf (like a real over-door organizer's hooks), rather than the eye-level default
-  // _defaultWallPlacement uses for a plain wallMountable item. Clamped the same way every other
-  // wall-item Y calculation here is (into [height/2, room.h - height/2]) so it can't poke through
-  // the ceiling on a door taller than the room, or (in practice never) go negative.
+  // The vertical anchor for a doorMountOnly item on a given door — hangs from the top of the door
+  // leaf (like a real over-door organizer's hooks), rather than the eye-level default
+  // _defaultWallPlacement uses for a plain wallMountable item. Unlike every other item here, this
+  // one's mesh is a plain (non-hasPoseOptions) glTF group — modelFit.js floor-aligns the loaded
+  // model to the *bottom* of its own group, so mesh.position.y is the item's bottom, not its
+  // center, and has to be set to (door.height - height) — not door.height - height/2 — for the
+  // organizer's top edge to actually land flush with the top of the door. Clamped into
+  // [0, room.h - height] so it can't sink through the floor or poke through the ceiling on a door
+  // taller than the room.
   _doorHangY(cat, door) {
     const height = cat.dims[2]
-    const candidate = door.height - height / 2
-    return Math.min(Math.max(candidate, height / 2), Math.max(height / 2, this.room.h - height / 2))
+    const candidate = door.height - height
+    return Math.min(Math.max(candidate, 0), Math.max(0, this.room.h - height))
   }
 
   // Places/re-places a doorMountOnly item's mesh centered on `door`, flush against its wall (nudged
@@ -1636,6 +1640,11 @@ export class RoomEngine {
 
   rotateSelected(deltaRad = Math.PI / 2) {
     if (!this.selected) return
+    // A doorMountOnly item's rotation is never a user choice — it always matches whatever door
+    // it's hanging on (see selectItem's own re-snap) — so the rotate button is a no-op for it
+    // rather than spinning it away from the door until the next selection silently undoes it.
+    const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
+    if (cat?.doorMountOnly) return
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
     // Anything stacked on the selected item — directly, or several layers up a bedding stack —
     // shares its x/z center (see stackItemOn/_restackAbove), so rotating around that shared center
@@ -1753,6 +1762,16 @@ export class RoomEngine {
     this.deselectItem()
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item) return
+    // A doorMountOnly item (the hanging pocket organizer) has no user-facing rotation of its own
+    // — it must always face however its door faces. rotateSelected has no doorMountOnly guard (see
+    // its own comment), so a stray 90°/180° rotate before deselecting would otherwise leave it
+    // facing the wrong way until something else (a drag, a door move) happened to resync it.
+    // Re-snapping on every selection guarantees it always reads right the moment you click it.
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (cat?.doorMountOnly) {
+      const door = this._nearestDoorFeature(item.mesh.position)
+      if (door) this._doorMountPlacement(item.mesh, cat, door)
+    }
     this.selected = item
     this.selectionHelper = new THREE.BoxHelper(item.mesh, item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
     this.itemsGroup.add(this.selectionHelper)
@@ -2123,6 +2142,10 @@ export class RoomEngine {
       if (feature.type !== 'door') return
       const featureBox = this._featureCollisionBox(feature)
       const hit = items.some((item, i) => {
+        // A doorMountOnly item (the hanging pocket organizer) is deliberately hung right on its
+        // door's own leaf — that's not furniture blocking the doorway, it's the doorway's own
+        // fixture, so it never counts toward this door's collision tint.
+        if (cats[i]?.doorMountOnly) return false
         if (!featureBox.intersectsBox(wholeBoxes[i])) return false
         return this._collectLeafBoxes(item, cats[i]).some((b) => featureBox.intersectsBox(b))
       })
@@ -2861,7 +2884,7 @@ export class RoomEngine {
       casing.position.set(0, DOOR_CASING_WIDTH / 2, -0.01)
       group.add(casing)
 
-      const doorMat = new THREE.MeshStandardMaterial({ color: DOOR_COLOR, roughness: 0.6 })
+      const doorMat = new THREE.MeshStandardMaterial({ color: DOOR_COLOR, roughness: 0.6, side: THREE.DoubleSide })
       const doorGeo = new THREE.PlaneGeometry(width, height)
       const door = new THREE.Mesh(doorGeo, doorMat)
       group.add(door)
@@ -2869,12 +2892,13 @@ export class RoomEngine {
 
       // Lever handle, offset toward the edge opposite the hinge (hinge assumed on the left, same
       // convention the old swing-arc symbol used) — purely decorative, just enough to read as a door.
-      const handle = new THREE.Mesh(
-        new THREE.CircleGeometry(0.06, 16),
-        new THREE.MeshStandardMaterial({ color: DOOR_HANDLE_COLOR, metalness: 0.5, roughness: 0.4 })
-      )
-      handle.position.set(width / 2 - 0.35, 0, 0.01)
-      group.add(handle)
+      const handleMat = new THREE.MeshStandardMaterial({ color: DOOR_HANDLE_COLOR, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide })
+      const handleFront = new THREE.Mesh(new THREE.CircleGeometry(0.06, 16), handleMat)
+      handleFront.position.set(width / 2 - 0.35, 0, 0.01)
+      group.add(handleFront)
+      const handleBack = new THREE.Mesh(new THREE.CircleGeometry(0.06, 16), handleMat)
+      handleBack.position.set(width / 2 - 0.35, 0, -0.01)
+      group.add(handleBack)
     }
     return group
   }
