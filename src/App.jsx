@@ -460,6 +460,50 @@ export default function App() {
     setPanelCollapsed(false)
   }, [featureSelection])
 
+  // Global item shortcuts — Delete/Backspace removes whatever's selected (an item or a door/
+  // window), Ctrl/Cmd+C and Ctrl/Cmd+V mirror the Copy/Paste buttons (so canPaste's enabled state
+  // stays correct either way), R does a clean 90° turn alongside the drag-to-spin gizmo. Skipped
+  // entirely while a text input/textarea/select/contentEditable has focus, same guard roomEngine.js
+  // 's own keyboard-pan listener uses, so typing a layout name or room dimension never fires one of
+  // these by accident.
+  useEffect(() => {
+    function isTypingTarget(el) {
+      if (!el) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
+    }
+    function onKeyDown(e) {
+      if (isTypingTarget(document.activeElement)) return
+      const key = e.key.toLowerCase()
+      if (key === 'delete' || key === 'backspace') {
+        if (selection) {
+          e.preventDefault()
+          engineRef.current.removeItem(selection.uid)
+        } else if (featureSelection) {
+          e.preventDefault()
+          engineRef.current.removeFeature(featureSelection.id)
+        }
+      } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
+        if (selection) {
+          e.preventDefault()
+          handleCopyItem()
+        }
+      } else if ((e.ctrlKey || e.metaKey) && key === 'v') {
+        if (canPaste) {
+          e.preventDefault()
+          handlePasteItem()
+        }
+      } else if (key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (selection) {
+          e.preventDefault()
+          engineRef.current.rotateSelected()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selection, featureSelection, canPaste])
+
   useEffect(() => {
     if (tab !== 'saved' || !session || savedSubView !== 'mine') return
     listLayouts()
@@ -720,10 +764,6 @@ export default function App() {
     engineRef.current.pasteItem()
   }
 
-  function handleFeatureWallChange(wall) {
-    engineRef.current.setFeatureWall(featureSelection.id, wall)
-  }
-
   function handleFeatureSizeChange(key, value) {
     const next = { width: featureSelection.width, height: featureSelection.height, [key]: parseFloat(value) || featureSelection[key] }
     engineRef.current.setFeatureSize(featureSelection.id, next.width, next.height)
@@ -910,6 +950,22 @@ export default function App() {
     // errors, so this never blocks or breaks loading the layout itself. data.id is only present
     // on layouts that came from Supabase (Browse/Saved), not a from-scratch room.
     if (data.id) incrementLayoutViewCount(data.id)
+  }
+
+  // Blanks the room back to a fresh default — every placed item and door/window gone, dimensions
+  // and notch reset, and any "this is a saved/shared layout" tracking cleared so the next Save
+  // creates a new layout instead of overwriting whatever was open. Mirrors handleLoad's own
+  // bookkeeping reset above rather than introducing a separate convention for it.
+  function handleNewRoom() {
+    const defaultRoom = { w: 12, l: 14, h: 9, notch: null }
+    engineRef.current.clearAll()
+    engineRef.current.setRoomDims(defaultRoom.w, defaultRoom.l, defaultRoom.h)
+    engineRef.current.setRoomNotch(null)
+    setRoom(defaultRoom)
+    setSharedLayout(null)
+    setSharedLayoutNotice('')
+    setSharedLayoutError('')
+    setCurrentLayoutName(null)
   }
 
   // Fetches a public layout by id and loads it — used for "Based on X" links (fresh data rather
@@ -1522,8 +1578,16 @@ export default function App() {
         <div id="hint">
           {measureState.active
             ? 'Click two points to measure the distance between them · Click again to start over · Drag to orbit'
-            : 'Drag floor to orbit · Scroll to zoom · WASD/arrows or Shift+drag to pan · Drag an item to move it · Select + R to rotate'}
+            : 'Drag floor to orbit · Scroll to zoom · WASD/arrows or Shift+drag to pan · Drag an item to move it · Select + R to rotate, Delete to remove'}
         </div>
+
+        <button
+          id="new-room-btn"
+          onClick={handleNewRoom}
+          title="Clear everything and start over with a blank room"
+        >
+          + New Room
+        </button>
 
         {selection && (
           <div id="selection-panel" className="visible">
@@ -1552,13 +1616,10 @@ export default function App() {
             </div>
             {!panelCollapsed && (
             <>
+            <div style={{ fontSize: 10, color: 'var(--ink-soft)', marginBottom: 6 }}>
+              Drag the blue arrows around it to spin (snaps every 45°) · R for a quick 90° turn
+            </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              <button
-                style={{ background: 'var(--ink)', color: 'var(--paper)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
-                onClick={() => engineRef.current.rotateSelected()}
-              >
-                ⟳ Rotate 90°
-              </button>
               <button
                 style={{
                   background: showDimensions ? 'var(--accent)' : 'var(--paper-shadow)',
@@ -1805,29 +1866,11 @@ export default function App() {
             <div className="meta">
               {featureSelection.width.toFixed(1)}' x {featureSelection.height.toFixed(1)}'
               {featureSelection.type === 'door' && ' · Standard size'}
+              {' · Drag it in the room to reposition'}
             </div>
 
             {!panelCollapsed && (
             <>
-            <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
-              Wall
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
-              {['back', 'front', 'left', 'right'].map((wall) => (
-                <button
-                  key={wall}
-                  onClick={() => handleFeatureWallChange(wall)}
-                  style={{
-                    border: 'none', borderRadius: 8, padding: 7, fontSize: 11, textTransform: 'capitalize', cursor: 'pointer',
-                    background: featureSelection.wall === wall ? 'var(--accent)' : 'var(--paper-shadow)',
-                    color: featureSelection.wall === wall ? '#fff' : 'var(--ink-soft)',
-                  }}
-                >
-                  {wall}
-                </button>
-              ))}
-            </div>
-
             <button
               style={{
                 background: featureSelection.locked ? '#5b6b73' : 'var(--paper-shadow)',
@@ -2773,9 +2816,9 @@ export default function App() {
             </h2>
             <div className="rsub">
               {colorPrompt.kind === 'sheets' &&
-                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors your mattress, and clears any mattress topper so the sheets actually show.`}
+                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors ${cart.filter((c) => c.cat?.isBed).length > 1 ? 'your selected bed\'s mattress' : 'your mattress'}, and clears its mattress topper so the sheets actually show.`}
               {colorPrompt.kind === 'pillowcases' &&
-                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors every pillow already in your room.`}
+                `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors ${cart.filter((c) => c.cat?.isBed).length > 1 ? "your selected bed's pillows" : 'every pillow already in your room'}.`}
               {colorPrompt.kind === 'throw-blanket' &&
                 `Pick a color for ${colorPrompt.cat.name} before it dresses your bed.`}
             </div>

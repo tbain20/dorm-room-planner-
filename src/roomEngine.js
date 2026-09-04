@@ -86,6 +86,12 @@ const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, di
 // the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
 // item reads as "locked" at a glance rather than looking like it's mid-collision.
 
+const ROTATE_GIZMO_COLOR = 0x5ec8e8 // faint blue — the drag-to-spin handles ringing a selected item
+const ROTATE_GIZMO_MARGIN = 0.4 // feet — how far outside the item's own footprint the ring sits
+const ROTATE_GIZMO_HANDLES = 4 // evenly-spaced grab handles around the ring, any one spins the item
+const ROTATE_GIZMO_ARC_SPAN = Math.PI / 2.6 // radians — each handle's arc length, short of a full quarter-circle so a visible gap separates one handle from the next
+const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see _buildRotateGizmo/'rotate-item' pointermove branch
+
 // RoomEngine owns the Three.js scene and all room/item state. It's deliberately independent of
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
@@ -117,6 +123,7 @@ export class RoomEngine {
     this.placedItems = [] // { mesh, catalogId, uid, stackedOnUid }
     this.selected = null
     this.selectionHelper = null
+    this.rotateGizmo = null
     // 3D dimension-line overlay on the selected item (see _buildDimensionOverlay/
     // _updateDimensionOverlay below) — separate from selectionHelper's BoxHelper outline.
     // showDimensionOverlay is the persisted on/off state (App.jsx's 📏 Dimensions button, via
@@ -235,6 +242,7 @@ export class RoomEngine {
     this._lastFrameTime = now
     if (this.panKeysHeld.size) this._applyKeyboardPan(dt)
     if (this.selectionHelper) this.selectionHelper.update()
+    if (this.rotateGizmo) this._updateRotateGizmo()
     if (this.featureSelectionHelper) this.featureSelectionHelper.update()
     // Recomputed every frame (cheap — a handful of line points) rather than only on
     // rotate/drag-end, so it tracks the item smoothly while it's being dragged. Deriving each
@@ -536,8 +544,22 @@ export class RoomEngine {
     grid.material.opacity = 0.28
     this.roomGroup.add(grid)
 
+    // Which of the 4 named walls (as _wallConfig understands them) a given outline segment lies
+    // flush against — back/front pin z, left/right pin x. A notch's short perpendicular "return"
+    // segments don't lie flush against any of the 4 original wall planes, so they get null: doors/
+    // windows never place themselves there (_clampFeatureOffset keeps them on the flat spans either
+    // side of a notch), so a drag-feature cross-wall reassignment just ignores those segments.
+    const wallNameForSegment = (x0, z0, x1, z1) => {
+      const EPS = 0.05
+      if (Math.abs(z0 + l / 2) < EPS && Math.abs(z1 + l / 2) < EPS) return 'back'
+      if (Math.abs(z0 - l / 2) < EPS && Math.abs(z1 - l / 2) < EPS) return 'front'
+      if (Math.abs(x0 + w / 2) < EPS && Math.abs(x1 + w / 2) < EPS) return 'left'
+      if (Math.abs(x0 - w / 2) < EPS && Math.abs(x1 - w / 2) < EPS) return 'right'
+      return null
+    }
+
     const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0xd9cfba, transparent: true, opacity: 0.6 })
-    const addWall = (width, height, x, z, rotY, normal) => {
+    const addWall = (width, height, x, z, rotY, normal, wallName) => {
       const geo = new THREE.PlaneGeometry(width, height)
       // Each wall gets its own material instance (not a shared one) so _updateNearWall can fade
       // just the one currently facing the camera without dimming every other wall along with it.
@@ -565,7 +587,7 @@ export class RoomEngine {
       trim.rotation.y = rotY
       this.roomGroup.add(trim)
 
-      this.wallMeshes.push({ mesh, trimMesh: trim, normal })
+      this.wallMeshes.push({ mesh, trimMesh: trim, normal, wallName })
     }
     // Walls follow the room's outline polygon edge by edge — a plain rectangle produces exactly
     // the original 4 wall segments (back/left/front/right, matching the old fixed calls); a
@@ -588,7 +610,7 @@ export class RoomEngine {
         nx = -nx
         nz = -nz
       }
-      addWall(segWidth, h, midX, midZ, rotY, new THREE.Vector3(nx, 0, nz))
+      addWall(segWidth, h, midX, midZ, rotY, new THREE.Vector3(nx, 0, nz), wallNameForSegment(x0, z0, x1, z1))
     }
 
     // Room just got rebuilt from scratch, so any previously-computed "near walls" reference
@@ -596,33 +618,8 @@ export class RoomEngine {
     // before it's ever read again, but clearing it here avoids one stale frame where a wall
     // material that no longer exists in the scene would otherwise get touched.
     this.nearWallEntries = new Set()
-    this._buildWallLabels()
     this.fitCamera()
     this._repositionAllFeatures()
-  }
-
-  // "BACK"/"FRONT"/"LEFT"/"RIGHT" billboards near the top of each of the room's 4 principal walls
-  // — a fixed reference so it's always clear which wall is which while orbiting, independent of
-  // the door/window "wall" picker using the same names. Positioned off the wall's overall span
-  // (via _wallConfig, the same helper the door/window picker's offset math uses) rather than off
-  // wallMeshes' per-segment list, since a notch splices extra short segments into whichever wall
-  // it's on — the label for that wall should still sit at the middle of its *original* full span,
-  // not on top of one of those fragments. Rebuilt on every buildRoom() (they live in roomGroup,
-  // cleared at the top of this method) since a resize moves every wall.
-  _buildWallLabels() {
-    const { h } = this.room
-    const INSET = 0.35 // feet — how far in front of the wall surface the label floats
-    const NORMALS = { back: [0, 1], front: [0, -1], left: [1, 0], right: [-1, 0] }
-    for (const wall of ['back', 'front', 'left', 'right']) {
-      const cfg = this._wallConfig(wall)
-      const [x, z] = cfg.pos(cfg.length / 2)
-      const [nx, nz] = NORMALS[wall]
-      const label = this._createDimLabel()
-      label.scale.set(1.1, 1.1 * (label.userData.canvas.height / label.userData.canvas.width), 1)
-      label.position.set(x + nx * INSET, Math.min(h - 0.5, h * 0.92), z + nz * INSET)
-      this._setDimLabelText(label, wall.toUpperCase())
-      this.roomGroup.add(label)
-    }
   }
 
   // ---------- Items ----------
@@ -1783,8 +1780,75 @@ export class RoomEngine {
     this.selected = item
     this.selectionHelper = new THREE.BoxHelper(item.mesh, item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
     this.itemsGroup.add(this.selectionHelper)
+    this._buildRotateGizmo(item, cat)
     if (this.showDimensionOverlay) this._buildDimensionOverlay()
     this._emitSelection()
+  }
+
+  // The faint blue drag-to-spin ring around a freshly selected item — see the 'rotate-item'
+  // pointerdown/pointermove handling in _initInteraction for how it's actually grabbed and
+  // dragged. No gizmo for a locked item (dragging it shouldn't do anything, same as the old
+  // rotate button silently doing nothing) or a doorMountOnly item (rotateSelected is a no-op for
+  // it too — see the comment above this method's caller). Any one of the handles does the same
+  // thing; several are offered around the ring just so at least one is usually easy to grab from
+  // whatever angle the camera's currently orbited to.
+  _buildRotateGizmo(item, cat) {
+    this._removeRotateGizmo()
+    if (item.locked || cat?.doorMountOnly) return
+    const [fw, fd] = this._footprint(item.mesh)
+    const radius = Math.max(fw, fd) / 2 + ROTATE_GIZMO_MARGIN
+    const group = new THREE.Group()
+    const arcMat = new THREE.MeshBasicMaterial({
+      color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide,
+    })
+    const arrowMat = new THREE.MeshBasicMaterial({
+      color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.75, depthTest: false,
+    })
+    const yAxis = new THREE.Vector3(0, 1, 0)
+    for (let i = 0; i < ROTATE_GIZMO_HANDLES; i++) {
+      const startAngle = (i / ROTATE_GIZMO_HANDLES) * Math.PI * 2
+      // TorusGeometry's own ring lies in the local XY plane; rotating it -90° around X lands it
+      // flat in XZ the same way buildRoom's floor shape does (see floor.rotation.x above), which
+      // also makes its local sweep angle line up exactly with the Vector3(1,0,0).applyAxisAngle(Y,
+      // angle) convention _snapToDoorHit/offsetForFeature already use elsewhere for a world angle.
+      const arc = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.025, 8, 24, ROTATE_GIZMO_ARC_SPAN), arcMat)
+      arc.rotation.x = -Math.PI / 2
+      arc.rotation.z = startAngle
+      group.add(arc)
+
+      const endAngle = startAngle + ROTATE_GIZMO_ARC_SPAN
+      const dir = new THREE.Vector3(1, 0, 0).applyAxisAngle(yAxis, endAngle)
+      const tangent = new THREE.Vector3(-dir.z, 0, dir.x).normalize() // direction of increasing angle
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 10), arrowMat)
+      arrow.position.set(dir.x * radius, 0, dir.z * radius)
+      arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent)
+      group.add(arrow)
+    }
+    group.position.set(item.mesh.position.x, 0.04, item.mesh.position.z)
+    group.userData.isRotateGizmo = true
+    group.userData.radius = radius
+    group.userData.uid = item.uid
+    this.itemsGroup.add(group)
+    this.rotateGizmo = group
+  }
+
+  _removeRotateGizmo() {
+    if (!this.rotateGizmo) return
+    this.itemsGroup.remove(this.rotateGizmo)
+    this.rotateGizmo.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose()
+      if (obj.material) obj.material.dispose()
+    })
+    this.rotateGizmo = null
+  }
+
+  // Keeps the ring centered under whatever's selected while it's being dragged around the floor
+  // (drag-item mode moves the mesh continuously; the gizmo has no other way to track that) — see
+  // the _animate loop's per-frame call.
+  _updateRotateGizmo() {
+    if (!this.rotateGizmo || !this.selected) return
+    this.rotateGizmo.position.x = this.selected.mesh.position.x
+    this.rotateGizmo.position.z = this.selected.mesh.position.z
   }
 
   // Toggles whether the item can be picked up by a mouse/touch drag (see the pointerdown handler
@@ -1798,6 +1862,8 @@ export class RoomEngine {
     item.locked = !item.locked
     if (this.selected === item) {
       if (this.selectionHelper) this.selectionHelper.material.color.setHex(item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
+      const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+      this._buildRotateGizmo(item, cat)
       this._emitSelection()
     }
   }
@@ -1809,6 +1875,7 @@ export class RoomEngine {
       this.itemsGroup.remove(this.selectionHelper)
       this.selectionHelper = null
     }
+    this._removeRotateGizmo()
     this.selected = null
     this.onSelectionChange(null)
   }
@@ -2133,6 +2200,10 @@ export class RoomEngine {
         // A desk chair slid in under a desk — see the note above on why height clearance can't
         // model this pair, so it's exempted outright instead.
         if ((cats[i]?.isChair && cats[j]?.hasLegroom) || (cats[j]?.isChair && cats[i]?.hasLegroom)) continue
+        // A rug lying flat on the floor and wall-mounted decor (posters, mirrors, the wall-mounted
+        // TV, the door-hung organizer) aren't real obstructions other furniture can bump into —
+        // exempt both from the red collision tint entirely, same spirit as the exemptions above.
+        if (cats[i]?.isRug || cats[j]?.isRug || this._isWallMounted(items[i], cats[i]) || this._isWallMounted(items[j], cats[j])) continue
         if (!wholeBoxes[i].intersectsBox(wholeBoxes[j])) continue
         if (this._piecesTouch(items[i], items[j], cats[i], cats[j])) {
           colliding[i] = true
@@ -2591,8 +2662,30 @@ export class RoomEngine {
       this.onNotice('Add a pillow to the room first.')
       return
     }
-    pillows.forEach((p) => this.setItemColor(p.uid, hex))
-    this.onNotice(`Updated ${pillows.length} pillow${pillows.length === 1 ? '' : 's'} in your room.`)
+    // With just one bed in the room there's no ambiguity, so this still applies everywhere (every
+    // colorable pillow, couch decor pillows included) exactly like before. With 2+ beds, a bed has
+    // to be selected first and this only touches pillows stacked (directly or indirectly, e.g. on
+    // a topper) on *that* bed — see _isStackedRelative. A freestanding decorative pillow (a couch's,
+    // say) is never stacked on any bed, so it naturally falls outside every bed-scoped edit too.
+    const beds = this.placedItems.filter((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      return cat && cat.isBed
+    })
+    let targetPillows = pillows
+    if (beds.length > 1) {
+      const selectedCat = this.selected ? ALL_ITEMS.find((c) => c.id === this.selected.catalogId) : null
+      if (!selectedCat?.isBed) {
+        this.onNotice('Select a bed first to change its bedding.')
+        return
+      }
+      targetPillows = pillows.filter((p) => this._isStackedRelative(p, this.selected))
+      if (targetPillows.length === 0) {
+        this.onNotice('That bed has no pillows to recolor yet.')
+        return
+      }
+    }
+    targetPillows.forEach((p) => this.setItemColor(p.uid, hex))
+    this.onNotice(`Updated ${targetPillows.length} pillow${targetPillows.length === 1 ? '' : 's'}${beds.length > 1 ? ' on that bed.' : ' in your room.'}`)
   }
 
   // Sheets (see catalog.js's recolorsMattress) have no placeable model either — real fitted sheets
@@ -2615,8 +2708,19 @@ export class RoomEngine {
       this.onNotice('Add a bed to the room first.')
       return
     }
+    // Same "select a bed first once there's more than one" gate as applyPillowcaseColor above —
+    // a single-bed room still applies with no selection required, matching prior behavior exactly.
+    let targetBeds = beds
+    if (beds.length > 1) {
+      const selectedCat = this.selected ? ALL_ITEMS.find((c) => c.id === this.selected.catalogId) : null
+      if (!selectedCat?.isBed) {
+        this.onNotice('Select a bed first to change its bedding.')
+        return
+      }
+      targetBeds = [this.selected]
+    }
     let mattressCount = 0
-    beds.forEach((bed) => {
+    targetBeds.forEach((bed) => {
       const mattressModels = bed.mesh.userData.mattressModels || []
       if (mattressModels.length) {
         mattressModels.forEach((model) => this._tintModel(model, hex))
@@ -2630,9 +2734,11 @@ export class RoomEngine {
       bed.colorHex = hex
       mattressCount += 1
     })
+    // A topper only ever sits on one specific bed (bedOnly items can't exist un-stacked), so
+    // scoping by ancestry here is safe in both the single- and multi-bed cases.
     const toppers = this.placedItems.filter((p) => {
       const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
-      return cat && cat.groupId === 'mattress-topper'
+      return cat && cat.groupId === 'mattress-topper' && targetBeds.some((bed) => this._isStackedRelative(p, bed))
     })
     toppers.forEach((t) => this.removeItem(t.uid))
     const message = `Updated ${mattressCount} bed${mattressCount === 1 ? '' : 's'}`
@@ -2813,17 +2919,25 @@ export class RoomEngine {
   _wallConfig(wall) {
     const { w, l } = this.room
     const inset = 0.02 // nudges the panel just off the wall plane, toward the room, to avoid z-fighting
+    // rotY is derived from _wallNormal so a feature's local +z (the door leaf's handle/front face —
+    // see _buildFeatureMesh — and the hanging organizer's facing side) always points along the
+    // wall's own inward normal. Back and left keep their historical 0/π⁄2 values; front and right
+    // used to share those same values even though their true normals are reversed (see the bug this
+    // fixed: a door's handle, and the door-mounted hanging organizer, ended up facing away from the
+    // room on those two walls) — Math.atan2 below derives the correct value instead of hardcoding it.
+    const normal = this._wallNormal(wall)
+    const rotY = Math.atan2(normal.x, normal.z)
     switch (wall) {
       case 'back':
-        return { length: w, rotY: 0, pos: (offset) => [-w / 2 + offset, -l / 2 + inset] }
+        return { length: w, rotY, pos: (offset) => [-w / 2 + offset, -l / 2 + inset] }
       case 'front':
-        return { length: w, rotY: 0, pos: (offset) => [-w / 2 + offset, l / 2 - inset] }
+        return { length: w, rotY, pos: (offset) => [-w / 2 + offset, l / 2 - inset] }
       case 'left':
-        return { length: l, rotY: Math.PI / 2, pos: (offset) => [-w / 2 + inset, -l / 2 + offset] }
+        return { length: l, rotY, pos: (offset) => [-w / 2 + inset, -l / 2 + offset] }
       case 'right':
-        return { length: l, rotY: Math.PI / 2, pos: (offset) => [w / 2 - inset, -l / 2 + offset] }
+        return { length: l, rotY, pos: (offset) => [w / 2 - inset, -l / 2 + offset] }
       default:
-        return { length: w, rotY: 0, pos: (offset) => [-w / 2 + offset, -l / 2 + inset] }
+        return { length: w, rotY, pos: (offset) => [-w / 2 + offset, -l / 2 + inset] }
     }
   }
 
@@ -3135,6 +3249,23 @@ export class RoomEngine {
         return
       }
 
+      // The drag-to-spin ring around the currently selected item (see _buildRotateGizmo) takes
+      // priority over the normal item/feature hit-test below — grabbing one of its handles spins
+      // the item instead of picking it up to move it. this.rotateGizmo only exists at all while
+      // something rotatable is selected (none for a locked or doorMountOnly item), so no extra
+      // guard is needed here beyond the hit test itself.
+      if (this.rotateGizmo) {
+        const gizmoHits = this.raycaster.intersectObjects(this.rotateGizmo.children, true)
+        if (gizmoHits.length && this.selected) {
+          this.mode = 'rotate-item'
+          const floorPt = getFloorPoint()
+          const center = this.selected.mesh.position
+          const startAngle = floorPt ? Math.atan2(floorPt.x - center.x, floorPt.z - center.z) : 0
+          this._rotateDrag = { lastPointerAngle: startAngle, rawRotation: this.selected.mesh.rotation.y }
+          return
+        }
+      }
+
       const itemMeshes = this._raycastableItemMeshes()
       const featureMeshes = this.wallFeatures.map((f) => f.mesh)
       const hits = this.raycaster.intersectObjects([...itemMeshes, ...featureMeshes], true)
@@ -3247,6 +3378,31 @@ export class RoomEngine {
         // visible room whether zoomed in tight or pulled back, rather than a fixed world distance.
         const factor = this.camState.radius * 0.0016
         this._panCamera(-dx * factor, dy * factor)
+      } else if (this.mode === 'rotate-item' && this.selected && this._rotateDrag) {
+        setPointerNDC(e.clientX, e.clientY)
+        const floorPt = getFloorPoint()
+        if (floorPt) {
+          const center = this.selected.mesh.position
+          const angleNow = Math.atan2(floorPt.x - center.x, floorPt.z - center.z)
+          // Per-frame delta (not delta-from-grab) so a full rotation past the ±180° atan2 seam
+          // accumulates correctly instead of snapping backward the instant the raw angle wraps —
+          // wrapped into (-π, π] since a single frame's own delta is always well under that.
+          let delta = angleNow - this._rotateDrag.lastPointerAngle
+          delta = ((delta + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
+          this._rotateDrag.rawRotation += delta
+          this._rotateDrag.lastPointerAngle = angleNow
+          // Quantized to the nearest 45° step every frame — holds steady at each detent and only
+          // advances to the next one once the drag has gone far enough past it, with no separate
+          // release-time snap needed since the mesh is already sitting on a step at all times.
+          const snapped = Math.round(this._rotateDrag.rawRotation / ROTATE_SNAP_STEP) * ROTATE_SNAP_STEP
+          const appliedDelta = snapped - this.selected.mesh.rotation.y
+          if (appliedDelta !== 0) {
+            this.selected.mesh.rotation.y = snapped
+            this._rotateDescendants(this.selected.uid, appliedDelta)
+            if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
+            else this._clampItemToRoom(this.selected.mesh)
+          }
+        }
       } else if (this.mode === 'drag-item' && this.selected) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
@@ -3284,6 +3440,17 @@ export class RoomEngine {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         if (floorPt) {
+          // Dragging over a different wall than the one this door/window is currently on
+          // reassigns it to that wall on the fly, replacing the old wall-name button picker.
+          // getFloorPoint() above already primed this.raycaster from the current pointer, so
+          // _raycastWallPoint can reuse it directly. wallNameForSegment (buildRoom) tags each
+          // wall segment with which of the 4 named walls it lies flush against; a notch's short
+          // "return" segments come back null and are ignored — a door/window never lives there.
+          const wallHit = this._raycastWallPoint()
+          const wallEntry = wallHit && this.wallMeshes.find((w) => w.mesh === wallHit.wallMesh)
+          if (wallEntry?.wallName && wallEntry.wallName !== this.selectedFeature.wall) {
+            this.selectedFeature.wall = wallEntry.wallName
+          }
           this.selectedFeature.offset = offsetForFeature(this.selectedFeature, floorPt) + this.dragOffset.x
           this._repositionFeature(this.selectedFeature)
           if (this.selectedFeature.type === 'door') this._resyncDoorMountedItems()
