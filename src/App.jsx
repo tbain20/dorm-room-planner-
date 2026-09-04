@@ -461,10 +461,11 @@ export default function App() {
   }, [featureSelection])
 
   // Global item shortcuts — Delete/Backspace removes whatever's selected (an item or a door/
-  // window), Ctrl/Cmd+C and Ctrl/Cmd+V mirror the Copy/Paste buttons (so canPaste's enabled state
-  // stays correct either way), R does a clean 90° turn alongside the drag-to-spin gizmo. Skipped
-  // entirely while a text input/textarea/select/contentEditable has focus, same guard roomEngine.js
-  // 's own keyboard-pan listener uses, so typing a layout name or room dimension never fires one of
+  // window), Ctrl/Cmd+C and Ctrl/Cmd+V mirror the Copy/Paste buttons for either an item or a
+  // door/window (so canPaste's enabled state stays correct either way), R does a clean 90° turn
+  // alongside the drag-to-spin gizmo, Ctrl/Cmd+Z undoes the most recent action. Skipped entirely
+  // while a text input/textarea/select/contentEditable has focus, same guard roomEngine.js's own
+  // keyboard-pan listener uses, so typing a layout name or room dimension never fires one of
   // these by accident.
   useEffect(() => {
     function isTypingTarget(el) {
@@ -483,15 +484,21 @@ export default function App() {
           e.preventDefault()
           engineRef.current.removeFeature(featureSelection.id)
         }
+      } else if ((e.ctrlKey || e.metaKey) && key === 'z') {
+        e.preventDefault()
+        engineRef.current.undo()
       } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
         if (selection) {
           e.preventDefault()
           handleCopyItem()
+        } else if (featureSelection) {
+          e.preventDefault()
+          handleCopyFeature()
         }
       } else if ((e.ctrlKey || e.metaKey) && key === 'v') {
         if (canPaste) {
           e.preventDefault()
-          handlePasteItem()
+          handlePaste()
         }
       } else if (key === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (selection) {
@@ -760,8 +767,17 @@ export default function App() {
     setCanPaste(true)
   }
 
-  function handlePasteItem() {
-    engineRef.current.pasteItem()
+  function handleCopyFeature() {
+    engineRef.current.copySelectedFeature()
+    setCanPaste(true)
+  }
+
+  // One shared Paste action for both clipboards — copying an item clears any copied door/window
+  // and vice versa (see copySelected/copySelectedFeature in roomEngine.js), so at most one of
+  // these is ever populated at a time; whichever it is is what gets pasted.
+  function handlePaste() {
+    if (engineRef.current.clipboardFeature) engineRef.current.pasteFeature()
+    else engineRef.current.pasteItem()
   }
 
   function handleFeatureSizeChange(key, value) {
@@ -1435,7 +1451,7 @@ export default function App() {
 
               {canPaste && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <button className="structure-btn" onClick={handlePasteItem}>📋 Paste item</button>
+                  <button className="structure-btn" onClick={handlePaste}>📋 Paste</button>
                 </div>
               )}
 
@@ -1578,7 +1594,7 @@ export default function App() {
         <div id="hint">
           {measureState.active
             ? 'Click two points to measure the distance between them · Click again to start over · Drag to orbit'
-            : 'Drag floor to orbit · Scroll to zoom · WASD/arrows or Shift+drag to pan · Drag an item to move it · Select + R to rotate, Delete to remove'}
+            : 'Drag floor to orbit · Scroll to zoom · WASD/arrows or Shift+drag to pan · Drag an item to move it · Select + R to rotate, Delete to remove · Ctrl+Z to undo'}
         </div>
 
         <button
@@ -1871,6 +1887,13 @@ export default function App() {
 
             {!panelCollapsed && (
             <>
+            <button
+              style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', width: '100%', border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer', marginBottom: 6 }}
+              onClick={handleCopyFeature}
+              title="Copy — paste it back with the 📋 Paste button or Ctrl/Cmd+V"
+            >
+              📋 Copy
+            </button>
             <button
               style={{
                 background: featureSelection.locked ? '#5b6b73' : 'var(--paper-shadow)',

@@ -92,6 +92,8 @@ const ROTATE_GIZMO_HANDLES = 4 // evenly-spaced grab handles around the ring, an
 const ROTATE_GIZMO_ARC_SPAN = Math.PI / 2.6 // radians — each handle's arc length, short of a full quarter-circle so a visible gap separates one handle from the next
 const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see _buildRotateGizmo/'rotate-item' pointermove branch
 
+const UNDO_HISTORY_LIMIT = 50 // how many past snapshots undo() can reach back through — see _pushUndo
+
 // RoomEngine owns the Three.js scene and all room/item state. It's deliberately independent of
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
@@ -145,6 +147,21 @@ export class RoomEngine {
     // copySelected()/pasteItem() below. Independent of `selected`, so a copy survives deselecting
     // (or selecting something else) before you paste it.
     this.clipboardItem = null
+    // Same idea as clipboardItem, for a copied door/window — see copySelectedFeature()/
+    // pasteFeature() below.
+    this.clipboardFeature = null
+
+    // Undo history — a stack of full getState() snapshots, each captured right *before* a
+    // mutation so undo() can pop and restore to "how things were right before the last action."
+    // See _pushUndo below for how call sites push exactly once per user action despite many of
+    // them calling each other internally (clearAll calling removeItem in a loop, say).
+    this.undoStack = []
+    this._suppressUndo = false // true for the whole duration of a loadState() call (including its
+    // async item loading), so restoring a snapshot — or loading a saved/shared layout — never
+    // itself generates new undo entries
+    this._undoTickGuard = false // collapses several undo-eligible calls chained together
+    // synchronously within one user action (e.g. duplicateSelected() calling addItemAt()) into a
+    // single snapshot — see _pushUndo
 
     // Every wall segment currently "facing" the camera — see _updateNearWall, called once per
     // frame from _animate. Used both to fade those walls' materials almost to nothing (so they
@@ -1189,6 +1206,7 @@ export class RoomEngine {
   addItem(catId, colorHex) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
+    this._pushUndo()
     if (cat.dressesBed) {
       this._applyBedDressing(cat, colorHex)
       return
@@ -1245,6 +1263,7 @@ export class RoomEngine {
   addItemAt(catId, x, z, rotY, onRegistered, y) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
+    this._pushUndo()
     this._loadItemMesh(cat, (mesh) => {
       mesh.position.x = x
       mesh.position.z = z
@@ -1507,6 +1526,7 @@ export class RoomEngine {
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat?.canWallMount || item.wallMounted === mounted) return
+    this._pushUndo()
     // Nothing should be resting on this item, or have this item resting on something, once it's
     // on the wall — same "surface it was on/resting on it is going away" cleanup a pickup-to-drag
     // does elsewhere (see the pointerdown handler's drag-item branch).
@@ -1591,6 +1611,7 @@ export class RoomEngine {
     this._cancelStackPickIfActive()
     const idx = this.placedItems.findIndex((p) => p.uid === uid)
     if (idx === -1) return
+    this._pushUndo()
     const removed = this.placedItems[idx]
     this.itemsGroup.remove(removed.mesh)
     this.placedItems.splice(idx, 1)
@@ -1639,8 +1660,42 @@ export class RoomEngine {
   }
 
   clearAll() {
+    this._pushUndo()
     ;[...this.placedItems].forEach((p) => this.removeItem(p.uid))
     ;[...this.wallFeatures].forEach((f) => this.removeFeature(f.id))
+  }
+
+  // Captures the room's current full state onto the undo stack, right before a mutation — called
+  // at the top of every undoable action (add/remove/move/rotate/recolor an item or feature, room
+  // resize/notch/clear, stacking, ...). Two things keep one user action from producing more than
+  // one entry despite these methods freely calling each other (clearAll looping over removeItem,
+  // duplicateSelected calling addItemAt, ...): _undoTickGuard collapses anything chained
+  // synchronously within the same call stack (reset on the next microtask), and _suppressUndo
+  // blanket-disables this for loadState()'s whole duration, sync and async parts alike, since
+  // restoring/loading a layout should never itself become a new undo entry.
+  _pushUndo() {
+    if (this._suppressUndo || this._undoTickGuard) return
+    this._undoTickGuard = true
+    Promise.resolve().then(() => {
+      this._undoTickGuard = false
+    })
+    this.undoStack.push(this.getState())
+    if (this.undoStack.length > UNDO_HISTORY_LIMIT) this.undoStack.shift()
+  }
+
+  // Pops the most recent pre-action snapshot and restores it. loadState(snapshot, false) is the
+  // same full-state restore a saved/shared layout load uses, just told not to wipe undoStack
+  // itself (a fresh layout load *should* clear old history — see loadState — but restoring one of
+  // our own snapshots shouldn't discard the rest of it) and wrapped in _suppressUndo so the
+  // restore doesn't push yet another entry recording itself.
+  undo() {
+    if (!this.undoStack.length) {
+      this.onNotice('Nothing to undo.')
+      return
+    }
+    const snapshot = this.undoStack.pop()
+    this.loadState(snapshot, false)
+    this.onNotice('Undid last action.')
   }
 
   rotateSelected(deltaRad = Math.PI / 2) {
@@ -1650,6 +1705,7 @@ export class RoomEngine {
     // rather than spinning it away from the door until the next selection silently undoes it.
     const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
     if (cat?.doorMountOnly) return
+    this._pushUndo()
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
     // Anything stacked on the selected item — directly, or several layers up a bedding stack —
     // shares its x/z center (see stackItemOn/_restackAbove), so rotating around that shared center
@@ -1736,6 +1792,31 @@ export class RoomEngine {
       pillowPose: src.pillowPose,
       stackedOnUid: src.stackedOnUid,
     }
+    // One shared clipboard slot between an item and a door/window — see copySelectedFeature.
+    this.clipboardFeature = null
+  }
+
+  // Same idea as copySelected, for a door/window — see pasteFeature below. Shares one clipboard
+  // slot with copySelected: copying a feature clears any copied item and vice versa, so App.jsx's
+  // single Paste button/keybind always has an unambiguous "paste this" to reach for.
+  copySelectedFeature() {
+    if (!this.selectedFeature) return
+    const f = this.selectedFeature
+    this.clipboardFeature = { type: f.type, wall: f.wall, offset: f.offset, width: f.width, height: f.height }
+    this.clipboardItem = null
+  }
+
+  // Places a new copy of whatever copySelectedFeature() last captured, nudged along its wall the
+  // same "step further away on repeated pastes" way pasteItem() does — _clampFeatureOffset (run
+  // by _repositionFeature, inside _addFeature) keeps the nudge from ever landing off the wall's
+  // own span or into a notch.
+  pasteFeature() {
+    if (!this.clipboardFeature) return
+    const c = this.clipboardFeature
+    const OFFSET = 1
+    const id = this.addFeatureAt(c.type, c.wall, c.offset + OFFSET, c.width, c.height)
+    this.selectFeature(id)
+    c.offset += OFFSET
   }
 
   // Places a new copy of whatever copySelected() last captured, offset from the clipboard's own
@@ -2495,6 +2576,7 @@ export class RoomEngine {
       if (ancestor.uid === sourceUid) return
       ancestor = ancestor.stackedOnUid != null ? this.placedItems.find((p) => p.uid === ancestor.stackedOnUid) : null
     }
+    this._pushUndo()
     // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
     // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
     if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
@@ -2579,6 +2661,7 @@ export class RoomEngine {
   unstackItem(uid) {
     const item = this.placedItems.find((p) => p.uid === uid)
     if (!item || item.stackedOnUid == null) return
+    this._pushUndo()
     item.mesh.position.y = 0
     item.stackedOnUid = null
     this._restackAbove(uid)
@@ -2599,6 +2682,7 @@ export class RoomEngine {
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat || !cat.bedHeights || cat.bedHeights[level] == null) return
+    this._pushUndo()
     item.bedHeightLevel = level
     ;(item.mesh.userData.movableObjs || []).forEach((m) => { m.obj.position.y = cat.bedHeights[level] + m.stackOffset })
     this._restackAbove(uid)
@@ -2628,6 +2712,7 @@ export class RoomEngine {
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat || !cat.hasPoseOptions || POSE_ANGLES[pose] === undefined) return
+    this._pushUndo()
     this._applyPose(item.mesh, cat, pose)
     item.pillowPose = pose
     if (this.selected && this.selected.uid === uid) this._emitSelection()
@@ -2642,6 +2727,7 @@ export class RoomEngine {
     if (!item) return
     const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
     if (!cat || !cat.colorable) return
+    this._pushUndo()
     this._tintModel(item.mesh.userData.primaryModel || item.mesh, hex)
     item.colorHex = hex
     if (this.selected && this.selected.uid === uid) this._emitSelection()
@@ -2684,6 +2770,7 @@ export class RoomEngine {
         return
       }
     }
+    this._pushUndo()
     targetPillows.forEach((p) => this.setItemColor(p.uid, hex))
     this.onNotice(`Updated ${targetPillows.length} pillow${targetPillows.length === 1 ? '' : 's'}${beds.length > 1 ? ' on that bed.' : ' in your room.'}`)
   }
@@ -2719,6 +2806,7 @@ export class RoomEngine {
       }
       targetBeds = [this.selected]
     }
+    this._pushUndo()
     let mattressCount = 0
     targetBeds.forEach((bed) => {
       const mattressModels = bed.mesh.userData.mattressModels || []
@@ -2830,7 +2918,16 @@ export class RoomEngine {
     return dataUrl
   }
 
-  loadState(data) {
+  // resetUndo controls whether this wipes undoStack: true (the default) for "load a genuinely
+  // different layout" (My Layouts, Browse, a shared link, ...), where old undo history belongs to
+  // a room that's about to stop existing; false only for undo()'s own internal restore of one of
+  // this room's own snapshots, which should leave the rest of that history intact. Either way,
+  // _suppressUndo blocks every undo-instrumented call this makes (clearAll, addItemAt,
+  // setBedHeight, setItemColor, ...) — sync and async alike — from generating new entries; reset
+  // once loading finishes, in whichever of the two completion paths below actually runs.
+  loadState(data, resetUndo = true) {
+    this._suppressUndo = true
+    if (resetUndo) this.undoStack = []
     this.clearAll()
     this.room = { ...data.room }
     this.buildRoom()
@@ -2843,6 +2940,7 @@ export class RoomEngine {
     let remaining = data.items.length
     if (remaining === 0) {
       this._emitCart()
+      this._suppressUndo = false
     } else {
       data.items.forEach((it, i) => {
         // A catalogId from an older save can point at an item that's since been retired (e.g. a
@@ -2906,6 +3004,9 @@ export class RoomEngine {
       bed.mesh.visible = false
     })
     this._emitCart()
+    // The async tail of loadState() (see its own comment) — every item has now landed, so it's
+    // safe to let undo-instrumented calls start recording again.
+    this._suppressUndo = false
   }
 
   // ---------- Wall features (doors & windows) ----------
@@ -3039,6 +3140,7 @@ export class RoomEngine {
   }
 
   _addFeature(type, wall, offset, width, height) {
+    this._pushUndo()
     const id = this.featureIdCounter++
     const feature = { id, type, wall, offset, width, height, locked: false }
     feature.mesh = this._buildFeatureMesh(feature)
@@ -3067,6 +3169,7 @@ export class RoomEngine {
   removeFeature(id) {
     const idx = this.wallFeatures.findIndex((f) => f.id === id)
     if (idx === -1) return
+    this._pushUndo()
     const removed = this.wallFeatures[idx]
     this.featuresGroup.remove(removed.mesh)
     this.wallFeatures.splice(idx, 1)
@@ -3111,23 +3214,11 @@ export class RoomEngine {
     }
   }
 
-  setFeatureWall(id, wall) {
-    const feature = this.wallFeatures.find((f) => f.id === id)
-    if (!feature) return
-    feature.wall = wall
-    feature.offset = this._wallConfig(wall).length / 2 // recenter on the new wall
-    this._repositionFeature(feature)
-    if (feature.type === 'door') this._resyncDoorMountedItems()
-    if (this.selectedFeature?.id === id) {
-      this._updateFeatureSelectionHelper()
-      this._emitFeatureSelection(feature)
-    }
-  }
-
   // Windows only — doors are a fixed standard size.
   setFeatureSize(id, width, height) {
     const feature = this.wallFeatures.find((f) => f.id === id)
     if (!feature || feature.type !== 'window') return
+    this._pushUndo()
     feature.width = Math.max(WINDOW_MIN_WIDTH, Math.min(WINDOW_MAX_WIDTH, width))
     feature.height = Math.max(WINDOW_MIN_HEIGHT, Math.min(WINDOW_MAX_HEIGHT, height))
     this.featuresGroup.remove(feature.mesh)
@@ -3205,6 +3296,11 @@ export class RoomEngine {
       const pts = [...this.activePointers.values()]
       return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
     }
+    // Same 5px click-vs-drag threshold endPointer's own measure-mode check uses — a synthetic or
+    // near-zero-movement pointermove (some automation/trackpad input dispatches one even for a
+    // plain click) shouldn't count as "the user started dragging" and push a wasted undo entry.
+    const movedPastClickThreshold = (e) =>
+      !!this._pointerDownPos && Math.hypot(e.clientX - this._pointerDownPos.x, e.clientY - this._pointerDownPos.y) >= 5
     // A door/window only drags along its own wall's length — project the pointer's floor-plane
     // hit onto whichever world axis that wall runs along (x for back/front, z for left/right).
     const offsetForFeature = (feature, floorPt) => {
@@ -3215,6 +3311,11 @@ export class RoomEngine {
     el.addEventListener('pointerdown', (e) => {
       el.setPointerCapture(e.pointerId)
       this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      // One undo snapshot per drag gesture, not per pointerdown — a plain click (down+up with no
+      // move in between) shouldn't leave a wasted no-op entry on the stack. Each drag-capable
+      // pointermove branch below pushes lazily, exactly once, the first time it actually moves
+      // something — see the "if (!this._dragUndoPushed)" checks.
+      this._dragUndoPushed = false
 
       if (this.activePointers.size === 2) {
         // A second touch landed — abandon any single-pointer drag/orbit and start pinch-zoom.
@@ -3382,6 +3483,10 @@ export class RoomEngine {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         if (floorPt) {
+          if (!this._dragUndoPushed && movedPastClickThreshold(e)) {
+            this._dragUndoPushed = true
+            this._pushUndo()
+          }
           const center = this.selected.mesh.position
           const angleNow = Math.atan2(floorPt.x - center.x, floorPt.z - center.z)
           // Per-frame delta (not delta-from-grab) so a full rotation past the ±180° atan2 seam
@@ -3410,6 +3515,10 @@ export class RoomEngine {
         // near-the-horizon zone this event — skip the update entirely rather than snapping the
         // item toward whatever wild point that ray would otherwise have produced.
         if (floorPt) {
+          if (!this._dragUndoPushed && movedPastClickThreshold(e)) {
+            this._dragUndoPushed = true
+            this._pushUndo()
+          }
           const rawX = floorPt.x + this.dragOffset.x
           const rawZ = floorPt.z + this.dragOffset.z
           if (this.selected.stackedOnUid != null) {
@@ -3435,11 +3544,21 @@ export class RoomEngine {
         setPointerNDC(e.clientX, e.clientY)
         this.raycaster.setFromCamera(this.pointerNDC, this.camera)
         const hit = this._raycastWallPoint()
-        if (hit) this._snapToWallHit(this.selected.mesh, this.selected.catalogId, hit)
+        if (hit) {
+          if (!this._dragUndoPushed && movedPastClickThreshold(e)) {
+            this._dragUndoPushed = true
+            this._pushUndo()
+          }
+          this._snapToWallHit(this.selected.mesh, this.selected.catalogId, hit)
+        }
       } else if (this.mode === 'drag-feature' && this.selectedFeature) {
         setPointerNDC(e.clientX, e.clientY)
         const floorPt = getFloorPoint()
         if (floorPt) {
+          if (!this._dragUndoPushed && movedPastClickThreshold(e)) {
+            this._dragUndoPushed = true
+            this._pushUndo()
+          }
           // Dragging over a different wall than the one this door/window is currently on
           // reassigns it to that wall on the fly, replacing the old wall-name button picker.
           // getFloorPoint() above already primed this.raycaster from the current pointer, so
