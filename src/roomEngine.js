@@ -1082,13 +1082,25 @@ export class RoomEngine {
     return this._topOfStack((undressed || beds[beds.length - 1]).uid, cat)
   }
 
+  // Walks every branch of what's stacked on a bed, not just one — a bed routinely has several
+  // *direct* children at once (a comforter and a pillow both stack straight onto the bed/mattress
+  // level, as siblings, not one on top of the other — see catalog.js's skipsComforter), so this
+  // has to check all of them, not stop at whichever one `placedItems.find` happens to hit first.
+  // Missing that (an earlier version of this only followed a single linear chain) meant a second
+  // bed's-worth of pillows could see the *first* bed as still "undressed" for the pillow group
+  // whenever its own comforter happened to be found first, landing both pillows on the same bed —
+  // right on top of each other, red collision tint and all.
   _stackChainHasGroup(uid, groupId) {
     if (!groupId) return false
-    let current = this.placedItems.find((p) => p.uid === uid)
-    while (current) {
-      const cat = ALL_ITEMS.find((c) => c.id === current.catalogId)
-      if (cat && cat.groupId === groupId) return true
-      current = this.placedItems.find((p) => p.stackedOnUid === current.uid)
+    const stack = [uid]
+    while (stack.length) {
+      const u = stack.pop()
+      const current = this.placedItems.find((p) => p.uid === u)
+      if (current) {
+        const cat = ALL_ITEMS.find((c) => c.id === current.catalogId)
+        if (cat && cat.groupId === groupId) return true
+      }
+      this.placedItems.filter((p) => p.stackedOnUid === u).forEach((child) => stack.push(child.uid))
     }
     return false
   }
@@ -1109,6 +1121,69 @@ export class RoomEngine {
       current = child
     }
     return null
+  }
+
+  // Walks a placed item's own stackedOnUid chain (itself included) up to whichever ancestor is a
+  // real bed (cat.isBed) — used by _fitComforterToBed/_pillowHeadOffset below so a comforter or
+  // pillow stacked several bedding layers up (bed → topper → sheet-level → comforter/pillow) still
+  // sizes/positions itself off the actual bed's own geometry, not whatever layer it's directly
+  // resting on.
+  _findRootBedCat(item) {
+    let current = item
+    while (current) {
+      const cat = ALL_ITEMS.find((c) => c.id === current.catalogId)
+      if (cat && cat.isBed) return cat
+      current = current.stackedOnUid != null ? this.placedItems.find((p) => p.uid === current.stackedOnUid) : null
+    }
+    return null
+  }
+
+  // Derives a comforter's real length/width/model purely from the target bed's own geometry —
+  // bedCat.dims[0] (the frame's overall length, i.e. how far anything can extend before floating
+  // off the actual bed) and bedCat.mattressDims (the bare mattress it has to cover) — rather than
+  // one fixed catalog size, so the two differently-proportioned beds this app has (Twin XL vs Full)
+  // each get a comforter that both drapes a little past the mattress's foot end and leaves the
+  // *right* amount of bare mattress at the head end for a bed-pillow (see _pillowHeadOffset just
+  // below) to sit in without any part of it overlapping the comforter's own footprint — the two are
+  // stacking siblings (see catalog.js's skipsComforter), so nothing else exempts that pair from the
+  // red collision tint.
+  //
+  // headEdge/footEdge are the comforter's own near/far edges along the bed's head-to-foot axis,
+  // measured from the bed's own center. headEdge = 1.9 - frameHalf is chosen to line up exactly
+  // with _pillowHeadOffset's own placement below (both derive from the same frameHalf, with a
+  // 0.05ft margin baked into the two constants together) for *any* frameHalf, not just this app's
+  // two current beds — so a bed added later with a different frame length still gets a
+  // pillow-safe gap with no per-bed tuning needed. footEdge drapes 0.15ft past the mattress's own
+  // foot edge for a bit of overhang, capped at the frame's own foot edge so the comforter never
+  // floats off the actual bed there either.
+  _fitComforterToBed(bedCat) {
+    const frameHalf = bedCat.dims[0] / 2
+    const [matLen, matWidth] = bedCat.mattressDims
+    const headEdge = 1.9 - frameHalf
+    const footEdge = Math.min(matLen / 2 + 0.15, frameHalf)
+    const footEndOffset = (headEdge + footEdge) / 2
+    const length = footEdge - headEdge
+    const width = matWidth + 1.3
+    // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin
+    // XL vs a Full comforter — 3.6ft is comfortably between this app's two mattress widths (Twin
+    // XL's 3.08-3.2ft, Full's 4.2ft), so it'll keep picking the right one if a narrower/wider bed
+    // is ever added too.
+    const modelUrl = matWidth < 3.6 ? '/models/twinComforter.glb' : '/models/fullComforter.glb'
+    return { dims: [length, width, 0.45], footEndOffset, modelUrl }
+  }
+
+  // A sleeping pillow (skipsComforter — see catalog.js) gets shifted this far toward the head end
+  // (a negative footEndOffset — see stackItemOn) instead of sitting dead-center on the mattress,
+  // which would otherwise land it right under/inside the comforter's own footprint. Mirrors
+  // _fitComforterToBed's own headEdge formula so the two always stay in sync: halfLen - frameHalf
+  // is exactly that formula's headEdge minus the pillow's own half-length, and the shared +0.1/-0.05
+  // margin split between the two constants keeps the pillow clear of both the comforter (on one
+  // side) and the bed frame's own head edge (on the other) for any frameHalf — see the two
+  // functions' comments for the algebra.
+  _pillowHeadOffset(bedCat, pillowCat) {
+    const frameHalf = bedCat.dims[0] / 2
+    const halfLen = pillowCat.dims[0] / 2
+    return halfLen - frameHalf + 0.1
   }
 
   // Finds which placed bed a comforter click should dress — prefers one that isn't already dressed
@@ -1217,7 +1292,18 @@ export class RoomEngine {
         this.onNotice('Add a bed to the room first.')
         return
       }
-      this._loadItemMesh(cat, (mesh) => {
+      // A comforter's real modelUrl depends on which bed it's about to land on — twinComforter.glb
+      // for a Twin XL-width mattress, fullComforter.glb for a Full-width one (see
+      // _fitComforterToBed) — so it has to be picked here, before the (async) model load starts,
+      // from whichever bed _findBedAutoStackTarget just resolved. Its dims/footEndOffset get
+      // recomputed for real once it's actually stacked (see stackItemOn), same as the mattress
+      // topper's own matchBaseFootprint — this only needs to get the *model* right upfront.
+      let loadCat = cat
+      if (cat.isComforterLayer) {
+        const bedCat = this._findRootBedCat(target)
+        if (bedCat) loadCat = { ...cat, modelUrl: this._fitComforterToBed(bedCat).modelUrl }
+      }
+      this._loadItemMesh(loadCat, (mesh) => {
         const uid = this._registerItem(mesh, cat)
         this.stackItemOn(uid, target.uid)
         this.selectItem(uid)
@@ -1727,10 +1813,11 @@ export class RoomEngine {
       // rotation too, or it'd stay offset toward whatever direction was "the foot end" before the
       // turn instead of tracking the bed around.
       const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
-      if (childCat && childCat.footEndOffset && parent) {
+      const childFootEndOffset = child.footEndOffsetOverride != null ? child.footEndOffsetOverride : childCat && childCat.footEndOffset
+      if (childFootEndOffset && parent) {
         const rot = child.mesh.rotation.y
-        child.mesh.position.x = parent.mesh.position.x + childCat.footEndOffset * Math.cos(rot)
-        child.mesh.position.z = parent.mesh.position.z - childCat.footEndOffset * Math.sin(rot)
+        child.mesh.position.x = parent.mesh.position.x + childFootEndOffset * Math.cos(rot)
+        child.mesh.position.z = parent.mesh.position.z - childFootEndOffset * Math.sin(rot)
       }
       // pillowSideOffset — same reasoning as footEndOffset above: a fanned-out pillow (see
       // stackItemOn) isn't centered on its parent either, so its position tracks the new rotation.
@@ -2588,6 +2675,29 @@ export class RoomEngine {
       const surfaceDims = (targetCat && targetCat.mattressDims) || target.mesh.userData.dims
       this._refitFootprint(source, sourceCat, surfaceDims)
     }
+    // isComforterLayer/skipsComforter (the comforter and a sleeping pillow, respectively — see
+    // catalog.js) both size/position themselves off the actual bed underneath, not a fixed catalog
+    // constant — see _fitComforterToBed/_pillowHeadOffset. Resolved once here (not on every drag's
+    // _restackAbove) and cached on the instance as footEndOffsetOverride, the same way a fanned
+    // pillow's own pillowSideOffset below is cached, so later restacks/rotations can reuse it
+    // without re-walking the stack to find the bed or re-fitting the model every frame.
+    const bedCat = sourceCat && (sourceCat.isComforterLayer || sourceCat.skipsComforter) ? this._findRootBedCat(target) : null
+    if (bedCat && sourceCat.isComforterLayer) {
+      const fit = this._fitComforterToBed(bedCat)
+      const model = source.mesh.userData.primaryModel
+      if (model) {
+        // fitModelToDims isn't idempotent (see _refitFootprint above) — reset to identity first so
+        // repeated re-stacks land on the new size instead of compounding onto the last one.
+        model.position.set(0, 0, 0)
+        model.scale.set(1, 1, 1)
+        if (sourceCat.modelRotationY) model.rotation.y = sourceCat.modelRotationY
+        this._fitModelToDims(model, fit.dims)
+      }
+      source.mesh.userData.dims = fit.dims
+      source.footEndOffsetOverride = fit.footEndOffset
+    } else if (bedCat && sourceCat.skipsComforter) {
+      source.footEndOffsetOverride = this._pillowHeadOffset(bedCat, sourceCat)
+    }
     // embedRatio (the comforter) sinks a chunky, scanned-fabric model further into its base than
     // the universal edge-rounding STACK_SINK alone would — a comforter is meant to hug the
     // mattress/topper underneath it, not perch fully on top of it.
@@ -2599,10 +2709,13 @@ export class RoomEngine {
     // local X (head-to-foot) axis after the rotation above, rather than centering it on the
     // mattress — a comforter authored short enough to leave the head end (and the pillow sitting
     // there) uncovered would otherwise just leave an equal, unrealistic gap at the foot end too.
-    if (sourceCat && sourceCat.footEndOffset) {
+    // footEndOffsetOverride (set just above) takes priority when present — a negative value shifts
+    // a sleeping pillow toward the head end instead.
+    const footEndOffset = source.footEndOffsetOverride != null ? source.footEndOffsetOverride : sourceCat && sourceCat.footEndOffset
+    if (footEndOffset) {
       const rot = source.mesh.rotation.y
-      source.mesh.position.x += sourceCat.footEndOffset * Math.cos(rot)
-      source.mesh.position.z -= sourceCat.footEndOffset * Math.sin(rot)
+      source.mesh.position.x += footEndOffset * Math.cos(rot)
+      source.mesh.position.z -= footEndOffset * Math.sin(rot)
     }
     // Fan pillows sideways off center (see PILLOW_SIDE_OFFSET above) based on how many other
     // pillows are already resting on this same target — persisted on the instance (rather than a
@@ -2637,11 +2750,13 @@ export class RoomEngine {
       child.mesh.position.x = parent.mesh.position.x
       child.mesh.position.z = parent.mesh.position.z
       // footEndOffset — see stackItemOn above, same reasoning: keep the comforter shifted toward
-      // the foot end instead of snapping back to centered on every drag/height-change cascade.
-      if (childCat && childCat.footEndOffset) {
+      // the foot end (or a sleeping pillow toward the head end — see footEndOffsetOverride in
+      // stackItemOn) instead of snapping back to centered on every drag/height-change cascade.
+      const childFootEndOffset = child.footEndOffsetOverride != null ? child.footEndOffsetOverride : childCat && childCat.footEndOffset
+      if (childFootEndOffset) {
         const rot = child.mesh.rotation.y
-        child.mesh.position.x += childCat.footEndOffset * Math.cos(rot)
-        child.mesh.position.z -= childCat.footEndOffset * Math.sin(rot)
+        child.mesh.position.x += childFootEndOffset * Math.cos(rot)
+        child.mesh.position.z -= childFootEndOffset * Math.sin(rot)
       }
       // pillowSideOffset — see stackItemOn above, same reasoning as footEndOffset: keep a fanned-
       // out pillow shifted off center instead of snapping back to dead-center on every cascade.
