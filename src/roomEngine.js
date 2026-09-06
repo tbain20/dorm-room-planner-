@@ -1138,15 +1138,24 @@ export class RoomEngine {
     return null
   }
 
-  // Derives a comforter's real length/width/model purely from the target bed's own geometry —
+  // Derives a comforter's real length/model purely from the target bed's own geometry —
   // bedCat.dims[0] (the frame's overall length, i.e. how far anything can extend before floating
   // off the actual bed) and bedCat.mattressDims (the bare mattress it has to cover) — rather than
-  // one fixed catalog size, so the two differently-proportioned beds this app has (Twin XL vs Full)
-  // each get a comforter that both drapes a little past the mattress's foot end and leaves the
-  // *right* amount of bare mattress at the head end for a bed-pillow (see _pillowHeadOffset just
-  // below) to sit in without any part of it overlapping the comforter's own footprint — the two are
-  // stacking siblings (see catalog.js's skipsComforter), so nothing else exempts that pair from the
-  // red collision tint.
+  // one fixed catalog length, so the two differently-proportioned beds this app has (Twin XL vs
+  // Full) each get a comforter that both drapes a little past the mattress's foot end and leaves
+  // the *right* amount of bare mattress at the head end for a bed-pillow (see _pillowHeadOffset
+  // just below) to sit in without any part of it overlapping the comforter's own footprint — the
+  // two are stacking siblings (see catalog.js's skipsComforter), so nothing else exempts that pair
+  // from the red collision tint.
+  //
+  // Width and thickness are NOT derived here — those stay exactly sourceCat.dims[1]/[2], the
+  // catalog's own fixed values, on every bed. A comforter's whole visual point is draping generously
+  // past the sides of whatever it's on, so a width that shrank to "just barely wider than this
+  // particular mattress" (an earlier version of this function did that) ends up looking like it
+  // barely hangs over at all on the wider of the two beds — length is the one dimension that
+  // actually has to respect the specific bed underneath it (see the pillow-clearance reasoning
+  // above); width/height are a cosmetic "how big/poofy does it look" choice same as any other item's
+  // dims, unaffected by which bed it's on.
   //
   // headEdge/footEdge are the comforter's own near/far edges along the bed's head-to-foot axis,
   // measured from the bed's own center. headEdge = 1.9 - frameHalf is chosen to line up exactly
@@ -1156,20 +1165,21 @@ export class RoomEngine {
   // pillow-safe gap with no per-bed tuning needed. footEdge drapes 0.15ft past the mattress's own
   // foot edge for a bit of overhang, capped at the frame's own foot edge so the comforter never
   // floats off the actual bed there either.
-  _fitComforterToBed(bedCat) {
+  _fitComforterToBed(bedCat, sourceCat) {
     const frameHalf = bedCat.dims[0] / 2
     const [matLen, matWidth] = bedCat.mattressDims
     const headEdge = 1.9 - frameHalf
     const footEdge = Math.min(matLen / 2 + 0.15, frameHalf)
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
-    const width = matWidth + 1.3
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin
     // XL vs a Full comforter — 3.6ft is comfortably between this app's two mattress widths (Twin
     // XL's 3.08-3.2ft, Full's 4.2ft), so it'll keep picking the right one if a narrower/wider bed
-    // is ever added too.
+    // is ever added too. This is still keyed off the actual mattress width (not sourceCat's own
+    // fixed display width above) — it's picking which real-world-sized comforter was scanned, not
+    // how big to render it.
     const modelUrl = matWidth < 3.6 ? '/models/twinComforter.glb' : '/models/fullComforter.glb'
-    return { dims: [length, width, 0.45], footEndOffset, modelUrl }
+    return { dims: [length, sourceCat.dims[1], sourceCat.dims[2]], footEndOffset, modelUrl }
   }
 
   // A sleeping pillow (skipsComforter — see catalog.js) gets shifted this far toward the head end
@@ -1301,7 +1311,7 @@ export class RoomEngine {
       let loadCat = cat
       if (cat.isComforterLayer) {
         const bedCat = this._findRootBedCat(target)
-        if (bedCat) loadCat = { ...cat, modelUrl: this._fitComforterToBed(bedCat).modelUrl }
+        if (bedCat) loadCat = { ...cat, modelUrl: this._fitComforterToBed(bedCat, cat).modelUrl }
       }
       this._loadItemMesh(loadCat, (mesh) => {
         const uid = this._registerItem(mesh, cat)
@@ -2683,7 +2693,7 @@ export class RoomEngine {
     // without re-walking the stack to find the bed or re-fitting the model every frame.
     const bedCat = sourceCat && (sourceCat.isComforterLayer || sourceCat.skipsComforter) ? this._findRootBedCat(target) : null
     if (bedCat && sourceCat.isComforterLayer) {
-      const fit = this._fitComforterToBed(bedCat)
+      const fit = this._fitComforterToBed(bedCat, sourceCat)
       const model = source.mesh.userData.primaryModel
       if (model) {
         // fitModelToDims isn't idempotent (see _refitFootprint above) — reset to identity first so
