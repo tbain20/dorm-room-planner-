@@ -248,28 +248,31 @@ export const CATALOG = [
   // into looking wrong" — a cosmetic compensation for the independent-axis-scaling tradeoff, not a
   // to-scale measurement.
   //
-  // embedRatio (0.82, ~1.89' at this height) sinks the model deep enough into the mattress that it
+  // embedRatio (0.784, ~1.8' at this height) sinks the model deep enough into the mattress that it
   // reads as actually resting *in* the bedding — Tyler's own framing — rather than as a separate
   // slab perched on top of it. Both height and embedRatio have climbed together across several
-  // passes (0.45'/0.15 → 1.0'/0.15 → 1.3'/0.3 → 2.3'/0.6 → 2.3'/0.82 — see git history): most of
-  // those bumps added roughly a foot to both the model's own local height and how far it sinks,
-  // keeping the *visible* poof above the mattress surface (height minus the embedded portion)
-  // roughly constant around 0.9' even as the underlying numbers grew — this last pass instead
-  // dropped it another 0.5' (visible poof down to ~0.41') at Tyler's explicit request to sit it
-  // closer to the mattress, not to keep chasing "properly seated." Y-position changes like this
-  // one don't create new collision risk on their own — the whole bed (frame/slat/mattress) is one
-  // placedItem, so any depth the comforter sinks to is exempted via the same stacked-relative check
-  // that already covers it (see _isStackedRelative in roomEngine.js); a sleeping pillow's clearance
-  // is governed entirely by the X-axis head/foot split (headEdge/_pillowHeadOffset), which this
-  // value doesn't touch.
+  // passes (0.45'/0.15 → 1.0'/0.15 → 1.3'/0.3 → 2.3'/0.6 → 2.3'/0.82 → 2.3'/0.784 — see git
+  // history): most of those bumps added roughly a foot to both the model's own local height and how
+  // far it sinks, keeping the *visible* poof above the mattress surface (height minus the embedded
+  // portion) roughly constant around 0.9' even as the underlying numbers grew. The last two passes
+  // moved the opposite direction in small steps — first down another 0.5' at Tyler's request to sit
+  // closer to the mattress (which visibly poked the mattress through the model's own quilted seam
+  // grooves in a few spots — accepted as-is, Tyler's call), then back up 1" when that poke-through
+  // read as a bit much. Y-position changes like this one don't create new collision risk with the
+  // BED — the whole bed (frame/slat/mattress) is one placedItem, so any depth the comforter sinks to
+  // is exempted via the same stacked-relative check that already covers it (see _isStackedRelative
+  // in roomEngine.js), and a sleeping pillow's clearance is governed entirely by the X-axis
+  // head/foot split (headEdge/_pillowHeadOffset), which this value doesn't touch — but a *width*
+  // change would (see _fitComforterToBed's footEdge for why it can genuinely reach *other* furniture
+  // placed close to the bed, which is a separate, real overlap, not a bug in either value).
   // modelRotationY: both scans' own head-to-foot axis came in on local Z, not X — without the
   // rotation, _fitModelToDims (which always maps local X onto dims[0]/length at rotation 0) would
   // stretch the model's naturally-short axis out to the full length and squash its naturally-long
   // axis down into the width, i.e. exactly backwards. Same fix, same reason, on the throw blanket
   // below (throwBlanket.glb shares this same axis convention).
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.82, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.82, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.82, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.784, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.784, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.784, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
   // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —

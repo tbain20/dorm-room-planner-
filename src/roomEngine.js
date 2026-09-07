@@ -1164,16 +1164,19 @@ export class RoomEngine {
   // two current beds — so a bed added later with a different frame length still gets a
   // pillow-safe gap with no per-bed tuning needed.
   //
-  // footEdge drapes 1.25ft past the mattress's own foot edge — Tyler's call, not capped at the
-  // frame's own foot edge the way an earlier version of this was: a mostly-covered mattress at the
-  // foot end read as more obviously wrong than the comforter running past the footboard, so this
-  // errs generously long enough that no mattress shows under it there, even accepting that it can
-  // now extend past the frame itself on the shorter-framed beds.
+  // footEdge drapes 0.5ft past the mattress's own foot edge — Tyler's call. A full 1.25ft was tried
+  // first (still not capped at the frame's own foot edge — a mostly-covered mattress at the foot
+  // end read as more obviously wrong than the comforter running past the footboard), but in
+  // colgate-bed's default room layout (see catalog.js's "Add Colgate furniture") the wardrobe sits
+  // only ~0.42ft past the frame's own foot edge, so 1.25ft of overhang genuinely reached ~0.67ft
+  // into it — a real geometric overlap, not a collision-detection bug (see session notes). 0.5ft
+  // still covers the mattress at ordinary viewing angles without reaching that wardrobe (or
+  // anything placed at a similarly tight default gap).
   _fitComforterToBed(bedCat, sourceCat) {
     const frameHalf = bedCat.dims[0] / 2
     const [matLen, matWidth] = bedCat.mattressDims
     const headEdge = 1.9 - frameHalf
-    const footEdge = matLen / 2 + 1.25
+    const footEdge = matLen / 2 + 0.5
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin
