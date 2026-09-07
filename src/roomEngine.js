@@ -1164,19 +1164,16 @@ export class RoomEngine {
   // two current beds — so a bed added later with a different frame length still gets a
   // pillow-safe gap with no per-bed tuning needed.
   //
-  // footEdge drapes 0.25ft past the mattress's own foot edge, capped at the frame's own foot edge
-  // so the comforter never floats off the actual bed frame there — twinComforter.glb/
-  // fullComforter.glb already puddle and drape at their own corners on their own (visible even
-  // unscaled, in Blender), so this doesn't need to chase covering the mattress's exposed foot face
-  // by brute-force overhang the way an earlier version of this tried (0.5ft, uncapped) — that,
-  // combined with a much deeper embedRatio (see catalog.js), ended up stretching/flattening the
-  // model's own proportions far more than it was worth for a minor gap. A modest overhang plus a
-  // small embed (below) is the better trade.
+  // footEdge drapes 1.25ft past the mattress's own foot edge — Tyler's call, not capped at the
+  // frame's own foot edge the way an earlier version of this was: a mostly-covered mattress at the
+  // foot end read as more obviously wrong than the comforter running past the footboard, so this
+  // errs generously long enough that no mattress shows under it there, even accepting that it can
+  // now extend past the frame itself on the shorter-framed beds.
   _fitComforterToBed(bedCat, sourceCat) {
     const frameHalf = bedCat.dims[0] / 2
     const [matLen, matWidth] = bedCat.mattressDims
     const headEdge = 1.9 - frameHalf
-    const footEdge = Math.min(matLen / 2 + 0.25, frameHalf)
+    const footEdge = matLen / 2 + 1.25
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin

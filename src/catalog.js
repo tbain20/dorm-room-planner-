@@ -236,36 +236,34 @@ export const CATALOG = [
   // proportions that it reads as squashed — see embedRatio below for why going wider than this
   // isn't free.
   //
-  // height (1.3') is much taller than a real comforter's actual thickness — fitModelToDims scales
+  // height (2.3') is way more than a real comforter's actual thickness — fitModelToDims scales
   // each axis independently to hit dims exactly (see modelFit.js), so a height picked to be
-  // physically-accurate-but-small (0.45' was tried first) squashes the model's own vertical
-  // proportions far more aggressively than its length/width get stretched, since those are both
-  // several feet. The scan itself is quite poofy relative to its own footprint (confirmed against
-  // Tyler's own unscaled Blender render); 0.45' crushed that down to a barely domed sheet, and even
-  // 1.0' (the next value tried) still read as flatter than the reference. 1.3' isn't "how thick a
-  // real comforter is," it's "how tall a target height has to be, given this model's own
-  // proportions, for fitModelToDims's per-axis scaling to not flatten it into looking wrong" — a
-  // cosmetic compensation for the independent-axis-scaling tradeoff, not a to-scale measurement.
+  // physically-accurate-but-small (0.45' was tried first, then 1.0', then 1.3') squashes the
+  // model's own vertical proportions far more aggressively than its length/width get stretched,
+  // since those are both several feet. The scan itself is quite poofy relative to its own footprint
+  // (confirmed against Tyler's own unscaled Blender render); each smaller value still read as
+  // flatter than the reference, so this climbed in steps rather than landing on the right value in
+  // one guess. 2.3' isn't "how thick a real comforter is," it's "how tall a target height has to
+  // be, given this model's own proportions, for fitModelToDims's per-axis scaling to not flatten it
+  // into looking wrong" — a cosmetic compensation for the independent-axis-scaling tradeoff, not a
+  // to-scale measurement.
   //
-  // embedRatio (0.3, ~0.39' at this height) sinks the model into the mattress enough that its
-  // *visible* top — the part actually poking up above the mattress surface, not its full local
-  // height — reads as the right thickness against the reference render, rather than the whole
-  // model perching on top of the mattress looking taller than a real laid-on-a-bed comforter would.
-  // This is a bigger fraction than the 0.15 tried right after the height bump (that one was tuned
-  // back when height was still 0.45' and the model barely dipped below the mattress's own top edge
-  // at all — see git history), but nowhere near the 0.85 tried earlier, which buried so much of a
-  // *shorter* (0.45') model that almost nothing was left visible above the mattress. At 1.3' tall,
-  // burying 0.39' of it still leaves a full 0.91' of visible poof — deep enough to look properly
-  // seated in the mattress rather than floating, without disappearing the way the 0.85/0.45
-  // combination did.
+  // embedRatio (0.6, ~1.39' at this height) sinks the model deep enough into the mattress that it
+  // reads as actually resting *in* the bedding — Tyler's own framing — rather than as a separate
+  // slab perched on top of it. Both height and embedRatio have climbed together across a few
+  // passes (0.45'/0.15 → 1.0'/0.15 → 1.3'/0.3 → 2.3'/0.6 — see git history): each bump added
+  // roughly a foot to both the model's own local height and how far it sinks, which is why the
+  // *visible* poof above the mattress surface (height minus the embedded portion) has stayed
+  // roughly the same, ~0.9', across the last couple of passes even as the numbers driving it grew —
+  // taller and deeper together reads as "properly seated in a thicker comforter," not just "bigger."
   // modelRotationY: both scans' own head-to-foot axis came in on local Z, not X — without the
   // rotation, _fitModelToDims (which always maps local X onto dims[0]/length at rotation 0) would
   // stretch the model's naturally-short axis out to the full length and squash its naturally-long
   // axis down into the width, i.e. exactly backwards. Same fix, same reason, on the throw blanket
   // below (throwBlanket.glb shares this same axis convention).
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 4.6, 1.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.3, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 4.6, 1.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.3, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 4.6, 1.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.3, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.6, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.6, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 4.6, 2.3], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.6, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
   // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —
