@@ -1164,19 +1164,22 @@ export class RoomEngine {
   // two current beds — so a bed added later with a different frame length still gets a
   // pillow-safe gap with no per-bed tuning needed.
   //
-  // footEdge drapes 0.5ft past the mattress's own foot edge — Tyler's call. A full 1.25ft was tried
-  // first (still not capped at the frame's own foot edge — a mostly-covered mattress at the foot
-  // end read as more obviously wrong than the comforter running past the footboard), but in
-  // colgate-bed's default room layout (see catalog.js's "Add Colgate furniture") the wardrobe sits
-  // only ~0.42ft past the frame's own foot edge, so 1.25ft of overhang genuinely reached ~0.67ft
-  // into it — a real geometric overlap, not a collision-detection bug (see session notes). 0.5ft
-  // still covers the mattress at ordinary viewing angles without reaching that wardrobe (or
-  // anything placed at a similarly tight default gap).
+  // footEdge drapes 1.0ft past the mattress's own foot edge — Tyler's call, moved up from 0.5ft
+  // because that still left a sliver of the mattress's own foot end visible. A full 1.25ft was
+  // tried before that (still not capped at the frame's own foot edge — a mostly-covered mattress at
+  // the foot end read as more obviously wrong than the comforter running past the footboard), but
+  // in colgate-bed's default room layout (see catalog.js's "Add Colgate furniture") the wardrobe
+  // sits only ~0.42ft past the frame's own foot edge, so 1.25ft of overhang genuinely reached
+  // ~0.67ft into it — a real geometric overlap, not a collision-detection bug (see session notes).
+  // 1.0ft sits close to that same ~0.42ft-of-clearance ceiling again (roughly 0.585ft of overhang
+  // is the most this specific default layout can take before touching the wardrobe) — see session
+  // notes for whether this reintroduces that collision; if a bed ends up placed close to other
+  // furniture at its foot, this is the value to pull back down rather than the wardrobe's position.
   _fitComforterToBed(bedCat, sourceCat) {
     const frameHalf = bedCat.dims[0] / 2
     const [matLen, matWidth] = bedCat.mattressDims
     const headEdge = 1.9 - frameHalf
-    const footEdge = matLen / 2 + 0.5
+    const footEdge = matLen / 2 + 1.0
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin
@@ -2396,7 +2399,15 @@ export class RoomEngine {
         }
       }
     }
-    for (let i = 0; i < n; i++) this._setCollisionTint(items[i], colliding[i])
+    // Tinting disabled for now (Tyler's call) — true per-part highlighting (only the actually-
+    // touching geometry turning gray) would need real triangle-level/CSG intersection, not just the
+    // per-submesh bounding boxes this already computes, which isn't worth building for how often
+    // this was firing on legitimate-looking placements (e.g. a large comforter's own footprint
+    // reaching adjacent furniture). `colliding` is still computed above in case a future pass wants
+    // it (a warning banner, a "fits/doesn't fit" check, etc.) — this just always tells
+    // _setCollisionTint the answer is "no" so nothing currently tinted stays stuck red and nothing
+    // new turns red either.
+    for (let i = 0; i < n; i++) this._setCollisionTint(items[i], false)
 
     // Doors vs. floor items — a door, sitting right at floor level, is the one wall feature
     // furniture can actually block in practice, so it's the only one that gets the red collision
