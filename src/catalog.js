@@ -701,7 +701,15 @@ export const PROVIDED_CATALOG = [
 // (bed) and the two side walls (desk/chair, wardrobe), scaled to whatever the current room
 // dimensions are. Not meant to be clever, just non-overlapping and roughly plausible; the engine's
 // normal wall-clamping still applies as a safety net for small rooms.
-export function colgateDefaultLayout(room) {
+//
+// count > 1 (Double/Triple, via the homepage's room-type panels — see App.jsx's
+// handleStartNewRoom) tiles that many full sets along the room's length instead of just one,
+// each set getting an equal length-wise slice of the room to itself — bed near the slice's own
+// back edge, desk/chair/wardrobe at the slice's center against the two side walls, same relative
+// layout each set already uses alone. count defaults to 1, which reduces to exactly the original
+// single-set positions (the math below collapses to the same numbers), so the existing one-click
+// button's behavior is unchanged.
+export function colgateDefaultLayout(room, count = 1) {
   const byId = Object.fromEntries(PROVIDED_CATALOG.map((c) => [c.id, c]))
   const margin = 0.3
   const bed = byId['colgate-bed']
@@ -709,18 +717,25 @@ export function colgateDefaultLayout(room) {
   const chair = byId['colgate-chair']
   const wardrobe = byId['colgate-wardrobe']
 
-  const wardrobeZ = -room.l / 2 + wardrobe.dims[0] / 2 + margin
+  const sliceLen = room.l / count
+  const items = []
+  for (let i = 0; i < count; i++) {
+    const sliceStart = -room.l / 2 + sliceLen * i
+    const sliceCenterZ = sliceStart + sliceLen / 2
+    const wardrobeZ = sliceStart + wardrobe.dims[0] / 2 + margin
 
-  return [
-    // Bed: long side flush against the back wall.
-    { catalogId: bed.id, x: 0, z: -room.l / 2 + bed.dims[1] / 2, rotY: 0 },
-    // Desk against the left wall, rotated 90° so its depth (not width) touches the wall.
-    { catalogId: desk.id, x: -room.w / 2 + desk.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
-    // Chair pulled out from the desk, facing the same way.
-    { catalogId: chair.id, x: -room.w / 2 + desk.dims[1] + margin + chair.dims[1] / 2, z: 0, rotY: Math.PI / 2 },
-    // Wardrobe along the right wall.
-    { catalogId: wardrobe.id, x: room.w / 2 - wardrobe.dims[1] / 2, z: wardrobeZ, rotY: -Math.PI / 2 },
-  ]
+    items.push(
+      // Bed: long side flush against this slice's back edge.
+      { catalogId: bed.id, x: 0, z: sliceStart + bed.dims[1] / 2, rotY: 0 },
+      // Desk against the left wall, rotated 90° so its depth (not width) touches the wall.
+      { catalogId: desk.id, x: -room.w / 2 + desk.dims[1] / 2, z: sliceCenterZ, rotY: Math.PI / 2 },
+      // Chair pulled out from the desk, facing the same way.
+      { catalogId: chair.id, x: -room.w / 2 + desk.dims[1] + margin + chair.dims[1] / 2, z: sliceCenterZ, rotY: Math.PI / 2 },
+      // Wardrobe along the right wall.
+      { catalogId: wardrobe.id, x: room.w / 2 - wardrobe.dims[1] / 2, z: wardrobeZ, rotY: -Math.PI / 2 },
+    )
+  }
+  return items
 }
 
 // Default positions for a Common Room's starting furniture — the homepage's Common Room panel

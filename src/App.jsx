@@ -45,8 +45,13 @@ export const ROOM_TYPE_DEFAULTS = {
   single: { w: 12, l: 14, h: 9 },
   double: { w: 15, l: 16, h: 9 },
   triple: { w: 18, l: 18, h: 9 },
-  common: { w: 20, l: 24, h: 9 },
+  common: { w: 15, l: 15, h: 9 },
 }
+
+// How many full sets of Colgate-provided furniture (bed/desk/chair/wardrobe) a fresh room starts
+// with — one per resident, since a Double/Triple houses that many students. Common Room isn't
+// personal-room furniture at all (see loungeDefaultLayout, catalog.js) so it has no entry here.
+const COLGATE_SET_COUNTS = { single: 1, double: 2, triple: 3 }
 
 const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
 
@@ -1002,9 +1007,11 @@ export default function App() {
 
   // Entry point for the homepage's room-type showcase panels (location.state.newRoom, handled
   // above) — like handleNewRoom, but seeds dimensions from ROOM_TYPE_DEFAULTS for the given type
-  // instead of the flat single-room default, pre-selects that type in the Publish modal, and — for
-  // Common Room only — pre-places lounge furniture (loungeDefaultLayout, catalog.js) since a
-  // shared space reads as furnished by default, unlike a personal room.
+  // instead of the flat single-room default, pre-selects that type in the Publish modal, and
+  // arrives already furnished: one Colgate-provided set (bed/desk/chair/wardrobe) per resident for
+  // Single/Double/Triple (COLGATE_SET_COUNTS, colgateDefaultLayout's count param), or lounge
+  // furniture (loungeDefaultLayout) for Common Room, since that's a shared space, not a personal
+  // one.
   function handleStartNewRoom(type) {
     const dims = ROOM_TYPE_DEFAULTS[type] || ROOM_TYPE_DEFAULTS.single
     const nextRoom = { w: dims.w, l: dims.l, h: dims.h, notch: null }
@@ -1017,14 +1024,13 @@ export default function App() {
     setSharedLayoutError('')
     setCurrentLayoutName(null)
     setPublishRoomType(ROOM_TYPES.includes(type) ? type : '')
-    if (type === 'common') {
-      loungeDefaultLayout(nextRoom).forEach(({ catalogId, x, z, rotY }) => {
-        engineRef.current.addItemAt(catalogId, x, z, rotY)
-      })
-      setTab('cart')
-    } else {
-      setTab('catalog')
-    }
+    const startingItems = type === 'common'
+      ? loungeDefaultLayout(nextRoom)
+      : colgateDefaultLayout(nextRoom, COLGATE_SET_COUNTS[type] || 1)
+    startingItems.forEach(({ catalogId, x, z, rotY }) => {
+      engineRef.current.addItemAt(catalogId, x, z, rotY)
+    })
+    setTab('cart')
   }
 
   // Fetches a public layout by id and loads it — used for "Based on X" links (fresh data rather
