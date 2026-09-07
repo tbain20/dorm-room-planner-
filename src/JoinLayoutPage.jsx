@@ -26,7 +26,7 @@ export default function JoinLayoutPage() {
       await joinLayoutAsCollaborator(id)
       const layout = await getLayoutForEditing(id)
       if (!layout) throw new Error("Couldn't open that layout — the invite link may be broken.")
-      navigate('/', { state: { loadLayout: layout, sharedLayoutId: id, openTab: 'cart' } })
+      navigate('/app', { state: { loadLayout: layout, sharedLayoutId: id, openTab: 'cart' } })
     } catch (err) {
       setError(err.message)
       setJoining(false)
@@ -47,7 +47,7 @@ export default function JoinLayoutPage() {
       {!session ? (
         <>
           <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginBottom: 12 }}>Sign in on the main app first, then come back to this link.</p>
-          <Link to="/" style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>← Sign in on Dorm Room Planner</Link>
+          <Link to="/app" state={{ openTab: 'saved' }} style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>← Sign in on Dorm Room Planner</Link>
         </>
       ) : (
         <>
@@ -64,7 +64,7 @@ export default function JoinLayoutPage() {
           </button>
           {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 14 }}>{error}</div>}
           <div style={{ marginTop: 20 }}>
-            <Link to="/" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>← Not now, take me to the app</Link>
+            <Link to="/app" style={{ color: 'var(--ink-soft)', fontSize: 12 }}>← Not now, take me to the app</Link>
           </div>
         </>
       )}

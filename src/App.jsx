@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
@@ -34,7 +34,19 @@ import AuthPanel from './AuthPanel.jsx'
 const DESIGNER_APPLY_EMAIL = 'tylerabain@icloud.com'
 
 // room_type is stored as free text (see migration 006) but the app only ever writes one of these.
-const ROOM_TYPES = ['single', 'double', 'triple']
+const ROOM_TYPES = ['single', 'double', 'triple', 'common']
+
+// Starting dimensions per room type, used by the homepage's room-type showcase (see
+// HomePage.jsx and handleStartNewRoom below) to seed a fresh room. `single` is the app's
+// existing default and is sourced from real Colgate hall data (see colgateDefaultLayout); no
+// equivalent real data exists yet for double/triple/common, so those are reasonable stand-ins
+// pending real dimensions.
+export const ROOM_TYPE_DEFAULTS = {
+  single: { w: 12, l: 14, h: 9 },
+  double: { w: 15, l: 16, h: 9 },
+  triple: { w: 18, l: 18, h: 9 },
+  common: { w: 20, l: 24, h: 9 },
+}
 
 const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
 
@@ -427,12 +439,16 @@ export default function App() {
   //                   loaded layout (already fetched via getLayoutForEditing, attached as
   //                   loadLayout above, so isOwner/collaborators ride along with it) as the one
   //                   "Save shared changes" should target instead of the normal name-based save.
+  //   newRoom       — the homepage's room-type showcase panels (HomePage.jsx) — start a fresh
+  //                   room sized (and, for Common Room, furnished) for the given type instead of
+  //                   the flat single-room default. See handleStartNewRoom below.
   // Clears the state immediately after consuming it (replace, no new history entry) so navigating
   // back to this tab later doesn't repeat the same hand-off again.
   useEffect(() => {
     const state = location.state
-    if (!state || (!state.loadLayout && !state.openTab && !state.viewProfileId && !state.sharedLayoutId)) return
+    if (!state || (!state.loadLayout && !state.openTab && !state.viewProfileId && !state.sharedLayoutId && !state.newRoom)) return
     if (state.loadLayout) handleLoad(state.loadLayout)
+    if (state.newRoom) handleStartNewRoom(state.newRoom.type)
     if (state.sharedLayoutId) {
       setSharedLayout({
         id: state.sharedLayoutId,
@@ -982,6 +998,33 @@ export default function App() {
     setSharedLayoutNotice('')
     setSharedLayoutError('')
     setCurrentLayoutName(null)
+  }
+
+  // Entry point for the homepage's room-type showcase panels (location.state.newRoom, handled
+  // above) — like handleNewRoom, but seeds dimensions from ROOM_TYPE_DEFAULTS for the given type
+  // instead of the flat single-room default, pre-selects that type in the Publish modal, and — for
+  // Common Room only — pre-places lounge furniture (loungeDefaultLayout, catalog.js) since a
+  // shared space reads as furnished by default, unlike a personal room.
+  function handleStartNewRoom(type) {
+    const dims = ROOM_TYPE_DEFAULTS[type] || ROOM_TYPE_DEFAULTS.single
+    const nextRoom = { w: dims.w, l: dims.l, h: dims.h, notch: null }
+    engineRef.current.clearAll()
+    engineRef.current.setRoomDims(nextRoom.w, nextRoom.l, nextRoom.h)
+    engineRef.current.setRoomNotch(null)
+    setRoom(nextRoom)
+    setSharedLayout(null)
+    setSharedLayoutNotice('')
+    setSharedLayoutError('')
+    setCurrentLayoutName(null)
+    setPublishRoomType(ROOM_TYPES.includes(type) ? type : '')
+    if (type === 'common') {
+      loungeDefaultLayout(nextRoom).forEach(({ catalogId, x, z, rotY }) => {
+        engineRef.current.addItemAt(catalogId, x, z, rotY)
+      })
+      setTab('cart')
+    } else {
+      setTab('catalog')
+    }
   }
 
   // Fetches a public layout by id and loads it — used for "Based on X" links (fresh data rather

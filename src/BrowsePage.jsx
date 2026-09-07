@@ -9,9 +9,9 @@ import {
 import BrowseLayoutCard from './BrowseLayoutCard.jsx'
 
 // room_type is free text at the DB level (see migration 006) but the app only ever writes one of
-// these three — same small constant App.jsx keeps for the publish-prompt dropdown, duplicated
-// here rather than exported/shared since it's three literal strings, not worth a module for.
-const ROOM_TYPES = ['single', 'double', 'triple']
+// these four — same small constant App.jsx keeps for the publish-prompt dropdown, duplicated
+// here rather than exported/shared since it's a handful of literal strings, not worth a module for.
+const ROOM_TYPES = ['single', 'double', 'triple', 'common']
 
 const PAGE_SIZE = 24
 
@@ -141,14 +141,14 @@ export default function BrowsePage() {
     })
   }
 
-  // No AuthPanel on this page — sign-in lives in App.jsx's Saved tab. Router state tells the app
-  // shell to land on that tab, same mechanism "load this layout" already uses.
+  // No AuthPanel on this page — sign-in lives in App.jsx's Saved tab, now at /app. Router state
+  // tells the app shell to land on that tab, same mechanism "load this layout" already uses.
   function requireSignIn() {
-    navigate('/', { state: { openTab: 'saved' } })
+    navigate('/app', { state: { openTab: 'saved' } })
   }
 
   function handleView(layout) {
-    navigate('/', { state: { loadLayout: layout } })
+    navigate('/app', { state: { loadLayout: layout } })
   }
 
   function handleViewDetails(layout) {
@@ -157,7 +157,7 @@ export default function BrowsePage() {
 
   function handleViewProfile(layout) {
     if (!layout.authorId) return
-    navigate('/', { state: { viewProfileId: layout.authorId } })
+    navigate('/app', { state: { viewProfileId: layout.authorId } })
   }
 
   async function handleToggleLike(layout) {
@@ -191,7 +191,7 @@ export default function BrowsePage() {
     try {
       const name = await copyLayout(layout)
       setNotice(`Copied to your layouts as "${name}". Loading it into your room…`)
-      navigate('/', { state: { loadLayout: layout } })
+      navigate('/app', { state: { loadLayout: layout } })
     } catch (err) {
       setError(err.message)
     }
@@ -228,11 +228,11 @@ export default function BrowsePage() {
         <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
         <div className="browse-header-row">
           <h1>Browse</h1>
-          <Link to="/" state={{ openTab: 'leaderboard' }} className="browse-leaderboard-link">🏆 Leaderboard</Link>
+          <Link to="/app" state={{ openTab: 'leaderboard' }} className="browse-leaderboard-link">🏆 Leaderboard</Link>
         </div>
         <div className="browse-intro">
           Layouts other students have made public. Copy one to start from it, load it into 3D first, or{' '}
-          <Link to="/">start from scratch</Link>.
+          <Link to="/app">start from scratch</Link>.
         </div>
       </div>
 

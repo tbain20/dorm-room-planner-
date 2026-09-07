@@ -723,6 +723,31 @@ export function colgateDefaultLayout(room) {
   ]
 }
 
+// Default positions for a Common Room's starting furniture — the homepage's Common Room panel
+// (see HomePage.jsx) routes into the editor with this pre-placed instead of the empty room every
+// other room type gets, since a shared lounge space reads as furnished by default (couches + a
+// TV, not somebody's bed/desk). Same "not meant to be clever, just non-overlapping" spirit as
+// colgateDefaultLayout above, and deliberately uses ordinary purchasable CATALOG items (not
+// PROVIDED_CATALOG) since a common room's furniture isn't school-provided.
+export function loungeDefaultLayout(room) {
+  const byId = Object.fromEntries(CATALOG.map((c) => [c.id, c]))
+  const margin = 0.3
+  const loveseat = byId['loveseat']
+  const chair = byId['accent-chair']
+  const tv = byId['tv']
+  const speaker = byId['bluetooth-speaker']
+
+  return [
+    // Loveseat and accent chair share the back wall, angled slightly apart like a sectional.
+    { catalogId: loveseat.id, x: -room.w / 2 + loveseat.dims[0] / 2 + margin, z: -room.l / 2 + loveseat.dims[1] / 2, rotY: 0 },
+    { catalogId: chair.id, x: room.w / 2 - chair.dims[0] / 2 - margin, z: -room.l / 2 + chair.dims[1] / 2, rotY: 0 },
+    // TV on the front wall, facing back into the room toward the seating.
+    { catalogId: tv.id, x: 0, z: room.l / 2 - tv.dims[1] / 2, rotY: Math.PI },
+    // Speaker tucked beside the TV.
+    { catalogId: speaker.id, x: tv.dims[0] / 2 + margin + speaker.dims[0] / 2, z: room.l / 2 - speaker.dims[1] / 2, rotY: Math.PI },
+  ]
+}
+
 // AFFILIATE LINKS — replace with real tracked affiliate links once approved for each program.
 // Sign-up starting points: Amazon Associates (affiliate-program.amazon.com), Impact (impact.com
 // — covers Target & Best Buy), Awin (awin.com — covers IKEA).

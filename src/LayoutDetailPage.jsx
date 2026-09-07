@@ -61,7 +61,7 @@ export default function LayoutDetailPage() {
   }, [session, id])
 
   async function handleToggleLike() {
-    if (!session) return navigate('/')
+    if (!session) return navigate('/app', { state: { openTab: 'saved' } })
     setActionError('')
     try {
       if (liked) {
@@ -79,7 +79,7 @@ export default function LayoutDetailPage() {
   }
 
   async function handleToggleSave() {
-    if (!session) return navigate('/')
+    if (!session) return navigate('/app', { state: { openTab: 'saved' } })
     setActionError('')
     try {
       if (saved) {
@@ -95,7 +95,7 @@ export default function LayoutDetailPage() {
   }
 
   async function handleCopy() {
-    if (!session) return navigate('/')
+    if (!session) return navigate('/app', { state: { openTab: 'saved' } })
     setActionError('')
     try {
       const name = await copyLayout(layout)
@@ -106,7 +106,7 @@ export default function LayoutDetailPage() {
   }
 
   function handleOpenInEditor() {
-    navigate('/', { state: { loadLayout: layout } })
+    navigate('/app', { state: { loadLayout: layout } })
   }
 
   async function handleAddComment() {
@@ -133,7 +133,7 @@ export default function LayoutDetailPage() {
   }
 
   async function handleReport() {
-    if (!session) return navigate('/')
+    if (!session) return navigate('/app', { state: { openTab: 'saved' } })
     try {
       await submitReport('layout', id, 'Reported from shared link')
       setActionError('')
