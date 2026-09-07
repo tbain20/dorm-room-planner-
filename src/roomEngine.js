@@ -1162,14 +1162,23 @@ export class RoomEngine {
   // with _pillowHeadOffset's own placement below (both derive from the same frameHalf, with a
   // 0.05ft margin baked into the two constants together) for *any* frameHalf, not just this app's
   // two current beds — so a bed added later with a different frame length still gets a
-  // pillow-safe gap with no per-bed tuning needed. footEdge drapes 0.15ft past the mattress's own
-  // foot edge for a bit of overhang, capped at the frame's own foot edge so the comforter never
-  // floats off the actual bed there either.
+  // pillow-safe gap with no per-bed tuning needed.
+  //
+  // footEdge drapes a full 0.5ft past the mattress's own foot edge — NOT capped at the frame's own
+  // foot edge the way an earlier version of this did. The comforter model itself has no "skirt"
+  // geometry that hangs down the mattress's front face; it's a flat drape whose underside sits near
+  // the mattress's TOP surface only, so a small overhang there (that earlier version's 0.15ft) left
+  // the mattress's own front face — a good half-foot tall, from its floor slat up to its own top —
+  // plainly visible past the comforter's foot edge instead of covered by it. A full 0.5ft overhang
+  // is generous enough to visually cover that whole face from a normal viewing angle even without
+  // any hanging geometry; on the shorter-framed beds this can run the comforter slightly past the
+  // frame's own foot edge/footboard, which is fine — see embedRatio below for the matching
+  // "flush over floating" tradeoff on the vertical side.
   _fitComforterToBed(bedCat, sourceCat) {
     const frameHalf = bedCat.dims[0] / 2
     const [matLen, matWidth] = bedCat.mattressDims
     const headEdge = 1.9 - frameHalf
-    const footEdge = Math.min(matLen / 2 + 0.15, frameHalf)
+    const footEdge = matLen / 2 + 0.5
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin

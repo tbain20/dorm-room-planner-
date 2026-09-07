@@ -237,23 +237,30 @@ export const CATALOG = [
   // overhangs doesn't read as a comforter. height (0.45') is a cosmetic "how poofy does it look"
   // choice, not to-scale.
   //
-  // embedRatio is deliberately small (0.15, not a deeper sink) — these comforter scans' own shape
-  // already dips down 0.1-0.15ft (raw-to-world scaled) at its two long edges, where a real
-  // comforter drapes down the sides of the mattress, well short of its flatter, higher-riding
-  // middle; fitModelToDims floor-aligns to the model's single lowest vertex (one of those edge
-  // dips), so a bigger embedRatio pushed that already-low edge geometry deep enough to sink INTO
-  // the solid mattress mesh at the same (x,z) instead of just meeting its surface — the "phases
-  // through the mattress" clipping. A small embed just closes the ordinary sliver-of-daylight gap
-  // (same reasoning the sheets model used to have) without also re-embedding geometry that's
-  // already modeled low.
+  // embedRatio (0.85 — most of the comforter's own 0.45' thickness) — Tyler's call: a visible
+  // sliver-of-daylight gap between the comforter's underside and the mattress reads as more
+  // obviously wrong than the comforter's own bottom clipping into the mattress/frame mesh it's
+  // resting on, so this errs generously toward "flush or clipped" over "flush or floating."
+  // Smaller values (0.15, then 0.4) were tried first on the theory that these scans' own shape
+  // already dips low enough at the edges to meet the mattress on its own — fitModelToDims
+  // floor-aligns to the model's single lowest vertex, so in principle no extra sink should be
+  // needed — but the model has no "skirt" geometry that actually hangs DOWN the mattress's own
+  // side/foot face (see _fitComforterToBed's footEdge comment); its lowest point just barely
+  // grazes mattress-top height, not below it, so any embed short of "most of the model's own
+  // height" still left the mattress's real face — half a foot tall — showing past the comforter's
+  // edge at ordinary camera angles, not just steep ones. This deep an embed does sink the
+  // comforter's *lowest* points at those edges down through the mattress's own top ~0.3'-0.4',
+  // which is exactly the tradeoff being made on purpose here: the poofy middle (still a full 0.45'
+  // tall locally) reads fine sitting mostly on top, and the alternative (a visible gap all along
+  // the mattress's real edges) looked worse than the clipping does.
   // modelRotationY: both scans' own head-to-foot axis came in on local Z, not X — without the
   // rotation, _fitModelToDims (which always maps local X onto dims[0]/length at rotation 0) would
   // stretch the model's naturally-short axis out to the full length and squash its naturally-long
   // axis down into the width, i.e. exactly backwards. Same fix, same reason, on the throw blanket
   // below (throwBlanket.glb shares this same axis convention).
-  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
-  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.15, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-budget', groupId: 'comforter', groupLabel: 'Comforter', tier: 'budget', name: 'Bedsure Reversible Comforter', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0BTHK7NW4', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.85, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter', groupId: 'comforter', groupLabel: 'Comforter', tier: 'moderate', name: 'CozyLux Down-Alternative Comforter Set (5-pc)', price: 48, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0H154HN7T', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.85, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
+  { id: 'comforter-premium', groupId: 'comforter', groupLabel: 'Comforter', tier: 'premium', name: 'Evercool Comforter', price: 70, retailer: 'Amazon', productUrl: 'https://www.amazon.com/dp/B0CHR8KYVW', dims: [5.1, 5.4, 0.45], color: 0xb5654a, category: 'Bedding', subcategory: 'Essentials', modelUrl: '/models/twinComforter.glb', modelRotationY: Math.PI / 2, tintMaterial: true, bedOnly: true, colorable: true, embedRatio: 0.85, footEndOffset: 0.9, isComforterLayer: true, relatedIds: ['sheet-set', 'bed-pillow', 'bed-full', 'colgate-bed'] },
   // Pillow — ✅ fully researched. Budget tier is a listed 2-pack ($38/pair per the research); the
   // other two tiers are single pillows — kept faithful to the doc's own listed prices rather than
   // normalizing to a per-pillow rate. Uses pillowBest.glb (Tyler's real scan) with pose options —
