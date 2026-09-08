@@ -86,11 +86,11 @@ const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, di
 // the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
 // item reads as "locked" at a glance rather than looking like it's mid-collision.
 
-const ROTATE_GIZMO_COLOR = 0x5ec8e8 // faint blue — the drag-to-spin handles ringing a selected item
-const ROTATE_GIZMO_MARGIN = 0.4 // feet — how far outside the item's own footprint the ring sits
-const ROTATE_GIZMO_HANDLES = 4 // evenly-spaced grab handles around the ring, any one spins the item
-const ROTATE_GIZMO_ARC_SPAN = Math.PI / 2.6 // radians — each handle's arc length, short of a full quarter-circle so a visible gap separates one handle from the next
-const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see _buildRotateGizmo/'rotate-item' pointermove branch
+const ROTATE_GIZMO_COLOR = 0x2f6fed // semi-opaque blue — the floating drag-to-spin handle above a selected item
+const ROTATE_GIZMO_RADIUS = 0.22 // feet — the floating handle sphere's own size
+const ROTATE_GIZMO_LIFT = 0.7 // feet — how far above the item's own top surface the handle floats
+const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see 'rotate-item' pointermove branch/_startRotateSettle
+const ROTATE_SETTLE_DURATION = 140 // ms — how long the eased snap-to-45° takes after letting go of a rotate drag, see _startRotateSettle
 
 const UNDO_HISTORY_LIMIT = 50 // how many past snapshots undo() can reach back through — see _pushUndo
 
@@ -126,6 +126,7 @@ export class RoomEngine {
     this.selected = null
     this.selectionHelper = null
     this.rotateGizmo = null
+    this._rotateSettle = null // eased snap-to-45° after releasing a rotate drag — see _startRotateSettle
     // 3D dimension-line overlay on the selected item (see _buildDimensionOverlay/
     // _updateDimensionOverlay below) — separate from selectionHelper's BoxHelper outline.
     // showDimensionOverlay is the persisted on/off state (App.jsx's 📏 Dimensions button, via
@@ -260,6 +261,7 @@ export class RoomEngine {
     if (this.panKeysHeld.size) this._applyKeyboardPan(dt)
     if (this.selectionHelper) this.selectionHelper.update()
     if (this.rotateGizmo) this._updateRotateGizmo()
+    if (this._rotateSettle) this._applyRotateSettle(now)
     if (this.featureSelectionHelper) this.featureSelectionHelper.update()
     // Recomputed every frame (cheap — a handful of line points) rather than only on
     // rotate/drag-end, so it tracks the item smoothly while it's being dragged. Deriving each
@@ -1973,70 +1975,87 @@ export class RoomEngine {
     this._emitSelection()
   }
 
-  // The faint blue drag-to-spin ring around a freshly selected item — see the 'rotate-item'
-  // pointerdown/pointermove handling in _initInteraction for how it's actually grabbed and
-  // dragged. No gizmo for a locked item (dragging it shouldn't do anything, same as the old
-  // rotate button silently doing nothing) or a doorMountOnly item (rotateSelected is a no-op for
-  // it too — see the comment above this method's caller). Any one of the handles does the same
-  // thing; several are offered around the ring just so at least one is usually easy to grab from
-  // whatever angle the camera's currently orbited to.
+  // The semi-opaque blue drag-to-spin button floating above a freshly selected item — see the
+  // 'rotate-item' pointerdown/pointermove handling in _initInteraction for how it's actually
+  // grabbed and dragged (dragging it any direction spins the item to match — the drag still
+  // resolves to an angle around the item's own center, same as before, just picked up from a
+  // handle that floats above the model instead of a ring sitting on the floor around it). No
+  // gizmo for a locked item (dragging it shouldn't do anything, same as the old rotate button
+  // silently doing nothing) or a doorMountOnly item (rotateSelected is a no-op for it too — see
+  // the comment above this method's caller).
   _buildRotateGizmo(item, cat) {
     this._removeRotateGizmo()
     if (item.locked || cat?.doorMountOnly) return
-    const [fw, fd] = this._footprint(item.mesh)
-    const radius = Math.max(fw, fd) / 2 + ROTATE_GIZMO_MARGIN
-    const group = new THREE.Group()
-    const arcMat = new THREE.MeshBasicMaterial({
-      color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.5, depthTest: false, side: THREE.DoubleSide,
-    })
-    const arrowMat = new THREE.MeshBasicMaterial({
-      color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.75, depthTest: false,
-    })
-    const yAxis = new THREE.Vector3(0, 1, 0)
-    for (let i = 0; i < ROTATE_GIZMO_HANDLES; i++) {
-      const startAngle = (i / ROTATE_GIZMO_HANDLES) * Math.PI * 2
-      // TorusGeometry's own ring lies in the local XY plane; rotating it -90° around X lands it
-      // flat in XZ the same way buildRoom's floor shape does (see floor.rotation.x above), which
-      // also makes its local sweep angle line up exactly with the Vector3(1,0,0).applyAxisAngle(Y,
-      // angle) convention _snapToDoorHit/offsetForFeature already use elsewhere for a world angle.
-      const arc = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.025, 8, 24, ROTATE_GIZMO_ARC_SPAN), arcMat)
-      arc.rotation.x = -Math.PI / 2
-      arc.rotation.z = startAngle
-      group.add(arc)
-
-      const endAngle = startAngle + ROTATE_GIZMO_ARC_SPAN
-      const dir = new THREE.Vector3(1, 0, 0).applyAxisAngle(yAxis, endAngle)
-      const tangent = new THREE.Vector3(-dir.z, 0, dir.x).normalize() // direction of increasing angle
-      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.2, 10), arrowMat)
-      arrow.position.set(dir.x * radius, 0, dir.z * radius)
-      arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent)
-      group.add(arrow)
-    }
-    group.position.set(item.mesh.position.x, 0.04, item.mesh.position.z)
-    group.userData.isRotateGizmo = true
-    group.userData.radius = radius
-    group.userData.uid = item.uid
-    this.itemsGroup.add(group)
-    this.rotateGizmo = group
+    const handle = new THREE.Mesh(
+      new THREE.SphereGeometry(ROTATE_GIZMO_RADIUS, 20, 16),
+      new THREE.MeshBasicMaterial({ color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.55, depthTest: false }),
+    )
+    // renderOrder keeps it drawn on top of whatever's stacked underneath (a tall lamp, another
+    // item's own transparent material) the same way depthTest:false already does against the
+    // depth buffer — belt and suspenders so the handle stays visible/grabbable from any angle.
+    handle.renderOrder = 999
+    handle.userData.isRotateGizmo = true
+    handle.userData.uid = item.uid
+    this.itemsGroup.add(handle)
+    this.rotateGizmo = handle
+    this._updateRotateGizmo()
   }
 
   _removeRotateGizmo() {
     if (!this.rotateGizmo) return
     this.itemsGroup.remove(this.rotateGizmo)
-    this.rotateGizmo.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose()
-      if (obj.material) obj.material.dispose()
-    })
+    this.rotateGizmo.geometry.dispose()
+    this.rotateGizmo.material.dispose()
     this.rotateGizmo = null
   }
 
-  // Keeps the ring centered under whatever's selected while it's being dragged around the floor
-  // (drag-item mode moves the mesh continuously; the gizmo has no other way to track that) — see
-  // the _animate loop's per-frame call.
+  // Keeps the floating handle centered above whatever's selected — re-run every frame (see the
+  // _animate loop's per-frame call) both for x/z (drag-item mode moves the mesh continuously, the
+  // gizmo has no other way to track that) and for height (a live Box3 rather than a cached value
+  // so a bed height change, a bedding stack growing, or the rotate drag itself — which can swap
+  // which world axis the item's own w/d sit on — all keep the handle floating just above the
+  // item's actual current top instead of an initial guess that drifts stale).
   _updateRotateGizmo() {
     if (!this.rotateGizmo || !this.selected) return
-    this.rotateGizmo.position.x = this.selected.mesh.position.x
-    this.rotateGizmo.position.z = this.selected.mesh.position.z
+    const box = new THREE.Box3().setFromObject(this.selected.mesh)
+    this.rotateGizmo.position.set(this.selected.mesh.position.x, box.max.y + ROTATE_GIZMO_LIFT, this.selected.mesh.position.z)
+  }
+
+  // Kicks off the eased catch-up from wherever a rotate drag let go to the nearest 45° detent —
+  // called once, from endPointer, the instant the pointer lifts off a 'rotate-item' drag. The
+  // drag itself never snaps (see the pointermove branch above), so this is the only place the
+  // "lock every 45°" guarantee actually gets enforced; _applyRotateSettle (below, driven by
+  // _animate) does the actual per-frame easing.
+  _startRotateSettle(uid) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const from = item.mesh.rotation.y
+    const to = Math.round(from / ROTATE_SNAP_STEP) * ROTATE_SNAP_STEP
+    if (to === from) return
+    this._rotateSettle = { uid, from, to, start: performance.now() }
+  }
+
+  // Eases item.mesh.rotation.y the rest of the way to the settle's target angle — an ease-out
+  // cubic, same shape curve as most snap-into-place UI transitions, over ROTATE_SETTLE_DURATION.
+  // Reapplies the same descendant-rotation/clamp bookkeeping the live drag itself used
+  // (_rotateDescendants/_clampStackedItem/_clampItemToRoom) each step so a bedding stack riding a
+  // bed through this settle, or an item settling flush against a wall/neighbor, stays in sync
+  // right through the last frame instead of only snapping true once the tween completes.
+  _applyRotateSettle(now) {
+    const s = this._rotateSettle
+    const item = this.placedItems.find((p) => p.uid === s.uid)
+    if (!item) { this._rotateSettle = null; return }
+    const t = Math.min(1, (now - s.start) / ROTATE_SETTLE_DURATION)
+    const eased = 1 - Math.pow(1 - t, 3)
+    const angle = s.from + (s.to - s.from) * eased
+    const appliedDelta = angle - item.mesh.rotation.y
+    if (appliedDelta !== 0) {
+      item.mesh.rotation.y = angle
+      this._rotateDescendants(item.uid, appliedDelta)
+      if (item.stackedOnUid != null) this._clampStackedItem(item.mesh, item.stackedOnUid)
+      else this._clampItemToRoom(item.mesh)
+    }
+    if (t >= 1) this._rotateSettle = null
   }
 
   // Toggles whether the item can be picked up by a mouse/touch drag (see the pointerdown handler
@@ -3493,13 +3512,13 @@ export class RoomEngine {
         return
       }
 
-      // The drag-to-spin ring around the currently selected item (see _buildRotateGizmo) takes
-      // priority over the normal item/feature hit-test below — grabbing one of its handles spins
-      // the item instead of picking it up to move it. this.rotateGizmo only exists at all while
-      // something rotatable is selected (none for a locked or doorMountOnly item), so no extra
-      // guard is needed here beyond the hit test itself.
+      // The floating drag-to-spin button above the currently selected item (see _buildRotateGizmo)
+      // takes priority over the normal item/feature hit-test below — grabbing it spins the item
+      // instead of picking it up to move it. this.rotateGizmo only exists at all while something
+      // rotatable is selected (none for a locked or doorMountOnly item), so no extra guard is
+      // needed here beyond the hit test itself.
       if (this.rotateGizmo) {
-        const gizmoHits = this.raycaster.intersectObjects(this.rotateGizmo.children, true)
+        const gizmoHits = this.raycaster.intersectObject(this.rotateGizmo, false)
         if (gizmoHits.length && this.selected) {
           this.mode = 'rotate-item'
           const floorPt = getFloorPoint()
@@ -3541,6 +3560,16 @@ export class RoomEngine {
           // A locked item still selects on click (so the panel's Unlock control is reachable) —
           // it just never picks up a drag. Falling through to orbit mode means dragging from here
           // behaves exactly like dragging empty floor instead of doing nothing/feeling stuck.
+          this.mode = 'orbit'
+          this.selectItem(item.uid)
+        } else if (item.stackedOnUid != null && itemCat && itemCat.isComforterLayer) {
+          // A stacked comforter's x/z is fully owned by _fitComforterToBed/_restackAbove's
+          // footEndOffset math (always re-anchored to the foot end of whatever bed it's dressing —
+          // see catalog.js's isComforterLayer) — picking it up here and letting _clampStackedItem
+          // slide it within the mattress footprint (same as any other stacked item, e.g. a topper)
+          // would let a drag walk it away from the foot end with nothing to ever snap it back,
+          // since only the bed being moved/rotated re-triggers that math. Same fallback-to-orbit
+          // as a locked item above; it still selects so color/tier/remove controls stay reachable.
           this.mode = 'orbit'
           this.selectItem(item.uid)
         } else if (this._isWallMounted(item, itemCat) && this.nearWallEntries.has(this._nearestWallMeshTo(item.mesh))) {
@@ -3639,13 +3668,13 @@ export class RoomEngine {
           delta = ((delta + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI
           this._rotateDrag.rawRotation += delta
           this._rotateDrag.lastPointerAngle = angleNow
-          // Quantized to the nearest 45° step every frame — holds steady at each detent and only
-          // advances to the next one once the drag has gone far enough past it, with no separate
-          // release-time snap needed since the mesh is already sitting on a step at all times.
-          const snapped = Math.round(this._rotateDrag.rawRotation / ROTATE_SNAP_STEP) * ROTATE_SNAP_STEP
-          const appliedDelta = snapped - this.selected.mesh.rotation.y
+          // Follows the raw, unquantized angle every frame — a smooth spin exactly tracking the
+          // drag rather than jumping between 45° steps mid-gesture. The 45° lock still happens,
+          // just deferred to release (see endPointer's rotate-item branch/_startRotateSettle
+          // below), which eases the mesh the rest of the way to the nearest step once you let go.
+          const appliedDelta = this._rotateDrag.rawRotation - this.selected.mesh.rotation.y
           if (appliedDelta !== 0) {
-            this.selected.mesh.rotation.y = snapped
+            this.selected.mesh.rotation.y = this._rotateDrag.rawRotation
             this._rotateDescendants(this.selected.uid, appliedDelta)
             if (this.selected.stackedOnUid != null) this._clampStackedItem(this.selected.mesh, this.selected.stackedOnUid)
             else this._clampItemToRoom(this.selected.mesh)
@@ -3735,6 +3764,12 @@ export class RoomEngine {
           const moved = Math.hypot(e.clientX - this._pointerDownPos.x, e.clientY - this._pointerDownPos.y)
           if (moved < 5) this._placeMeasurePoint(e.clientX, e.clientY)
         }
+        // Letting go of a rotate-item drag: the mesh has been following the raw, unsnapped angle
+        // all the way through the drag (see the pointermove branch above) — this is where the
+        // deferred 45° lock actually lands, eased in over _startRotateSettle rather than teleported
+        // there in one frame.
+        if (this.mode === 'rotate-item' && this._rotateDrag && this.selected) this._startRotateSettle(this.selected.uid)
+        this._rotateDrag = null
         this.mode = null
         this.primaryPointerId = null
       }

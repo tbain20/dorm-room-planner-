@@ -53,7 +53,7 @@ export const ROOM_TYPE_DEFAULTS = {
 // personal-room furniture at all (see loungeDefaultLayout, catalog.js) so it has no entry here.
 const COLGATE_SET_COUNTS = { single: 1, double: 2, triple: 3 }
 
-const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium' }
+const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium', eco: '🌱 Eco-Friendly' }
 
 // One catalog card for a tiered conceptual item (e.g. "Mattress Topper") — a shared thumbnail
 // and dims up top, then a small budget/moderate/premium option per tier. Each option adds that
@@ -72,7 +72,7 @@ function TierGroupCard({ group, onAdd }) {
           {group.tiers.map((tier) => (
             <button
               key={tier.id}
-              className="tier-btn"
+              className={`tier-btn ${tier.tier === 'eco' ? 'tier-btn-eco' : ''}`}
               title={tier.name}
               onClick={(e) => {
                 e.stopPropagation()
@@ -402,6 +402,7 @@ export default function App() {
   const [profileEditNotice, setProfileEditNotice] = useState('')
   const [roomPlannerCollapsed, setRoomPlannerCollapsed] = useState(false)
   const [openCategories, setOpenCategories] = useState(() => new Set())
+  const [catalogSearch, setCatalogSearch] = useState('')
   const [checklistItems, setChecklistItems] = useState([])
   const [checklistError, setChecklistError] = useState('')
   const [checklistLoading, setChecklistLoading] = useState(false)
@@ -659,18 +660,32 @@ export default function App() {
   // sharing a `groupId` — see catalog.js's note on the CATALOG export) collapse into one
   // { isGroup: true, tiers } entry at the position of their first tier in CATALOG, so the browse
   // list shows one card with a budget/moderate/premium picker instead of 3 separate rows.
+  // Catalog search — matches a plain item's own name, or (for a tiered group) either the shared
+  // groupLabel or any individual tier's name, so typing e.g. a specific tier's brand still surfaces
+  // the group card it lives on rather than requiring the group's generic label.
+  const catalogQuery = catalogSearch.trim().toLowerCase()
+  const catalogItemMatches = (item) =>
+    !catalogQuery ||
+    item.name.toLowerCase().includes(catalogQuery) ||
+    (item.groupLabel && item.groupLabel.toLowerCase().includes(catalogQuery))
+
   const groupedCatalog = {}
   const seenGroupIds = new Set()
   for (const item of CATALOG) {
-    const sub = item.subcategory || 'General'
-    groupedCatalog[item.category] ??= {}
-    groupedCatalog[item.category][sub] ??= []
     if (item.groupId) {
       if (seenGroupIds.has(item.groupId)) continue
       seenGroupIds.add(item.groupId)
       const tiers = CATALOG.filter((c) => c.groupId === item.groupId)
+      if (catalogQuery && !tiers.some(catalogItemMatches)) continue
+      const sub = item.subcategory || 'General'
+      groupedCatalog[item.category] ??= {}
+      groupedCatalog[item.category][sub] ??= []
       groupedCatalog[item.category][sub].push({ isGroup: true, groupId: item.groupId, groupLabel: item.groupLabel, tiers })
     } else {
+      if (!catalogItemMatches(item)) continue
+      const sub = item.subcategory || 'General'
+      groupedCatalog[item.category] ??= {}
+      groupedCatalog[item.category][sub] ??= []
       groupedCatalog[item.category][sub].push(item)
     }
   }
@@ -1682,7 +1697,7 @@ export default function App() {
             {!panelCollapsed && (
             <>
             <div style={{ fontSize: 10, color: 'var(--ink-soft)', marginBottom: 6 }}>
-              Drag the blue arrows around it to spin (snaps every 45°) · R for a quick 90° turn
+              Drag the blue button above it to spin (locks every 45°) · R for a quick 90° turn
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
@@ -1869,7 +1884,12 @@ export default function App() {
                 )}
               </>
             )}
-            {selection.cat.bedOnly && (
+            {selection.cat.bedOnly && selection.cat.isComforterLayer && (
+              <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
+                Stays fixed at the foot of the bed — it moves and turns with the bed, but can't be dragged separately.
+              </div>
+            )}
+            {selection.cat.bedOnly && !selection.cat.isComforterLayer && (
               <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
                 Drag to slide it around the bed — it stays on the bed and can't be moved off.
               </div>
@@ -2002,6 +2022,19 @@ export default function App() {
 
         {tab === 'catalog' && (
           <div id="catalog-panel">
+            <div className="catalog-search-row">
+              <input
+                type="text"
+                className="catalog-search-input"
+                placeholder="Search the catalog…"
+                value={catalogSearch}
+                onChange={(e) => setCatalogSearch(e.target.value)}
+              />
+              {catalogSearch && (
+                <button className="catalog-search-clear" title="Clear search" onClick={() => setCatalogSearch('')}>×</button>
+              )}
+            </div>
+
             <div style={{ background: 'var(--sage-soft)', border: '1px solid var(--sage)', borderRadius: 12, padding: 14, marginBottom: 14 }}>
               <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 14, marginBottom: 4, color: 'var(--ink)' }}>
                 🎓 Colgate dorm room?
@@ -2061,7 +2094,10 @@ export default function App() {
             {CATEGORY_ORDER.filter((category) => groupedCatalog[category]).map((category) => {
               const subcats = groupedCatalog[category]
               const itemCount = Object.values(subcats).reduce((n, items) => n + items.length, 0)
-              const isOpen = openCategories.has(category)
+              // A live search always shows its (already-filtered) matches regardless of this
+              // category's collapsed/expanded state — collapsing categories exists to manage
+              // browsing a huge list, which searching has already done the job of.
+              const isOpen = catalogQuery ? true : openCategories.has(category)
               return (
                 <div key={category} className="category-section">
                   <button className="category-header" onClick={() => toggleCategory(category)}>
@@ -2138,6 +2174,9 @@ export default function App() {
                 </div>
               )
             })}
+            {catalogQuery && Object.keys(groupedCatalog).length === 0 && (
+              <div className="catalog-search-empty">No catalog items match "{catalogSearch.trim()}".</div>
+            )}
           </div>
         )}
 
