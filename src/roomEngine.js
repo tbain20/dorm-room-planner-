@@ -3002,7 +3002,12 @@ export class RoomEngine {
   // carry it, nothing else does) to this color instead of adding a new item. Reports what happened
   // via onNotice (same transient-toast mechanism _findBedForAutoPlacement below uses for "no bed in
   // the room yet") since otherwise nothing visibly gets added to the room for the user to react to.
-  applyPillowcaseColor(hex) {
+  // catalogId (the specific pillowcase-set tier clicked — see App.jsx's colorPrompt) is recorded
+  // on each recolored pillow as pillowcaseCatalogId purely so _emitCart can still count its real
+  // price toward the total/shopping list even though a pillowcase set never becomes a placedItem
+  // of its own — without this, a real purchase would silently never appear on the shopping list,
+  // same gap as sheets (see applyMattressColor's own comment) and fixed the same way.
+  applyPillowcaseColor(hex, catalogId) {
     const pillows = this.placedItems.filter((p) => {
       const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
       return cat && cat.hasPoseOptions && cat.colorable
@@ -3034,7 +3039,11 @@ export class RoomEngine {
       }
     }
     this._pushUndo()
-    targetPillows.forEach((p) => this.setItemColor(p.uid, hex))
+    targetPillows.forEach((p) => {
+      this.setItemColor(p.uid, hex)
+      if (catalogId) p.pillowcaseCatalogId = catalogId
+    })
+    this._emitCart()
     this.onNotice(`Updated ${targetPillows.length} pillow${targetPillows.length === 1 ? '' : 's'}${beds.length > 1 ? ' on that bed.' : ' in your room.'}`)
   }
 
@@ -3049,7 +3058,12 @@ export class RoomEngine {
   // placed mattress topper: a topper sits between the mattress and a fitted sheet in real life, so
   // leaving one in place would hide the recolor completely, matching Tyler's "topper should leave
   // the screen" requirement.
-  applyMattressColor(hex) {
+  //
+  // catalogId (the specific sheet-set tier clicked — see App.jsx's colorPrompt) is recorded on
+  // each recolored bed as mattressSheetCatalogId purely so _emitCart can still count its real price
+  // toward the total/shopping list even though sheets never become a placedItem of their own —
+  // without this, a real $23–35 purchase would silently never appear on the shopping list.
+  applyMattressColor(hex, catalogId) {
     const beds = this.placedItems.filter((p) => {
       const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
       return cat && cat.isBed
@@ -3083,6 +3097,7 @@ export class RoomEngine {
       // blanket dressing this bed later — see _applyBedDressing — picks up the same color instead
       // of resetting to its own tier default.
       bed.colorHex = hex
+      if (catalogId) bed.mattressSheetCatalogId = catalogId
       mattressCount += 1
     })
     // A topper only ever sits on one specific bed (bedOnly items can't exist un-stacked), so
@@ -3092,6 +3107,10 @@ export class RoomEngine {
       return cat && cat.groupId === 'mattress-topper' && targetBeds.some((bed) => this._isStackedRelative(p, bed))
     })
     toppers.forEach((t) => this.removeItem(t.uid))
+    // removeItem above already re-emits the cart if a topper was actually removed — but with none
+    // to remove (the common case), nothing else here ever tells the cart a sheet purchase just
+    // happened, so this can't be left implicit the way it is for a topper's own removal.
+    this._emitCart()
     const message = `Updated ${mattressCount} bed${mattressCount === 1 ? '' : 's'}`
     this.onNotice(toppers.length ? `${message} and removed the topper.` : `${message}.`)
   }
@@ -3102,6 +3121,31 @@ export class RoomEngine {
       catalogId: p.catalogId,
       cat: ALL_ITEMS.find((c) => c.id === p.catalogId),
     }))
+    // Sheets (see applyMattressColor above) never become a placedItem of their own — one synthetic
+    // row per bed that has a mattressSheetCatalogId recorded stands in for that real purchase here,
+    // purely so its price counts toward App.jsx's total/shopping list. virtualTargetUid (not a real
+    // placedItems uid — nothing in placedItems will ever match it) is what the cart-tab row uses to
+    // select the underlying bed on click instead of trying to select this non-existent item.
+    this.placedItems.forEach((p) => {
+      if (!p.mattressSheetCatalogId) return
+      const cat = ALL_ITEMS.find((c) => c.id === p.mattressSheetCatalogId)
+      if (cat) items.push({ uid: `sheets-${p.uid}`, catalogId: cat.id, cat, virtualTargetUid: p.uid })
+    })
+    // Pillowcases (see applyPillowcaseColor above) are the same story, but recorded per-pillow
+    // instead of per-bed since a single pillowcase set can cover pillows on different beds (or a
+    // freestanding decorative one with no bed at all) — one synthetic row per *distinct* tier
+    // currently applied to at least one pillow, not one per pillow, since buying the set once
+    // covers every pillow it's put on. virtualTargetUid picks one of those pillows (whichever is
+    // found first) purely so clicking the row selects *something* real instead of nothing.
+    const seenPillowcaseCatalogIds = new Set()
+    this.placedItems.forEach((p) => {
+      const catalogId = p.pillowcaseCatalogId
+      if (!catalogId || seenPillowcaseCatalogIds.has(catalogId)) return
+      const cat = ALL_ITEMS.find((c) => c.id === catalogId)
+      if (!cat) return
+      seenPillowcaseCatalogIds.add(catalogId)
+      items.push({ uid: `pillowcase-${catalogId}`, catalogId: cat.id, cat, virtualTargetUid: p.uid })
+    })
     this.onCartChange(items)
   }
 
@@ -3134,6 +3178,11 @@ export class RoomEngine {
           locked: p.locked,
           colorHex: p.colorHex,
           pillowPose: p.pillowPose,
+          // Which sheet-set/pillowcase-set tier last recolored this bed/pillow, if any (see
+          // _emitCart) — without saving these, a real sheets/pillowcase purchase would silently
+          // vanish off the shopping list the instant a layout gets reloaded.
+          mattressSheetCatalogId: p.mattressSheetCatalogId,
+          pillowcaseCatalogId: p.pillowcaseCatalogId,
         }
       }),
       features: this.wallFeatures.map((f) => ({
@@ -3229,6 +3278,13 @@ export class RoomEngine {
             if (placed) placed.locked = true
           }
           if (it.colorHex != null) this.setItemColor(uid, it.colorHex)
+          if (it.mattressSheetCatalogId || it.pillowcaseCatalogId) {
+            const placed = this.placedItems.find((p) => p.uid === uid)
+            if (placed) {
+              if (it.mattressSheetCatalogId) placed.mattressSheetCatalogId = it.mattressSheetCatalogId
+              if (it.pillowcaseCatalogId) placed.pillowcaseCatalogId = it.pillowcaseCatalogId
+            }
+          }
           if (it.pillowPose && it.pillowPose !== 'flat') this.setItemPose(uid, it.pillowPose)
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)

@@ -2231,7 +2231,12 @@ export default function App() {
               <div className="empty-note">Nothing placed yet. Add items from the Catalog tab and drag them into position in your room.</div>
             ) : (
               cart.map((it) => (
-                <div key={it.uid} className="cart-row" onClick={() => engineRef.current.selectItem(it.uid)}>
+                <div
+                  key={it.uid}
+                  className="cart-row"
+                  onClick={() => engineRef.current.selectItem(it.virtualTargetUid ?? it.uid)}
+                  title={it.virtualTargetUid != null ? 'Recolors something already in your room — click to select it' : undefined}
+                >
                   <CatalogThumb cat={it.cat} />
                   <div className="name">{it.cat.name}</div>
                   {it.cat.isProvided ? (
@@ -2241,16 +2246,22 @@ export default function App() {
                   ) : (
                     <div className="price">${it.cat.price}</div>
                   )}
-                  <button
-                    className="remove-btn"
-                    title="Remove"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      engineRef.current.removeItem(it.uid)
-                    }}
-                  >
-                    ×
-                  </button>
+                  {/* A virtual sheets/pillowcase row (see roomEngine.js's _emitCart) has no
+                      placedItem of its own to remove — it comes and goes with whichever tier is
+                      currently applied to the mattress/pillows, so there's no separate "remove"
+                      action for it here. */}
+                  {it.virtualTargetUid == null && (
+                    <button
+                      className="remove-btn"
+                      title="Remove"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        engineRef.current.removeItem(it.uid)
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))
             )}
@@ -2938,8 +2949,8 @@ export default function App() {
                 <button
                   key={hex}
                   onClick={() => {
-                    if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex)
-                    else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex)
+                    if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
+                    else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
