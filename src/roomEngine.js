@@ -90,9 +90,8 @@ const ROTATE_GIZMO_COLOR = 0x2f6fed // semi-opaque blue — the floating "Rotate
 const ROTATE_GIZMO_WIDTH = 0.72 // feet — the floating "Rotate" button's own on-screen size (world units)
 const ROTATE_GIZMO_HEIGHT = 0.32
 const ROTATE_GIZMO_LIFT = 0.7 // feet — how far above the item's own top surface the button floats
-const ROTATE_ARROW_WIDTH = 0.95 // feet — each of the two curved direction arrows that shoot out from the button while it's held
-const ROTATE_ARROW_HEIGHT = ROTATE_ARROW_WIDTH * (72 / 200) // matches _createRotateArrowSprite's own canvas aspect ratio
-const ROTATE_ARROW_OFFSET = 0.66 // feet — how far to either side of the button's center each arrow sprite sits, tucking its inner (tail) end right up against the button's own edge
+const ROTATE_ARROWS_WIDTH = 2.1 // feet — total span of the two-way curved arrow that shoots out from the button's own center while it's held
+const ROTATE_ARROWS_HEIGHT = ROTATE_ARROWS_WIDTH * (110 / 460) // matches _createRotateArrowsSprite's own canvas aspect ratio
 const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see 'rotate-item' pointermove branch/_startRotateSettle
 const ROTATE_SETTLE_DURATION = 140 // ms — how long the eased snap-to-45° takes after letting go of a rotate drag, see _startRotateSettle
 
@@ -2036,89 +2035,86 @@ export class RoomEngine {
     this.rotateGizmo = null
   }
 
-  // One curved arrow shooting out from the button's side (canvas-drawn: a bowed stroke from the
-  // inner/tail end near the button out to a triangular arrowhead at the outer/tip end) —
-  // pointingRight=false draws it tail-on-the-right tip-on-the-left (for the arrow parked to the
-  // button's left), pointingRight=true mirrors it — used in pairs by _showRotateArrows so the pair
-  // reads as "<~~~~ Rotate ~~~~>", showing the two directions a drag on the button can spin the
-  // item.
-  _createRotateArrowSprite(pointingRight) {
+  // One two-way curved arrow — canvas-drawn as a single quadratic-Bezier stroke running from the
+  // left tip straight through the center (right under the Rotate button, once positioned) out to
+  // the right tip, with a triangular arrowhead at each end — rather than two separate strokes,
+  // so both directions visibly share one continuous curve (the same "plane") passing right through
+  // the button's own middle instead of two disjoint pieces parked at its edges. Reads as
+  // "<~~~~ Rotate ~~~~>", showing the two directions a drag on the button can spin the item.
+  _createRotateArrowsSprite() {
     const canvas = document.createElement('canvas')
-    canvas.width = 200
-    canvas.height = 72
+    canvas.width = 460
+    canvas.height = 110
     const ctx = canvas.getContext('2d')
     const midY = canvas.height / 2
-    const bow = 22 // px — how far the curve's midpoint bows away from the straight tail-to-tip line
-    const tailX = pointingRight ? 34 : 166 // near the button
-    const tipX = pointingRight ? 166 : 34 // pointing away from the button
+    const bow = 30 // px — how far the curve's center bows above the straight tip-to-tip line
+    const leftTipX = 40
+    const rightTipX = canvas.width - 40
     const controlX = canvas.width / 2
     const controlY = midY - bow
     const color = `#${ROTATE_GIZMO_COLOR.toString(16).padStart(6, '0')}`
     ctx.strokeStyle = color
-    ctx.lineWidth = 10
+    ctx.lineWidth = 11
     ctx.lineCap = 'round'
     ctx.beginPath()
-    ctx.moveTo(tailX, midY)
-    ctx.quadraticCurveTo(controlX, controlY, tipX, midY)
+    ctx.moveTo(leftTipX, midY)
+    ctx.quadraticCurveTo(controlX, controlY, rightTipX, midY)
     ctx.stroke()
-    // Arrowhead at the tip, tangent to the curve's own direction of travel there (the quadratic
-    // Bezier's tangent at t=1 points from the control point toward the end point).
-    const tangent = Math.atan2(midY - controlY, tipX - controlX)
-    const headLen = 20
+    // Both arrowheads point "outward" from the shared control point — symmetric by construction
+    // since leftTipX/rightTipX sit equidistant from controlX, so the two ends automatically mirror
+    // each other with no separate left/right-case math needed.
+    const headLen = 22
     const headSpread = 0.5
     ctx.fillStyle = color
-    ctx.beginPath()
-    ctx.moveTo(tipX + Math.cos(tangent) * headLen, midY + Math.sin(tangent) * headLen)
-    ctx.lineTo(tipX + Math.cos(tangent + Math.PI - headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI - headSpread) * headLen * 0.75)
-    ctx.lineTo(tipX + Math.cos(tangent + Math.PI + headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI + headSpread) * headLen * 0.75)
-    ctx.closePath()
-    ctx.fill()
+    for (const tipX of [leftTipX, rightTipX]) {
+      const tangent = Math.atan2(midY - controlY, tipX - controlX)
+      ctx.beginPath()
+      ctx.moveTo(tipX + Math.cos(tangent) * headLen, midY + Math.sin(tangent) * headLen)
+      ctx.lineTo(tipX + Math.cos(tangent + Math.PI - headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI - headSpread) * headLen * 0.75)
+      ctx.lineTo(tipX + Math.cos(tangent + Math.PI + headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI + headSpread) * headLen * 0.75)
+      ctx.closePath()
+      ctx.fill()
+    }
     const texture = new THREE.CanvasTexture(canvas)
     texture.minFilter = THREE.LinearFilter
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85, depthTest: false }))
-    sprite.scale.set(ROTATE_ARROW_WIDTH, ROTATE_ARROW_HEIGHT, 1)
-    sprite.renderOrder = 999
+    sprite.scale.set(ROTATE_ARROWS_WIDTH, ROTATE_ARROWS_HEIGHT, 1)
+    // One less than the Rotate button's own renderOrder (999) so the button always draws on top —
+    // the curve passes visually *behind* it, reading as though it emerges from the button's middle
+    // rather than covering its text.
+    sprite.renderOrder = 998
     return sprite
   }
 
-  // Pops the two direction arrows out to either side of the Rotate button the instant it's
-  // grabbed (see the pointerdown handler's rotate-item branch) — one shooting left, one shooting
-  // right, since those are the two directions a drag on the button can actually spin the item.
-  // Removed again on release (_hideRotateArrows, called from endPointer and from
-  // _removeRotateGizmo so a mid-drag deselect can't strand them).
+  // Pops the two-way curved arrow up through the Rotate button's own center the instant it's
+  // grabbed (see the pointerdown handler's rotate-item branch) — its left half/right half show the
+  // two directions a drag on the button can actually spin the item. Removed again on release
+  // (_hideRotateArrows, called from endPointer and from _removeRotateGizmo so a mid-drag deselect
+  // can't strand it).
   _showRotateArrows() {
     this._hideRotateArrows()
     if (!this.rotateGizmo) return
-    const group = new THREE.Group()
-    const left = this._createRotateArrowSprite(false)
-    const right = this._createRotateArrowSprite(true)
-    left.position.set(-ROTATE_ARROW_OFFSET, 0, 0)
-    right.position.set(ROTATE_ARROW_OFFSET, 0, 0)
-    group.add(left, right)
-    group.position.copy(this.rotateGizmo.position)
-    this.itemsGroup.add(group)
-    this._rotateArrows = group
+    const sprite = this._createRotateArrowsSprite()
+    sprite.position.copy(this.rotateGizmo.position)
+    this.itemsGroup.add(sprite)
+    this._rotateArrows = sprite
   }
 
   _hideRotateArrows() {
     if (!this._rotateArrows) return
     this.itemsGroup.remove(this._rotateArrows)
-    this._rotateArrows.traverse((obj) => {
-      if (obj.material) {
-        if (obj.material.map) obj.material.map.dispose()
-        obj.material.dispose()
-      }
-    })
+    this._rotateArrows.material.map.dispose()
+    this._rotateArrows.material.dispose()
     this._rotateArrows = null
   }
 
-  // Keeps the floating button (and, while a drag holds it, the two arrow icons beside it) centered
-  // above whatever's selected — re-run every frame (see the _animate loop's per-frame call) both
-  // for x/z (drag-item mode moves the mesh continuously, the gizmo has no other way to track that)
-  // and for height (a live Box3 rather than a cached value so a bed height change, a bedding stack
-  // growing, or the rotate drag itself — which can swap which world axis the item's own w/d sit on
-  // — all keep the button floating just above the item's actual current top instead of an initial
-  // guess that drifts stale).
+  // Keeps the floating button (and, while a drag holds it, the two-way arrow through its center)
+  // centered above whatever's selected — re-run every frame (see the _animate loop's per-frame
+  // call) both for x/z (drag-item mode moves the mesh continuously, the gizmo has no other way to
+  // track that) and for height (a live Box3 rather than a cached value so a bed height change, a
+  // bedding stack growing, or the rotate drag itself — which can swap which world axis the item's
+  // own w/d sit on — all keep the button floating just above the item's actual current top instead
+  // of an initial guess that drifts stale).
   _updateRotateGizmo() {
     if (!this.rotateGizmo || !this.selected) return
     const box = new THREE.Box3().setFromObject(this.selected.mesh)
