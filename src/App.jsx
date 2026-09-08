@@ -1697,7 +1697,7 @@ export default function App() {
             {!panelCollapsed && (
             <>
             <div style={{ fontSize: 10, color: 'var(--ink-soft)', marginBottom: 6 }}>
-              Drag the blue button above it to spin (locks every 45°) · R for a quick 90° turn
+              Drag the Rotate button above it to spin (locks every 45°) · R for a quick 90° turn
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
@@ -1714,7 +1714,7 @@ export default function App() {
                   })
                 }
               >
-                📏 Dimensions
+                Dimensions
               </button>
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
@@ -1723,14 +1723,14 @@ export default function App() {
                 onClick={handleDuplicateItem}
                 title="Place an extra copy of this item nearby"
               >
-                ⧉ Duplicate
+                Duplicate
               </button>
               <button
                 style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
                 onClick={handleCopyItem}
                 title="Copy this item so you can paste it again later"
               >
-                📋 Copy
+                Copy
               </button>
             </div>
             <button
@@ -1742,7 +1742,7 @@ export default function App() {
               onClick={() => engineRef.current.toggleItemLock(selection.uid)}
               title={selection.locked ? "Unlock so it can be dragged again" : "Lock in place so a stray drag can't move it"}
             >
-              {selection.locked ? '🔒 Locked — click to unlock' : '🔓 Lock in place'}
+              {selection.locked ? 'Locked — click to unlock' : 'Lock in place'}
             </button>
             {showDimensions && (
               <div style={{ background: 'var(--paper-shadow)', borderRadius: 8, padding: 10, marginBottom: 6, fontSize: 11.5, color: 'var(--ink)' }}>
@@ -1844,7 +1844,7 @@ export default function App() {
                   onClick={() => engineRef.current.setWallMounted(selection.uid, !selection.wallMounted)}
                   title={selection.wallMounted ? 'Take it down and place it on the floor' : 'Mount it on the wall'}
                 >
-                  {selection.wallMounted ? '🖼️ Wall-mounted — click to take down' : '🖼️ Mount on wall'}
+                  {selection.wallMounted ? 'Wall-mounted — click to take down' : 'Mount on wall'}
                 </button>
                 {selection.wallMounted && (
                   <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginBottom: 6, fontStyle: 'italic' }}>
@@ -1862,7 +1862,7 @@ export default function App() {
                       style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', flex: 1, border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer' }}
                       onClick={() => engineRef.current.unstackItem(selection.uid)}
                     >
-                      ⬇ Place on floor
+                      Place on floor
                     </button>
                   ) : (
                     <button
@@ -1873,7 +1873,7 @@ export default function App() {
                       }}
                       onClick={() => handleToggleStackPick(selection.uid)}
                     >
-                      {stackPickForUid === selection.uid ? 'Cancel picking…' : '⬆ Put on top of…'}
+                      {stackPickForUid === selection.uid ? 'Cancel picking…' : 'Put on top of…'}
                     </button>
                   )}
                 </div>
@@ -1959,9 +1959,9 @@ export default function App() {
             <button
               style={{ background: 'var(--paper-shadow)', color: 'var(--ink-soft)', width: '100%', border: 'none', padding: 8, borderRadius: 8, fontSize: 11.5, cursor: 'pointer', marginBottom: 6 }}
               onClick={handleCopyFeature}
-              title="Copy — paste it back with the 📋 Paste button or Ctrl/Cmd+V"
+              title="Copy — paste it back with the Paste button or Ctrl/Cmd+V"
             >
-              📋 Copy
+              Copy
             </button>
             <button
               style={{
@@ -1972,7 +1972,7 @@ export default function App() {
               onClick={() => engineRef.current.toggleFeatureLock(featureSelection.id)}
               title={featureSelection.locked ? "Unlock so it can be dragged again" : "Lock in place so a stray drag can't move it"}
             >
-              {featureSelection.locked ? '🔒 Locked — click to unlock' : '🔓 Lock in place'}
+              {featureSelection.locked ? 'Locked — click to unlock' : 'Lock in place'}
             </button>
 
             {featureSelection.type === 'window' && (

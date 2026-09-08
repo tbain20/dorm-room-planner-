@@ -86,9 +86,12 @@ const LOCKED_SELECTION_COLOR = 0x5b6b73 // slate — a locked item's outline, di
 // the normal orange selection color above and the red collision tint (0xd93a2b), so a locked
 // item reads as "locked" at a glance rather than looking like it's mid-collision.
 
-const ROTATE_GIZMO_COLOR = 0x2f6fed // semi-opaque blue — the floating drag-to-spin handle above a selected item
-const ROTATE_GIZMO_RADIUS = 0.22 // feet — the floating handle sphere's own size
-const ROTATE_GIZMO_LIFT = 0.7 // feet — how far above the item's own top surface the handle floats
+const ROTATE_GIZMO_COLOR = 0x2f6fed // semi-opaque blue — the floating "Rotate" button above a selected item
+const ROTATE_GIZMO_WIDTH = 0.72 // feet — the floating "Rotate" button's own on-screen size (world units)
+const ROTATE_GIZMO_HEIGHT = 0.32
+const ROTATE_GIZMO_LIFT = 0.7 // feet — how far above the item's own top surface the button floats
+const ROTATE_ARROW_SIZE = 0.42 // feet — each of the two direction-arrow icons that pop up while the button is held
+const ROTATE_ARROW_OFFSET = 0.68 // feet — how far to either side of the button the two arrows sit, clear of its own width
 const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see 'rotate-item' pointermove branch/_startRotateSettle
 const ROTATE_SETTLE_DURATION = 140 // ms — how long the eased snap-to-45° takes after letting go of a rotate drag, see _startRotateSettle
 
@@ -126,6 +129,7 @@ export class RoomEngine {
     this.selected = null
     this.selectionHelper = null
     this.rotateGizmo = null
+    this._rotateArrows = null // the two direction-arrow icons shown only while the rotate button is held — see _showRotateArrows
     this._rotateSettle = null // eased snap-to-45° after releasing a rotate drag — see _startRotateSettle
     // 3D dimension-line overlay on the selected item (see _buildDimensionOverlay/
     // _updateDimensionOverlay below) — separate from selectionHelper's BoxHelper outline.
@@ -1986,10 +1990,31 @@ export class RoomEngine {
   _buildRotateGizmo(item, cat) {
     this._removeRotateGizmo()
     if (item.locked || cat?.doorMountOnly) return
-    const handle = new THREE.Mesh(
-      new THREE.SphereGeometry(ROTATE_GIZMO_RADIUS, 20, 16),
-      new THREE.MeshBasicMaterial({ color: ROTATE_GIZMO_COLOR, transparent: true, opacity: 0.55, depthTest: false }),
-    )
+    const canvas = document.createElement('canvas')
+    canvas.width = 220
+    canvas.height = 100
+    const ctx = canvas.getContext('2d')
+    const r = 26 // corner radius, px
+    ctx.fillStyle = `#${ROTATE_GIZMO_COLOR.toString(16).padStart(6, '0')}`
+    ctx.globalAlpha = 0.62
+    ctx.beginPath()
+    ctx.moveTo(r, 0)
+    ctx.arcTo(canvas.width, 0, canvas.width, canvas.height, r)
+    ctx.arcTo(canvas.width, canvas.height, 0, canvas.height, r)
+    ctx.arcTo(0, canvas.height, 0, 0, r)
+    ctx.arcTo(0, 0, canvas.width, 0, r)
+    ctx.closePath()
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.fillStyle = '#ffffff'
+    ctx.font = '700 46px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('Rotate', canvas.width / 2, canvas.height / 2 + 2)
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    const handle = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }))
+    handle.scale.set(ROTATE_GIZMO_WIDTH, ROTATE_GIZMO_WIDTH * (canvas.height / canvas.width), 1)
     // renderOrder keeps it drawn on top of whatever's stacked underneath (a tall lamp, another
     // item's own transparent material) the same way depthTest:false already does against the
     // depth buffer — belt and suspenders so the handle stays visible/grabbable from any angle.
@@ -2002,23 +2027,103 @@ export class RoomEngine {
   }
 
   _removeRotateGizmo() {
+    this._hideRotateArrows()
     if (!this.rotateGizmo) return
     this.itemsGroup.remove(this.rotateGizmo)
-    this.rotateGizmo.geometry.dispose()
+    this.rotateGizmo.material.map.dispose()
     this.rotateGizmo.material.dispose()
     this.rotateGizmo = null
   }
 
-  // Keeps the floating handle centered above whatever's selected — re-run every frame (see the
-  // _animate loop's per-frame call) both for x/z (drag-item mode moves the mesh continuously, the
-  // gizmo has no other way to track that) and for height (a live Box3 rather than a cached value
-  // so a bed height change, a bedding stack growing, or the rotate drag itself — which can swap
-  // which world axis the item's own w/d sit on — all keep the handle floating just above the
-  // item's actual current top instead of an initial guess that drifts stale).
+  // One small curved-arrow icon (canvas-drawn: a stroked arc plus a triangular arrowhead at its
+  // leading end) — clockwise=true sweeps rightward/down from the top, clockwise=false mirrors it —
+  // used in pairs by _showRotateArrows to show the two directions a drag on the Rotate button can
+  // spin the item.
+  _createRotateArrowSprite(clockwise) {
+    const canvas = document.createElement('canvas')
+    canvas.width = 90
+    canvas.height = 90
+    const ctx = canvas.getContext('2d')
+    const cx = canvas.width / 2
+    const cy = canvas.height / 2
+    const radius = 30
+    const sweep = Math.PI * 1.35
+    const start = -Math.PI / 2 - sweep / 2
+    const end = start + sweep
+    const color = `#${ROTATE_GIZMO_COLOR.toString(16).padStart(6, '0')}`
+    ctx.strokeStyle = color
+    ctx.lineWidth = 9
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    // canvas arc()'s own sweep direction is screen-clockwise (y grows downward) for
+    // counterclockwise:false — matches this sprite's "clockwise" meaning directly, no inversion.
+    ctx.arc(cx, cy, radius, start, end, !clockwise)
+    ctx.stroke()
+    // Arrowhead at the arc's leading end, tangent to the direction of travel there.
+    const tipAngle = clockwise ? end : start
+    const tangent = tipAngle + (clockwise ? Math.PI / 2 : -Math.PI / 2)
+    const tipX = cx + Math.cos(tipAngle) * radius
+    const tipY = cy + Math.sin(tipAngle) * radius
+    const headLen = 16
+    const headSpread = 0.55
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.moveTo(tipX + Math.cos(tangent) * headLen, tipY + Math.sin(tangent) * headLen)
+    ctx.lineTo(tipX + Math.cos(tangent + Math.PI - headSpread) * headLen * 0.75, tipY + Math.sin(tangent + Math.PI - headSpread) * headLen * 0.75)
+    ctx.lineTo(tipX + Math.cos(tangent + Math.PI + headSpread) * headLen * 0.75, tipY + Math.sin(tangent + Math.PI + headSpread) * headLen * 0.75)
+    ctx.closePath()
+    ctx.fill()
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.minFilter = THREE.LinearFilter
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85, depthTest: false }))
+    sprite.scale.set(ROTATE_ARROW_SIZE, ROTATE_ARROW_SIZE, 1)
+    sprite.renderOrder = 999
+    return sprite
+  }
+
+  // Pops the two direction-arrow icons up beside the Rotate button the instant it's grabbed (see
+  // the pointerdown handler's rotate-item branch) — one showing clockwise, one counterclockwise,
+  // since those are the only two directions a drag on the button can actually spin the item.
+  // Removed again on release (_hideRotateArrows, called from endPointer and from
+  // _removeRotateGizmo so a mid-drag deselect can't strand them).
+  _showRotateArrows() {
+    this._hideRotateArrows()
+    if (!this.rotateGizmo) return
+    const group = new THREE.Group()
+    const ccw = this._createRotateArrowSprite(false)
+    const cw = this._createRotateArrowSprite(true)
+    ccw.position.set(-ROTATE_ARROW_OFFSET, 0, 0)
+    cw.position.set(ROTATE_ARROW_OFFSET, 0, 0)
+    group.add(ccw, cw)
+    group.position.copy(this.rotateGizmo.position)
+    this.itemsGroup.add(group)
+    this._rotateArrows = group
+  }
+
+  _hideRotateArrows() {
+    if (!this._rotateArrows) return
+    this.itemsGroup.remove(this._rotateArrows)
+    this._rotateArrows.traverse((obj) => {
+      if (obj.material) {
+        if (obj.material.map) obj.material.map.dispose()
+        obj.material.dispose()
+      }
+    })
+    this._rotateArrows = null
+  }
+
+  // Keeps the floating button (and, while a drag holds it, the two arrow icons beside it) centered
+  // above whatever's selected — re-run every frame (see the _animate loop's per-frame call) both
+  // for x/z (drag-item mode moves the mesh continuously, the gizmo has no other way to track that)
+  // and for height (a live Box3 rather than a cached value so a bed height change, a bedding stack
+  // growing, or the rotate drag itself — which can swap which world axis the item's own w/d sit on
+  // — all keep the button floating just above the item's actual current top instead of an initial
+  // guess that drifts stale).
   _updateRotateGizmo() {
     if (!this.rotateGizmo || !this.selected) return
     const box = new THREE.Box3().setFromObject(this.selected.mesh)
     this.rotateGizmo.position.set(this.selected.mesh.position.x, box.max.y + ROTATE_GIZMO_LIFT, this.selected.mesh.position.z)
+    if (this._rotateArrows) this._rotateArrows.position.copy(this.rotateGizmo.position)
   }
 
   // Kicks off the eased catch-up from wherever a rotate drag let go to the nearest 45° detent —
@@ -3525,6 +3630,7 @@ export class RoomEngine {
           const center = this.selected.mesh.position
           const startAngle = floorPt ? Math.atan2(floorPt.x - center.x, floorPt.z - center.z) : 0
           this._rotateDrag = { lastPointerAngle: startAngle, rawRotation: this.selected.mesh.rotation.y }
+          this._showRotateArrows()
           return
         }
       }
@@ -3769,6 +3875,7 @@ export class RoomEngine {
         // deferred 45° lock actually lands, eased in over _startRotateSettle rather than teleported
         // there in one frame.
         if (this.mode === 'rotate-item' && this._rotateDrag && this.selected) this._startRotateSettle(this.selected.uid)
+        if (this.mode === 'rotate-item') this._hideRotateArrows()
         this._rotateDrag = null
         this.mode = null
         this.primaryPointerId = null
