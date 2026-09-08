@@ -53,7 +53,7 @@ export const ROOM_TYPE_DEFAULTS = {
 // personal-room furniture at all (see loungeDefaultLayout, catalog.js) so it has no entry here.
 const COLGATE_SET_COUNTS = { single: 1, double: 2, triple: 3 }
 
-const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium', eco: '🌱 Eco-Friendly' }
+const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium', eco: '🌱 Eco-Friendly', retro: '📻 Retro' }
 
 // One catalog card for a tiered conceptual item (e.g. "Mattress Topper") — a shared thumbnail
 // and dims up top, then a small budget/moderate/premium option per tier. Each option adds that
