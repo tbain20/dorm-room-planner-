@@ -90,8 +90,9 @@ const ROTATE_GIZMO_COLOR = 0x2f6fed // semi-opaque blue — the floating "Rotate
 const ROTATE_GIZMO_WIDTH = 0.72 // feet — the floating "Rotate" button's own on-screen size (world units)
 const ROTATE_GIZMO_HEIGHT = 0.32
 const ROTATE_GIZMO_LIFT = 0.7 // feet — how far above the item's own top surface the button floats
-const ROTATE_ARROW_SIZE = 0.42 // feet — each of the two direction-arrow icons that pop up while the button is held
-const ROTATE_ARROW_OFFSET = 0.68 // feet — how far to either side of the button the two arrows sit, clear of its own width
+const ROTATE_ARROW_WIDTH = 0.95 // feet — each of the two curved direction arrows that shoot out from the button while it's held
+const ROTATE_ARROW_HEIGHT = ROTATE_ARROW_WIDTH * (72 / 200) // matches _createRotateArrowSprite's own canvas aspect ratio
+const ROTATE_ARROW_OFFSET = 0.66 // feet — how far to either side of the button's center each arrow sprite sits, tucking its inner (tail) end right up against the button's own edge
 const ROTATE_SNAP_STEP = Math.PI / 4 // 45° detents — see 'rotate-item' pointermove branch/_startRotateSettle
 const ROTATE_SETTLE_DURATION = 140 // ms — how long the eased snap-to-45° takes after letting go of a rotate drag, see _startRotateSettle
 
@@ -2035,66 +2036,65 @@ export class RoomEngine {
     this.rotateGizmo = null
   }
 
-  // One small curved-arrow icon (canvas-drawn: a stroked arc plus a triangular arrowhead at its
-  // leading end) — clockwise=true sweeps rightward/down from the top, clockwise=false mirrors it —
-  // used in pairs by _showRotateArrows to show the two directions a drag on the Rotate button can
-  // spin the item.
-  _createRotateArrowSprite(clockwise) {
+  // One curved arrow shooting out from the button's side (canvas-drawn: a bowed stroke from the
+  // inner/tail end near the button out to a triangular arrowhead at the outer/tip end) —
+  // pointingRight=false draws it tail-on-the-right tip-on-the-left (for the arrow parked to the
+  // button's left), pointingRight=true mirrors it — used in pairs by _showRotateArrows so the pair
+  // reads as "<~~~~ Rotate ~~~~>", showing the two directions a drag on the button can spin the
+  // item.
+  _createRotateArrowSprite(pointingRight) {
     const canvas = document.createElement('canvas')
-    canvas.width = 90
-    canvas.height = 90
+    canvas.width = 200
+    canvas.height = 72
     const ctx = canvas.getContext('2d')
-    const cx = canvas.width / 2
-    const cy = canvas.height / 2
-    const radius = 30
-    const sweep = Math.PI * 1.35
-    const start = -Math.PI / 2 - sweep / 2
-    const end = start + sweep
+    const midY = canvas.height / 2
+    const bow = 22 // px — how far the curve's midpoint bows away from the straight tail-to-tip line
+    const tailX = pointingRight ? 34 : 166 // near the button
+    const tipX = pointingRight ? 166 : 34 // pointing away from the button
+    const controlX = canvas.width / 2
+    const controlY = midY - bow
     const color = `#${ROTATE_GIZMO_COLOR.toString(16).padStart(6, '0')}`
     ctx.strokeStyle = color
-    ctx.lineWidth = 9
+    ctx.lineWidth = 10
     ctx.lineCap = 'round'
     ctx.beginPath()
-    // canvas arc()'s own sweep direction is screen-clockwise (y grows downward) for
-    // counterclockwise:false — matches this sprite's "clockwise" meaning directly, no inversion.
-    ctx.arc(cx, cy, radius, start, end, !clockwise)
+    ctx.moveTo(tailX, midY)
+    ctx.quadraticCurveTo(controlX, controlY, tipX, midY)
     ctx.stroke()
-    // Arrowhead at the arc's leading end, tangent to the direction of travel there.
-    const tipAngle = clockwise ? end : start
-    const tangent = tipAngle + (clockwise ? Math.PI / 2 : -Math.PI / 2)
-    const tipX = cx + Math.cos(tipAngle) * radius
-    const tipY = cy + Math.sin(tipAngle) * radius
-    const headLen = 16
-    const headSpread = 0.55
+    // Arrowhead at the tip, tangent to the curve's own direction of travel there (the quadratic
+    // Bezier's tangent at t=1 points from the control point toward the end point).
+    const tangent = Math.atan2(midY - controlY, tipX - controlX)
+    const headLen = 20
+    const headSpread = 0.5
     ctx.fillStyle = color
     ctx.beginPath()
-    ctx.moveTo(tipX + Math.cos(tangent) * headLen, tipY + Math.sin(tangent) * headLen)
-    ctx.lineTo(tipX + Math.cos(tangent + Math.PI - headSpread) * headLen * 0.75, tipY + Math.sin(tangent + Math.PI - headSpread) * headLen * 0.75)
-    ctx.lineTo(tipX + Math.cos(tangent + Math.PI + headSpread) * headLen * 0.75, tipY + Math.sin(tangent + Math.PI + headSpread) * headLen * 0.75)
+    ctx.moveTo(tipX + Math.cos(tangent) * headLen, midY + Math.sin(tangent) * headLen)
+    ctx.lineTo(tipX + Math.cos(tangent + Math.PI - headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI - headSpread) * headLen * 0.75)
+    ctx.lineTo(tipX + Math.cos(tangent + Math.PI + headSpread) * headLen * 0.75, midY + Math.sin(tangent + Math.PI + headSpread) * headLen * 0.75)
     ctx.closePath()
     ctx.fill()
     const texture = new THREE.CanvasTexture(canvas)
     texture.minFilter = THREE.LinearFilter
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.85, depthTest: false }))
-    sprite.scale.set(ROTATE_ARROW_SIZE, ROTATE_ARROW_SIZE, 1)
+    sprite.scale.set(ROTATE_ARROW_WIDTH, ROTATE_ARROW_HEIGHT, 1)
     sprite.renderOrder = 999
     return sprite
   }
 
-  // Pops the two direction-arrow icons up beside the Rotate button the instant it's grabbed (see
-  // the pointerdown handler's rotate-item branch) — one showing clockwise, one counterclockwise,
-  // since those are the only two directions a drag on the button can actually spin the item.
+  // Pops the two direction arrows out to either side of the Rotate button the instant it's
+  // grabbed (see the pointerdown handler's rotate-item branch) — one shooting left, one shooting
+  // right, since those are the two directions a drag on the button can actually spin the item.
   // Removed again on release (_hideRotateArrows, called from endPointer and from
   // _removeRotateGizmo so a mid-drag deselect can't strand them).
   _showRotateArrows() {
     this._hideRotateArrows()
     if (!this.rotateGizmo) return
     const group = new THREE.Group()
-    const ccw = this._createRotateArrowSprite(false)
-    const cw = this._createRotateArrowSprite(true)
-    ccw.position.set(-ROTATE_ARROW_OFFSET, 0, 0)
-    cw.position.set(ROTATE_ARROW_OFFSET, 0, 0)
-    group.add(ccw, cw)
+    const left = this._createRotateArrowSprite(false)
+    const right = this._createRotateArrowSprite(true)
+    left.position.set(-ROTATE_ARROW_OFFSET, 0, 0)
+    right.position.set(ROTATE_ARROW_OFFSET, 0, 0)
+    group.add(left, right)
     group.position.copy(this.rotateGizmo.position)
     this.itemsGroup.add(group)
     this._rotateArrows = group
