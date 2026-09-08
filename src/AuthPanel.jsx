@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from './supabaseClient.js'
 
 const inputStyle = {
@@ -15,6 +16,7 @@ export default function AuthPanel() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
 
   if (!supabase) {
     return (
@@ -28,6 +30,7 @@ export default function AuthPanel() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (mode === 'signup' && !agreedToTerms) return
     setError('')
     setNotice('')
     setBusy(true)
@@ -64,10 +67,26 @@ export default function AuthPanel() {
           style={inputStyle}
           onChange={(e) => setPassword(e.target.value)}
         />
+        {mode === 'signup' && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11, color: 'var(--ink-soft)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              I agree to the{' '}
+              <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Terms of Service</Link>{' '}
+              and{' '}
+              <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>Privacy Policy</Link>
+            </span>
+          </label>
+        )}
         <button
           type="submit"
-          disabled={busy}
-          style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: 10, fontSize: 12, fontWeight: 600, letterSpacing: '0.01em', cursor: 'pointer', borderRadius: 8 }}
+          disabled={busy || (mode === 'signup' && !agreedToTerms)}
+          style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: 10, fontSize: 12, fontWeight: 600, letterSpacing: '0.01em', cursor: 'pointer', borderRadius: 8, opacity: busy || (mode === 'signup' && !agreedToTerms) ? 0.6 : 1 }}
         >
           {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
         </button>

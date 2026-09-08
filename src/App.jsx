@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
 import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
@@ -2280,9 +2280,14 @@ export default function App() {
                   </div>
                 )}
                 <AuthPanel />
-                <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '0 14px', fontSize: 10, color: 'var(--ink-soft)', marginTop: 8 }}>
-                  Terms of Service
-                </a>
+                <div style={{ display: 'flex', gap: 10, padding: '0 14px', marginTop: 8 }}>
+                  <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--ink-soft)' }}>
+                    Terms of Service
+                  </Link>
+                  <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: 'var(--ink-soft)' }}>
+                    Privacy Policy
+                  </Link>
+                </div>
               </>
             ) : (
               <>
@@ -2296,9 +2301,12 @@ export default function App() {
                     )}
                   </span>
                   <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
-                    <a href="/terms.html" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10.5, color: 'var(--ink-soft)' }}>
+                    <Link to="/terms" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10.5, color: 'var(--ink-soft)' }}>
                       Terms
-                    </a>
+                    </Link>
+                    <Link to="/privacy" target="_blank" rel="noopener noreferrer" style={{ fontSize: 10.5, color: 'var(--ink-soft)' }}>
+                      Privacy
+                    </Link>
                     <button
                       onClick={() => supabase.auth.signOut()}
                       style={{ background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: 10.5, color: 'var(--ink-soft)', padding: 0 }}

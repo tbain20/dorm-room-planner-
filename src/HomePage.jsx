@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
 import AccountMenu from './AccountMenu.jsx'
@@ -150,6 +150,10 @@ export default function HomePage() {
 
       <footer className="home-footer">
         <span>Dorm Room Planner</span>
+        <span className="home-footer-links">
+          <Link to="/terms">Terms of Service</Link>
+          <Link to="/privacy">Privacy Policy</Link>
+        </span>
       </footer>
 
       {showAuth && (

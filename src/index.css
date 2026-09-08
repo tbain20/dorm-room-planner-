@@ -503,3 +503,10 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
   .gallery-card-actions-mobile button.active{background:var(--accent); color:#fff;}
   .board-popover{width:180px; right:0;}
 }
+
+/* Legal pages (/terms, /privacy) — see LegalPageLayout.jsx */
+.legal-body h2{font-family:var(--font-sans); font-size:17px; font-weight:650; margin-top:30px; margin-bottom:8px;}
+.legal-body p{margin:0 0 12px;}
+.legal-body ul{margin:0 0 12px; padding-left:20px;}
+.legal-body li{margin-bottom:6px;}
+.legal-body a{color:var(--accent);}
