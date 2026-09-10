@@ -175,6 +175,19 @@
   text-align: center;
 }
 
+/* General Room Designer CTA — sits directly under the dorm room-type picker */
+.home-room-designer-cta {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 24px 90px;
+  text-align: center;
+}
+.home-room-designer-cta h2 {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  margin: 0 0 8px;
+}
+
 /* Feature sections */
 .home-feature {
   padding: 64px 24px;
@@ -289,6 +302,61 @@
 .home-account-item:hover { background: var(--accent-soft); color: var(--accent); }
 .home-account-signout { color: var(--danger); }
 .home-account-signout:hover { background: rgba(179, 38, 30, 0.1); color: var(--danger); }
+
+/* Profile nav panel (followers/following/search — see ProfileMenu.jsx) */
+.home-profile-panel { width: 300px; }
+.home-profile-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--paper-shadow);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  background: var(--bg);
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.home-profile-search:focus { outline: none; border-color: var(--accent); }
+.home-profile-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
+.home-profile-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.home-profile-tab:hover { background: var(--accent-soft); color: var(--accent); }
+.home-profile-tab.active { background: var(--accent-soft); color: var(--accent); }
+.home-profile-list { max-height: 260px; overflow-y: auto; margin-bottom: 4px; }
+.home-profile-badge {
+  margin-left: 6px;
+  color: var(--sage);
+  font-weight: 600;
+  background: var(--sage-soft);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+.home-profile-follow-btn {
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.home-profile-follow-btn.is-following { background: var(--paper-shadow); color: var(--ink-soft); }
+.home-profile-error { color: var(--danger); font-size: 11px; padding: 4px 6px 8px; }
+.home-profile-view-link { text-align: center; color: var(--accent); font-weight: 600; }
 
 /* Mobile */
 @media (max-width: 860px) {

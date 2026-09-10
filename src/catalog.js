@@ -417,6 +417,38 @@ export const CATALOG = [
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
+  // Generic (non-Colgate) bed-size picker for the general-purpose Room Designer (see
+  // RoomDesignerPage.jsx) — reuses colgateBed.glb, the same fused frame+mattress mesh bed-bunk
+  // above already reuses generically, just rescaled to real twin/full/queen/king mattress
+  // footprints instead of a new model. Plain (non-`isProvided`) purchasable items, so they also
+  // show up as extra bed options in the dorm designer's own catalog — harmless there. mattressDims
+  // width feeds _fitComforterToBed (roomEngine.js) automatically: queen/king (>= 3.6ft) get
+  // fullComforter.glb, twin/full get twinComforter.glb, same as every other bed. No bedHeights —
+  // these are plain fixed-height frames, not Colgate's adjustable-peg lofted bed.
+  {
+    id: 'bed-twin', name: 'Twin Bed', price: 279, retailer: 'Amazon', dims: [6.6, 3.6, 2.0], primaryModelFitDims: [6.6, 3.6, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
+    isBed: true, mattressDims: [6.33, 3.25], mattressTopY: 0.7,
+    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
+  },
+  {
+    id: 'bed-full-generic', name: 'Full Bed', price: 329, retailer: 'Amazon', dims: [6.6, 4.8, 2.0], primaryModelFitDims: [6.6, 4.8, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
+    isBed: true, mattressDims: [6.33, 4.5], mattressTopY: 0.7,
+    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
+  },
+  {
+    id: 'bed-queen', name: 'Queen Bed', price: 379, retailer: 'Amazon', dims: [6.95, 5.3, 2.0], primaryModelFitDims: [6.95, 5.3, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
+    isBed: true, mattressDims: [6.67, 5.0], mattressTopY: 0.7,
+    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
+  },
+  {
+    id: 'bed-king', name: 'King Bed', price: 449, retailer: 'Amazon', dims: [6.95, 6.65, 2.0], primaryModelFitDims: [6.95, 6.65, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
+    isBed: true, mattressDims: [6.67, 6.33], mattressTopY: 0.7,
+    relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
+  },
   // Storage Bins — ✅ fully researched. Mapped onto the existing under-bed-bins slot as the
   // closest match to the research's generic "Storage Bins" category; premium ($30) is cheaper
   // than moderate ($84) because that's genuinely what the research turned up (a rolling cart vs.

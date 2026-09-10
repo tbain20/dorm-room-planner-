@@ -971,6 +971,142 @@ export async function getPublicProfile(userId) {
   }
 }
 
+// Looks up other users by display name for the homepage's profile nav panel — public-read, same
+// as getPublicProfile, so it works whether or not the caller has a name column collision (there's
+// no unique username, just the auto-seeded display_name) with a substring match.
+export async function searchProfiles(query, limit = 20) {
+  const client = requireClient()
+  const q = (query || '').trim()
+  if (!q) return []
+  const { data, error } = await client
+    .from('profiles')
+    .select('id, display_name, is_designer')
+    .ilike('display_name', `%${q}%`)
+    .limit(limit)
+  if (error) throw error
+  return data
+}
+
+// listFollowers/listFollowing back the profile nav panel's two list tabs. follows.follower_id/
+// followee_id reference auth.users, not profiles, so PostgREST can't embed a join — same two-step
+// (ids, then the matching profile rows) getPublicProfile already uses for its own counts.
+export async function listFollowers(userId) {
+  const client = requireClient()
+  const { data: rows, error } = await client.from('follows').select('follower_id').eq('followee_id', userId)
+  if (error) throw error
+  const ids = rows.map((r) => r.follower_id)
+  if (!ids.length) return []
+  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer').in('id', ids)
+  if (perr) throw perr
+  return data
+}
+
+export async function listFollowing(userId) {
+  const client = requireClient()
+  const { data: rows, error } = await client.from('follows').select('followee_id').eq('follower_id', userId)
+  if (error) throw error
+  const ids = rows.map((r) => r.followee_id)
+  if (!ids.length) return []
+  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer').in('id', ids)
+  if (perr) throw perr
+  return data
+}
+
+// --- General-purpose Room Designer: multi-room "designs" (see supabase/migrations/019_room_designs.sql) ---
+// A design is a named group of rooms; each design_rooms row is exactly the same {room, items,
+// features} shape RoomEngine.getState()/loadState() already use for a single dorm layout — just
+// grouped under a design_id instead of being unique per (user_id, name). Private-only for v1: no
+// is_public column, RLS only ever allows the owner in.
+
+export async function listDesigns() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('designs')
+    .select('id, name, updated_at')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function createDesign(name) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('designs')
+    .insert({ user_id: user.id, name })
+    .select('id, name')
+    .single()
+  if (error) throw error
+  const { data: room, error: rerr } = await client
+    .from('design_rooms')
+    .insert({ design_id: data.id, name: 'Room 1', sort_order: 0, room: { w: 12, l: 14, h: 9, notch: null }, items: [], features: [] })
+    .select('id, name, sort_order, room, items, features')
+    .single()
+  if (rerr) throw rerr
+  return { ...data, rooms: [room] }
+}
+
+export async function renameDesign(designId, name) {
+  const client = requireClient()
+  const { error } = await client.from('designs').update({ name, updated_at: new Date().toISOString() }).eq('id', designId)
+  if (error) throw error
+}
+
+export async function deleteDesign(designId) {
+  const client = requireClient()
+  const { error } = await client.from('designs').delete().eq('id', designId)
+  if (error) throw error
+}
+
+export async function getDesign(designId) {
+  const client = requireClient()
+  const [{ data: design, error }, { data: rooms, error: rerr }] = await Promise.all([
+    client.from('designs').select('id, name').eq('id', designId).single(),
+    client.from('design_rooms').select('id, name, sort_order, room, items, features').eq('design_id', designId).order('sort_order', { ascending: true }),
+  ])
+  if (error) throw error
+  if (rerr) throw rerr
+  return { ...design, rooms }
+}
+
+export async function addRoomToDesign(designId, name) {
+  const client = requireClient()
+  const { data: existing, error: cerr } = await client.from('design_rooms').select('sort_order').eq('design_id', designId).order('sort_order', { ascending: false }).limit(1)
+  if (cerr) throw cerr
+  const nextOrder = existing.length ? existing[0].sort_order + 1 : 0
+  const { data, error } = await client
+    .from('design_rooms')
+    .insert({ design_id: designId, name, sort_order: nextOrder, room: { w: 12, l: 14, h: 9, notch: null }, items: [], features: [] })
+    .select('id, name, sort_order, room, items, features')
+    .single()
+  if (error) throw error
+  await client.from('designs').update({ updated_at: new Date().toISOString() }).eq('id', designId)
+  return data
+}
+
+export async function saveDesignRoom(roomId, { room, items, features }) {
+  const client = requireClient()
+  const { error } = await client
+    .from('design_rooms')
+    .update({ room, items, features: features || [], updated_at: new Date().toISOString() })
+    .eq('id', roomId)
+  if (error) throw error
+}
+
+export async function renameDesignRoom(roomId, name) {
+  const client = requireClient()
+  const { error } = await client.from('design_rooms').update({ name }).eq('id', roomId)
+  if (error) throw error
+}
+
+export async function deleteDesignRoom(roomId) {
+  const client = requireClient()
+  const { error } = await client.from('design_rooms').delete().eq('id', roomId)
+  if (error) throw error
+}
+
 // Returns the signed-in user's packing checklist, seeding it from DEFAULT_CHECKLIST_ITEMS the
 // first time a given *category* shows up (not just once ever, on the very first load) — so an
 // account seeded back when checklistItems.js only covered a couple of categories automatically

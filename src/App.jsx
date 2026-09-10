@@ -2018,6 +2018,9 @@ export default function App() {
           <button className={`tab-btn ${tab === 'saved' ? 'active' : ''}`} onClick={() => setTab('saved')}>Saved</button>
           <button className="tab-btn" onClick={() => navigate('/browse')}>Browse ↗</button>
           <button className={`tab-btn ${tab === 'checklist' ? 'active' : ''}`} onClick={() => setTab('checklist')}>Checklist</button>
+          {session && (
+            <button className={`tab-btn ${tab === 'profile' ? 'active' : ''}`} onClick={() => handleViewProfile(session.user.id)}>Profile</button>
+          )}
         </div>
 
         {tab === 'catalog' && (

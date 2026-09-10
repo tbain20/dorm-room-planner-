@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
 import AccountMenu from './AccountMenu.jsx'
+import ProfileMenu from './ProfileMenu.jsx'
 import RoomTypeIcon from './RoomTypeIcon.jsx'
 import './homepage.css'
 
@@ -47,6 +48,10 @@ export default function HomePage() {
     navigate('/app', { state: { newRoom: { type } } })
   }
 
+  function startDesigner() {
+    navigate('/design')
+  }
+
   function continueToRooms() {
     navigate('/app', { state: { openTab: 'saved' } })
   }
@@ -67,7 +72,10 @@ export default function HomePage() {
           <div className="home-nav-actions">
             <button className="home-btn home-btn-browse" onClick={() => navigate('/browse')}>Browse</button>
             {session ? (
-              <AccountMenu session={session} onContinue={continueToRooms} />
+              <>
+                <ProfileMenu session={session} />
+                <AccountMenu session={session} onContinue={continueToRooms} />
+              </>
             ) : (
               <button className="home-btn home-btn-ghost" onClick={() => setShowAuth(true)}>Sign in</button>
             )}
@@ -104,6 +112,15 @@ export default function HomePage() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="home-room-designer-cta">
+        <h2>Designing a whole house or apartment instead?</h2>
+        <p className="home-section-sub">
+          Use the general Room Designer — the same 3D editor, generic furniture (no Colgate-only
+          pieces), any bed size from Twin to King, and as many rooms as your place actually has.
+        </p>
+        <button className="home-btn home-btn-primary" onClick={startDesigner}>Open Room Designer →</button>
       </section>
 
       <section className="home-feature">
