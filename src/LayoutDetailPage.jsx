@@ -165,10 +165,9 @@ export default function LayoutDetailPage() {
       <h1 style={{ ...headingStyle, marginTop: 12, marginBottom: 4, fontSize: 26 }}>{layout.name}</h1>
       <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 4 }}>
         {layout.authorId && (
-          // Profile pages are still a pseudo-tab inside the main app (see "Public profiles +
-          // follow"), not a real route yet — so this can only send you to the app, not deep-link
-          // straight to their profile. Worth promoting alongside a future /u/:id route.
-          <span>{layout.designerName ? `Designed by ${layout.designerName}` : `by ${layout.authorName || 'a student'}`}</span>
+          <Link to={`/profile/${layout.authorId}`} style={{ color: 'var(--ink-soft)' }}>
+            {layout.designerName ? `Designed by ${layout.designerName}` : `by ${layout.authorName || 'a student'}`}
+          </Link>
         )}
         {layout.parentLayoutId && (
           <>

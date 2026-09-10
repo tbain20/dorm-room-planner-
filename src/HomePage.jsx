@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
 import AccountMenu from './AccountMenu.jsx'
-import ProfileMenu from './ProfileMenu.jsx'
 import RoomTypeIcon from './RoomTypeIcon.jsx'
 import './homepage.css'
 
@@ -72,10 +71,7 @@ export default function HomePage() {
           <div className="home-nav-actions">
             <button className="home-btn home-btn-browse" onClick={() => navigate('/browse')}>Browse</button>
             {session ? (
-              <>
-                <ProfileMenu session={session} />
-                <AccountMenu session={session} onContinue={continueToRooms} />
-              </>
+              <AccountMenu session={session} onContinue={continueToRooms} />
             ) : (
               <button className="home-btn home-btn-ghost" onClick={() => setShowAuth(true)}>Sign in</button>
             )}

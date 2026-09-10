@@ -869,7 +869,7 @@ export async function getMyProfile() {
   const user = await requireUser(client)
   const { data, error } = await client
     .from('profiles')
-    .select('display_name, is_designer, bio, display_hall, class_year')
+    .select('display_name, is_designer, bio, display_hall, class_year, avatar_url')
     .eq('id', user.id)
     .single()
   if (error) throw error
@@ -877,18 +877,39 @@ export async function getMyProfile() {
 }
 
 // Only ever touches fields explicitly passed — omit a key entirely to leave it alone, pass ''
-// to clear it. Used by the small inline profile-editor in the Saved tab (bio/hall/class year are
-// all optional, so there's no dedicated "profile settings" tab for this yet).
-export async function updateMyProfile({ bio, displayHall, classYear } = {}) {
+// to clear it. Used by ProfilePage.jsx's own-profile editor (bio/hall/class year/avatar are all
+// optional, so there's no separate "profile settings" screen for this).
+export async function updateMyProfile({ bio, displayHall, classYear, avatarUrl } = {}) {
   const client = requireClient()
   const user = await requireUser(client)
   const patch = {}
   if (bio !== undefined) patch.bio = bio
   if (displayHall !== undefined) patch.display_hall = displayHall
   if (classYear !== undefined) patch.class_year = classYear
+  if (avatarUrl !== undefined) patch.avatar_url = avatarUrl
   if (Object.keys(patch).length === 0) return
   const { error } = await client.from('profiles').update(patch).eq('id', user.id)
   if (error) throw error
+}
+
+// Uploads a real photo as the signed-in user's avatar (see supabase/migrations/020_profile_avatar.sql).
+// Always the same path per user (upsert:true) — there's only ever one current avatar, so a fresh
+// upload just overwrites the last one rather than accumulating orphaned files. Returns the public
+// URL; the caller still has to pass it to updateMyProfile({ avatarUrl }) to actually save it — kept
+// separate so ProfilePage can show the uploaded image immediately without waiting on both requests.
+export async function uploadAvatar(file) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  const path = `${user.id}/avatar.${ext}`
+  const { error } = await client.storage.from('avatars').upload(path, file, {
+    upsert: true,
+    contentType: file.type || 'image/jpeg',
+  })
+  if (error) throw error
+  // Cache-bust — the path (and therefore the public URL) never changes on re-upload, so without
+  // this the browser/CDN would keep showing the old cached image after a new one is saved.
+  return `${client.storage.from('avatars').getPublicUrl(path).data.publicUrl}?v=${Date.now()}`
 }
 
 // Follow/unfollow — plain insert/delete against `follows`, same toggle shape as likes/saves.
@@ -927,7 +948,7 @@ export async function getPublicProfile(userId) {
   const client = requireClient()
   const { data: profile, error } = await client
     .from('profiles')
-    .select('id, display_name, is_designer, bio, display_hall, class_year, created_at')
+    .select('id, display_name, is_designer, bio, display_hall, class_year, avatar_url, created_at')
     .eq('id', userId)
     .maybeSingle()
   if (error || !profile) return null
@@ -950,6 +971,7 @@ export async function getPublicProfile(userId) {
     bio: profile.bio,
     displayHall: profile.display_hall,
     classYear: profile.class_year,
+    avatarUrl: profile.avatar_url,
     createdAt: new Date(profile.created_at).getTime(),
     followerCount: followerRes.count || 0,
     followingCount: followingRes.count || 0,
@@ -980,7 +1002,7 @@ export async function searchProfiles(query, limit = 20) {
   if (!q) return []
   const { data, error } = await client
     .from('profiles')
-    .select('id, display_name, is_designer')
+    .select('id, display_name, is_designer, avatar_url')
     .ilike('display_name', `%${q}%`)
     .limit(limit)
   if (error) throw error
@@ -996,7 +1018,7 @@ export async function listFollowers(userId) {
   if (error) throw error
   const ids = rows.map((r) => r.follower_id)
   if (!ids.length) return []
-  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer').in('id', ids)
+  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer, avatar_url').in('id', ids)
   if (perr) throw perr
   return data
 }
@@ -1007,7 +1029,7 @@ export async function listFollowing(userId) {
   if (error) throw error
   const ids = rows.map((r) => r.followee_id)
   if (!ids.length) return []
-  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer').in('id', ids)
+  const { data, error: perr } = await client.from('profiles').select('id, display_name, is_designer, avatar_url').in('id', ids)
   if (perr) throw perr
   return data
 }

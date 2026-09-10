@@ -29,6 +29,7 @@ export default function AccountMenu({ session, onContinue }) {
           <div className="home-account-email">{session.user.email}</div>
           <button className="home-account-item" onClick={() => { setOpen(false); onContinue() }}>Your rooms</button>
           <button className="home-account-item" onClick={() => { setOpen(false); navigate('/app', { state: { openTab: 'checklist' } }) }}>Checklist</button>
+          <button className="home-account-item" onClick={() => { setOpen(false); navigate('/profile') }}>Profile</button>
           <button className="home-account-item home-account-signout" onClick={() => { setOpen(false); supabase.auth.signOut() }}>Sign out</button>
         </div>
       )}

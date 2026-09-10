@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import {
   listPublicLayouts, listDistinctHalls, listDistinctTags, listFeaturedCollections, listMyFollowingIds,
@@ -32,6 +32,7 @@ const SKELETON_HEIGHTS = [220, 300, 180, 260, 340, 200, 280, 240, 190, 310, 230,
 // picks it up on landing (see the `location.state` effect there).
 export default function BrowsePage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { session } = useAuth()
 
   const [layouts, setLayouts] = useState([])
@@ -157,7 +158,17 @@ export default function BrowsePage() {
 
   function handleViewProfile(layout) {
     if (!layout.authorId) return
-    navigate('/app', { state: { viewProfileId: layout.authorId } })
+    navigate(`/profile/${layout.authorId}`)
+  }
+
+  // Real browser-history back rather than a hardcoded destination — Browse is reachable both from
+  // the homepage and from inside the room editor (/app), and "back" should return to whichever one
+  // you actually came from instead of always landing on the homepage. location.key is 'default'
+  // when this page was opened directly (e.g. a bookmark/shared link) with no prior entry to return
+  // to, so that case still falls back to the homepage instead of navigating away from the app.
+  function handleBack() {
+    if (location.key !== 'default') navigate(-1)
+    else navigate('/')
   }
 
   async function handleToggleLike(layout) {
@@ -225,7 +236,7 @@ export default function BrowsePage() {
   return (
     <div className="browse-page">
       <div className="browse-header">
-        <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
+        <button className="browse-back-link" onClick={handleBack}>← Back</button>
         <div className="browse-header-row">
           <h1>Browse</h1>
           <Link to="/app" state={{ openTab: 'leaderboard' }} className="browse-leaderboard-link">🏆 Leaderboard</Link>

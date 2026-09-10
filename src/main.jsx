@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './App.jsx'
 import RoomDesignerPage from './RoomDesignerPage.jsx'
+import ProfilePage from './ProfilePage.jsx'
 import HomePage from './HomePage.jsx'
 import LayoutDetailPage from './LayoutDetailPage.jsx'
 import BrowsePage from './BrowsePage.jsx'
@@ -33,6 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<HomePage />} />
         <Route path="/app" element={<App />} />
         <Route path="/design" element={<RoomDesignerPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:id" element={<ProfilePage />} />
         <Route path="/layouts/:id/join" element={<JoinLayoutPage />} />
         <Route path="/layouts/:id" element={<LayoutDetailPage />} />
         <Route path="/browse" element={<BrowsePage />} />

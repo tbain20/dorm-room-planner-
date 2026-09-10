@@ -14,10 +14,9 @@ import {
   listChecklistItems, setChecklistItemChecked, addChecklistItem, deleteChecklistItem,
   listDistinctHalls, incrementLayoutViewCount, likeLayout, unlikeLayout, listMyLikedLayoutIds,
   saveLayoutBookmark, unsaveLayoutBookmark, listMySavedLayoutIds, listSavedLayouts, getPublicLayoutById,
-  followUser, unfollowUser, listMyFollowingIds, getPublicProfile, updateMyProfile,
   SUGGESTED_TAGS, submitReport,
   listMyBoardsWithLayouts, createBoard, renameBoard, deleteBoard, setBoardPublic, addLayoutToBoard, removeLayoutFromBoard,
-  getLeaderboard, computeBadges,
+  getLeaderboard,
   leaveLayoutCollaboration, removeCollaborator, saveSharedLayout, listSharedWithMe, getLayoutForEditing,
   listMyCustomItems, createCustomItem, deleteCustomItem,
   listMyCustomPosters, uploadCustomPoster, deleteCustomPoster,
@@ -389,17 +388,6 @@ export default function App() {
   const [shareNotice, setShareNotice] = useState('')
   const [leaderboard, setLeaderboard] = useState(null)
   const [leaderboardError, setLeaderboardError] = useState('')
-  const [followingIds, setFollowingIds] = useState(() => new Set())
-  // Which user's public profile is showing when tab === 'profile' — a pseudo-route, not a real
-  // URL, since react-router isn't in the app yet (that lands with shareable links in a later
-  // session). "← Back" just returns to whichever tab you came from.
-  const [viewingProfileId, setViewingProfileId] = useState(null)
-  const [profileReturnTab, setProfileReturnTab] = useState('catalog')
-  const [profileData, setProfileData] = useState(null)
-  const [profileLoading, setProfileLoading] = useState(false)
-  const [profileError, setProfileError] = useState('')
-  const [profileDrafts, setProfileDrafts] = useState({ bio: '', displayHall: '', classYear: '' })
-  const [profileEditNotice, setProfileEditNotice] = useState('')
   const [roomPlannerCollapsed, setRoomPlannerCollapsed] = useState(false)
   const [openCategories, setOpenCategories] = useState(() => new Set())
   const [catalogSearch, setCatalogSearch] = useState('')
@@ -573,21 +561,12 @@ export default function App() {
       })
       return
     }
-    getMyProfile()
-      .then((profile) => {
-        setMyProfile(profile)
-        // Seeds the Saved tab's inline profile editor with whatever's already saved, so hitting
-        // "Save profile" before ever visiting the profile-drafts-populating profile page itself
-        // doesn't blank out an existing bio/hall/class year.
-        setProfileDrafts({ bio: profile.bio || '', displayHall: profile.display_hall || '', classYear: profile.class_year || '' })
-      })
-      .catch(() => {})
+    getMyProfile().then(setMyProfile).catch(() => {})
     // Fetched independent of which tab is open — a signed-in user's session is often already
     // restored before this effect's first run, and BrowsePage.jsx (a separate route/component)
     // needs its own copy of this same data rather than reading it from here.
     listMyLikedLayoutIds().then((ids) => setLikedIds(new Set(ids))).catch(() => {})
     listMySavedLayoutIds().then((ids) => setMySavedIds(new Set(ids))).catch(() => {})
-    listMyFollowingIds().then((ids) => setFollowingIds(new Set(ids))).catch(() => {})
     // Registered into catalog.js's live lookup as soon as they're fetched (not lazily when the
     // Catalog tab is opened) so a custom item saved in a layout resolves correctly even if the
     // user lands straight on the Cart/Saved tab.
@@ -612,23 +591,6 @@ export default function App() {
       .then(setLeaderboard)
       .catch((err) => setLeaderboardError(err.message))
   }, [tab])
-
-  useEffect(() => {
-    if (tab !== 'profile' || !viewingProfileId) return
-    setProfileError('')
-    setProfileLoading(true)
-    getPublicProfile(viewingProfileId)
-      .then((data) => {
-        if (!data) {
-          setProfileError('This profile could not be found.')
-          return
-        }
-        setProfileData(data)
-        setProfileDrafts({ bio: data.bio || '', displayHall: data.displayHall || '', classYear: data.classYear || '' })
-      })
-      .catch((err) => setProfileError(err.message))
-      .finally(() => setProfileLoading(false))
-  }, [tab, viewingProfileId])
 
   // distinctHalls only feeds the publish-prompt's hall dropdown now that Browse (which used to
   // share this fetch for its own hall filter) has moved to BrowsePage.jsx — gated on 'saved'
@@ -1058,16 +1020,10 @@ export default function App() {
     else setBrowseError('That original layout is no longer available.')
   }
 
+  // Profile pages are a real route (/profile/:id, see ProfilePage.jsx) rather than a tab inside
+  // the editor — navigating away is deliberate here, not a placeholder.
   function handleViewProfile(userId) {
-    if (tab !== 'profile') setProfileReturnTab(tab)
-    setViewingProfileId(userId)
-    setProfileData(null)
-    setTab('profile')
-  }
-
-  function handleBackFromProfile() {
-    setTab(profileReturnTab)
-    setViewingProfileId(null)
+    navigate(`/profile/${userId}`)
   }
 
   // /layouts/:id is the shareable route added in this session (see LayoutDetailPage.jsx) — this
@@ -1104,46 +1060,6 @@ export default function App() {
       setReportTarget(null)
     } catch (err) {
       setReportNotice(err.message)
-    }
-  }
-
-  async function handleToggleFollow(userId) {
-    if (!session) {
-      setTab('saved')
-      return
-    }
-    const isFollowing = followingIds.has(userId)
-    try {
-      if (isFollowing) {
-        await unfollowUser(userId)
-        setFollowingIds((prev) => {
-          const next = new Set(prev)
-          next.delete(userId)
-          return next
-        })
-        setProfileData((prev) => (prev && prev.id === userId ? { ...prev, followerCount: Math.max(0, prev.followerCount - 1) } : prev))
-      } else {
-        await followUser(userId)
-        setFollowingIds((prev) => new Set(prev).add(userId))
-        setProfileData((prev) => (prev && prev.id === userId ? { ...prev, followerCount: prev.followerCount + 1 } : prev))
-      }
-    } catch (err) {
-      setProfileError(err.message)
-    }
-  }
-
-  async function handleSaveProfileEdits() {
-    setProfileEditNotice('')
-    try {
-      await updateMyProfile(profileDrafts)
-      setProfileEditNotice('Saved.')
-      // Refresh whichever profile view is currently showing your own data — either the profile
-      // page itself (if you navigated to your own) or the "Signed in as" summary in the Saved tab.
-      if (viewingProfileId === session?.user.id) {
-        getPublicProfile(session.user.id).then(setProfileData).catch(() => {})
-      }
-    } catch (err) {
-      setProfileEditNotice(err.message)
     }
   }
 
@@ -2019,7 +1935,7 @@ export default function App() {
           <button className="tab-btn" onClick={() => navigate('/browse')}>Browse ↗</button>
           <button className={`tab-btn ${tab === 'checklist' ? 'active' : ''}`} onClick={() => setTab('checklist')}>Checklist</button>
           {session && (
-            <button className={`tab-btn ${tab === 'profile' ? 'active' : ''}`} onClick={() => handleViewProfile(session.user.id)}>Profile</button>
+            <button className="tab-btn" onClick={() => handleViewProfile(session.user.id)}>Profile</button>
           )}
         </div>
 
@@ -2065,11 +1981,11 @@ export default function App() {
                 {customItemsError && <div className="board-popover-error" style={{ marginBottom: 8 }}>{customItemsError}</div>}
                 {customItems.length > 0 && (
                   <>
-                    <div className="category-header" style={{ cursor: 'default' }}>
+                    <button className="category-header" onClick={() => toggleCategory('My Custom Items')}>
                       <span>🧩 My Custom Items</span>
-                      <span className="category-meta">{customItems.length}</span>
-                    </div>
-                    {customItems.map((row) => {
+                      <span className="category-meta">{customItems.length} {openCategories.has('My Custom Items') ? '−' : '+'}</span>
+                    </button>
+                    {openCategories.has('My Custom Items') && customItems.map((row) => {
                       const cat = buildCustomCatalogItem(row)
                       return (
                         <div key={row.id} className="cat-item custom-item-row" onClick={() => engineRef.current.addItem(cat.id)}>
@@ -2326,47 +2242,12 @@ export default function App() {
                     Want to publish layouts as a designer? Apply here →
                   </a>
                 )}
-                <span
-                  style={{ display: 'block', fontSize: 10.5, color: 'var(--ink-soft)', textDecoration: 'underline', cursor: 'pointer', marginBottom: 14 }}
+                <button
                   onClick={() => handleViewProfile(session.user.id)}
+                  style={{ display: 'block', background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 14px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', borderRadius: 8, marginBottom: 14 }}
                 >
-                  View my public profile →
-                </span>
-                <div style={{ background: 'var(--paper-shadow)', borderRadius: 10, padding: 12, marginBottom: 14 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 8 }}>
-                    Profile — shown on your public profile page, all optional
-                  </div>
-                  <textarea
-                    placeholder="A short bio…"
-                    value={profileDrafts.bio}
-                    onChange={(e) => setProfileDrafts((prev) => ({ ...prev, bio: e.target.value }))}
-                    rows={2}
-                    style={{ width: '100%', padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 6, fontSize: 11.5, marginBottom: 6, resize: 'vertical', fontFamily: 'inherit' }}
-                  />
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                    <input
-                      placeholder="Hall (e.g. Curtis Hall)"
-                      value={profileDrafts.displayHall}
-                      onChange={(e) => setProfileDrafts((prev) => ({ ...prev, displayHall: e.target.value }))}
-                      style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 6, fontSize: 11.5 }}
-                    />
-                    <input
-                      placeholder="Class year"
-                      value={profileDrafts.classYear}
-                      onChange={(e) => setProfileDrafts((prev) => ({ ...prev, classYear: e.target.value }))}
-                      style={{ flex: 1, padding: 7, border: '1px solid var(--paper-shadow)', borderRadius: 6, fontSize: 11.5 }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button
-                      onClick={handleSaveProfileEdits}
-                      style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', borderRadius: 6 }}
-                    >
-                      Save profile
-                    </button>
-                    {profileEditNotice && <span style={{ fontSize: 10.5, color: 'var(--sage)' }}>{profileEditNotice}</span>}
-                  </div>
-                </div>
+                  View profile →
+                </button>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
                   <button
                     className={`tab-btn ${savedSubView === 'mine' ? 'active' : ''}`}
@@ -2674,114 +2555,6 @@ export default function App() {
                 )}
               </>
             )}
-          </div>
-        )}
-
-        {tab === 'profile' && (
-          <div id="profile-panel" style={{ display: 'flex', padding: 14, flexDirection: 'column' }}>
-            <span
-              style={{ fontSize: 11, color: 'var(--ink-soft)', textDecoration: 'underline', cursor: 'pointer', marginBottom: 12 }}
-              onClick={handleBackFromProfile}
-            >
-              ← Back
-            </span>
-            {profileLoading ? (
-              <div className="empty-note">Loading profile…</div>
-            ) : profileError ? (
-              <div className="empty-note">{profileError}</div>
-            ) : profileData ? (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: 16, color: 'var(--ink)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {profileData.displayName || 'A student'}
-                      {profileData.isDesigner && (
-                        <span style={{ color: 'var(--sage)', fontWeight: 600, background: 'var(--sage-soft)', padding: '2px 7px', borderRadius: 999, fontSize: 9.5, letterSpacing: '0.03em' }}>
-                          DESIGNER
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: 'var(--ink-soft)', marginTop: 3 }}>
-                      {[profileData.displayHall, profileData.classYear && `Class of ${profileData.classYear}`].filter(Boolean).join(' · ')}
-                    </div>
-                  </div>
-                  {session && session.user.id !== viewingProfileId && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <button
-                        onClick={() => handleToggleFollow(viewingProfileId)}
-                        style={{
-                          border: 'none', borderRadius: 999, padding: '6px 14px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                          background: followingIds.has(viewingProfileId) ? 'var(--paper-shadow)' : 'var(--accent)',
-                          color: followingIds.has(viewingProfileId) ? 'var(--ink-soft)' : '#fff',
-                        }}
-                      >
-                        {followingIds.has(viewingProfileId) ? 'Following' : 'Follow'}
-                      </button>
-                      <button
-                        onClick={() => handleOpenReport('profile', viewingProfileId, profileData.displayName || 'this profile')}
-                        title="Report this profile"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, padding: 0 }}
-                      >
-                        🚩
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {profileData.bio && (
-                  <div style={{ fontSize: 12, color: 'var(--ink)', lineHeight: 1.5, marginBottom: 10 }}>{profileData.bio}</div>
-                )}
-                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--ink-soft)', marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--paper-shadow)' }}>
-                  <span><strong style={{ color: 'var(--ink)' }}>{profileData.followerCount}</strong> follower{profileData.followerCount === 1 ? '' : 's'}</span>
-                  <span><strong style={{ color: 'var(--ink)' }}>{profileData.followingCount}</strong> following</span>
-                  <span><strong style={{ color: 'var(--ink)' }}>{profileData.layouts.length}</strong> public layout{profileData.layouts.length === 1 ? '' : 's'}</span>
-                </div>
-                {computeBadges(profileData.layouts, { isDesigner: profileData.isDesigner, createdAt: profileData.createdAt }).length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-                    {computeBadges(profileData.layouts, { isDesigner: profileData.isDesigner, createdAt: profileData.createdAt }).map((b) => (
-                      <span
-                        key={b.label}
-                        title={b.label}
-                        style={{ background: 'var(--accent-soft)', color: 'var(--accent)', borderRadius: 999, padding: '4px 10px', fontSize: 10.5, fontWeight: 600 }}
-                      >
-                        {b.emoji} {b.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {profileError && <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 10 }}>{profileError}</div>}
-                {profileData.layouts.length === 0 ? (
-                  <div className="empty-note">
-                    {viewingProfileId === session?.user.id
-                      ? 'No public layouts yet — publish one from the Saved tab to show it here.'
-                      : 'No public layouts yet.'}
-                  </div>
-                ) : (
-                  profileData.layouts.map((layout) => (
-                    <div
-                      key={layout.id}
-                      className="cart-row"
-                      style={{ alignItems: 'flex-start' }}
-                      onClick={() => handleLoad(layout)}
-                      title="Click to view this layout in your room"
-                    >
-                      <LayoutThumb url={layout.thumbnailUrl} />
-                      <div className="name">
-                        {layout.name}
-                        <span style={{ display: 'block', fontSize: 10, color: 'var(--ink-soft)' }}>
-                          {layout.items.length} item{layout.items.length === 1 ? '' : 's'} · {layout.room.w}'×{layout.room.l}'
-                        </span>
-                        <span style={{ display: 'block', fontSize: 9.5, color: 'var(--ink-soft)', marginTop: 3 }}>
-                          {layout.likesCount > 0 && `♥ ${layout.likesCount}`}
-                          {layout.likesCount > 0 && layout.copyCount > 0 && ' · '}
-                          {layout.copyCount > 0 && `Copied ${layout.copyCount}×`}
-                        </span>
-                      </div>
-                      <button className="add-btn" style={{ background: 'var(--ink)' }} title="View in 3D" onClick={(e) => { e.stopPropagation(); handleLoad(layout) }}>↺</button>
-                    </div>
-                  ))
-                )}
-              </>
-            ) : null}
           </div>
         )}
 
