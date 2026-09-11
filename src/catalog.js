@@ -599,53 +599,37 @@ export const CATALOG = [
   { id: 'microwave-premium', groupId: 'microwave', groupLabel: 'Microwave', tier: 'premium', name: 'Toshiba Microwave', price: 100, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6W4G', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
   // Retro tier (replaces the eco tier other groups have — Tyler asked for a retro-style pick here instead) — real product from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
   { id: 'microwave-retro', groupId: 'microwave', groupLabel: 'Microwave', tier: 'retro', name: 'Nostalgia Retro Countertop Microwave Oven (0.9 cu ft, 800W)', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/4ygVNve', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
-  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['electric-kettle', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'air-fryer', name: 'Air Fryer', price: 79, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.0, 1.0, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['fridge', 'microwave'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'rice-cooker', name: 'Rice Cooker', price: 35, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.8, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['fridge', 'microwave'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'toaster', name: 'Toaster', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.0, 0.6, 0.7], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
-  // Ice Maker — added from Tyler's link pass. dims/price are estimates (not retrievable via
-  // automated fetch from the product page) — double-check both before relying on them.
-  { id: 'ice-maker', name: 'EUHOMY Countertop Ice Maker', price: 130, retailer: 'Amazon', productUrl: 'https://amzn.to/4gOrGEw', dims: [0.85, 1.1, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['fridge'] },
+  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Amazon', productUrl: 'https://amzn.to/3TutnPL', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/coffeeMaker.glb', relatedIds: ['electric-kettle', 'fridge'] },
+  { id: 'air-fryer', name: 'Air Fryer', price: 79, retailer: 'Amazon', productUrl: 'https://amzn.to/4xjWFP0', dims: [1.0, 1.0, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/airFryer.glb', relatedIds: ['fridge', 'microwave'] },
+  { id: 'rice-cooker', name: 'Rice Cooker', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/4r7vl56', dims: [0.8, 0.8, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/riceCooker.glb', relatedIds: ['fridge', 'microwave'] },
+  { id: 'toaster', name: 'Toaster', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4r4pspn', dims: [1.0, 0.6, 0.7], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/toaster.glb', relatedIds: ['coffee-maker', 'fridge'] },
+  { id: 'ice-maker', name: 'EUHOMY Countertop Ice Maker', price: 130, retailer: 'Amazon', productUrl: 'https://amzn.to/4gQ1rPq', dims: [0.85, 1.1, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/iceMaker.glb', relatedIds: ['fridge'] },
   // Electric Kettle — ✅ fully researched category, but the doc didn't list prices for any of the
   // three picks — estimates, not sourced (see note at top of file).
-  { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4zSthSm', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
-  { id: 'electric-kettle', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'moderate', name: 'Cosori 1.7L Borosilicate Glass Electric Kettle', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4xBFPfo', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
-  { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Meedome Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4xDCoop', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4zSthSm', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'moderate', name: 'Cosori 1.7L Borosilicate Glass Electric Kettle', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4xBFPfo', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Meedome Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4xDCoop', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
 
   // ---- Cleaning Supplies ----
-  { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Target', productUrl: 'https://www.amazon.com', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'handheld-vacuum', name: 'Handheld Vacuum', price: 45, retailer: 'Target', dims: [0.5, 1.1, 0.6], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', relatedIds: ['trash-can'] },
+  { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Amazon', productUrl: 'https://amzn.to/4gZ5Vlp', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] },
+  { id: 'handheld-vacuum', name: 'Handheld Vacuum', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4A4MUGY', dims: [0.5, 1.1, 0.6], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/vacuum.glb', relatedIds: ['trash-can'] },
 
   // ---- Laundry ----
-  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/coatRackStanding.glb', relatedIds: ['hamper', 'chk:detergent'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'ironing-board', name: 'Ironing Board', price: 30, retailer: 'Amazon', dims: [4.0, 1.1, 2.9], color: 0xd8d8d8, category: 'Laundry', subcategory: 'Optional', relatedIds: ['chk:iron'] },
+  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4yygenK', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/dryingRack.glb', relatedIds: ['hamper', 'chk:detergent'] },
 
   // ---- Bathroom ----
-  // Shower Caddy — placeholder link for now. Tyler has real tiered research for this one already
-  // (Attmu/EUDELE/Rejomiik, see curated-research-FINAL.md) but is deliberately deferring wiring it
-  // in until later — this entry exists now purely so modeling can proceed unblocked. First real
-  // placeable item in Bathroom (see the CATEGORY_ORDER/note above).
-  { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.5, 1.5], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', relatedIds: ['chk:shower-shoes'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4iZVTD7', dims: [0.8, 0.5, 1.5], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', modelUrl: '/models/showerCaddy.glb', relatedIds: ['chk:shower-shoes'] },
 
   // ---- Sleep & Comfort ----
-  // Fan — placeholder link for now, per Tyler's final-links pass (was previously an untiered
-  // "reasonable pick" with no link at all — now flagged for a real link like the other Type D
-  // placeholders, since Tyler's tiered fan research still hasn't been wired in either).
-  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4yoHFQL', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['humidifier'] },
-  // Desk Fan — added from Tyler's link pass. Real stated dims (11.1"W x 6.3"D x 10.9"H) convert to
-  // ~0.9 x 0.5 x 0.9 ft; price is an estimate (not retrievable via automated fetch) — double-check
-  // before relying on it.
-  { id: 'desk-fan', name: 'Amazon Basics Air Circulator Desk Fan', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4yvfLCV', dims: [0.9, 0.5, 0.9], color: 0x2b2b2b, category: 'Sleep & Comfort', relatedIds: ['fan'] },
-  // Humidifier — placeholder link for now. Was checklist-only before; promoted since it has a
-  // real physical footprint worth placing, same as the other Type D promotions in this pass.
-  { id: 'humidifier', name: 'Humidifier', price: 30, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [0.8, 0.8, 1.2], color: 0xe4e4e4, category: 'Sleep & Comfort', relatedIds: ['fan'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4j4gciK', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/towerFan.glb', relatedIds: ['humidifier'] },
+  // Desk Fan — real stated dims (11.1"W x 6.3"D x 10.9"H) convert to ~0.9 x 0.5 x 0.9 ft; price is
+  // an estimate (not retrievable via automated fetch) — double-check before relying on it.
+  { id: 'desk-fan', name: 'Amazon Basics Air Circulator Desk Fan', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/3Va20eh', dims: [0.9, 0.5, 0.9], color: 0x2b2b2b, category: 'Sleep & Comfort', modelUrl: '/models/deskFan.glb', relatedIds: ['fan'] },
+  { id: 'humidifier', name: 'Humidifier', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4r3U5uU', dims: [0.8, 0.8, 1.2], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/humidifier.glb', relatedIds: ['fan'] },
 
   // ---- Entertainment ----
-  { id: 'instrument', name: 'Musical Instrument', price: 199, retailer: 'Amazon', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['shelf'] },
-  // Bluetooth Speaker — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
-  // remaining-longtail-picks.md) — replaces what used to be a checklist-only stub referenced from
-  // the TV's relatedIds ('chk:bluetooth-speaker'), now a real placeable entry.
-  { id: 'bluetooth-speaker', name: 'Anker Soundcore Bluetooth Speaker', price: 40, retailer: 'Amazon', productUrl: null, dims: [0.6, 0.6, 0.9], color: 0x1b1b1b, category: 'Entertainment', subcategory: 'Hobbies', relatedIds: ['tv', 'desk'] },
+  { id: 'instrument', name: 'Guitar', price: 199, retailer: 'Amazon', productUrl: 'https://amzn.to/46iucy8', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', modelUrl: '/models/guitar.glb', relatedIds: ['shelf'] },
+  { id: 'bluetooth-speaker', name: 'Bluetooth Speaker', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4ywp6tZ', dims: [0.6, 0.6, 0.9], color: 0x1b1b1b, category: 'Entertainment', subcategory: 'Hobbies', modelUrl: '/models/bluetoothSpeaker.glb', relatedIds: ['tv', 'desk'] },
 
   // ---- Decor ----
   // Area Rug — ✅ fully researched (rectangular 5x3 only — rug-round/rug-square below are shape
@@ -681,12 +665,13 @@ export const CATALOG = [
   { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://amzn.to/4A21oHs', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
   // Eco-Friendly tier — real pick from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
   { id: 'beanbag-eco', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'eco', name: 'Hobestluk 4ft Memory Foam Bean Bag Chair', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/3UDjEa9', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['bev-cooler', 'fridge'] }, // TODO: placeholder link, replace with real product/search link
-  // Makeup Mirror — placeholder link for now, per Tyler's final-links pass; wall-mountable like the
-  // Full-Length Mirror above, just smaller (a vanity/makeup mirror, not the desk it used to be sold
-  // as here).
-  { id: 'makeup-mirror', name: 'Makeup Mirror', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.3, 0.15, 1.6], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', modelUrl: '/models/makeupmirror.glb', tintMaterial: true, colorable: true, wallMountable: true, relatedIds: ['desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'bev-cooler', name: 'Beverage Cooler', price: 89, retailer: 'Best Buy', dims: [1.6, 1.6, 2.6], color: 0xe4e4e4, category: 'Optional Luxury Items', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['snack-cart'] },
+  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['fridge'] }, // TODO: placeholder link, replace with real product/search link
+  // Makeup Mirror — a freestanding vanity mirror meant to sit on a desk, not wall-mounted (it used
+  // to be wallMountable; Tyler asked for it to go back to a desk item). No special "desk-only"
+  // flag needed — like any other placeable item it drops on the floor by default and the existing
+  // generic "Put on top of…" stacking flow (see roomEngine.js's stackItemOn) lets it be moved onto
+  // any placed desk in the room.
+  { id: 'makeup-mirror', name: 'Makeup Mirror', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.3, 0.15, 1.6], color: 0xc9a876, category: 'Decor', subcategory: 'Room', modelUrl: '/models/makeupmirror.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'colgate-desk', 'desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
 ]
 
 // Furniture Colgate already provides in every standard residence hall room — the student isn't
