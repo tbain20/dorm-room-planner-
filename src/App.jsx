@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES, WALL_ART_TYPES } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
@@ -2028,14 +2028,15 @@ export default function App() {
                       {category === 'Decor' && session && (
                         <div>
                           <button className="custom-item-trigger" onClick={() => setShowPosterUploadForm(true)}>
-                            + Upload your own poster
+                            + Upload custom wall art
                           </button>
                           {customPostersError && <div className="board-popover-error" style={{ marginBottom: 8 }}>{customPostersError}</div>}
                           {customPosters.length > 0 && (
                             <>
-                              <div className="subcategory-label">My Posters</div>
+                              <div className="subcategory-label">My Wall Art</div>
                               {customPosters.map((row) => {
                                 const cat = buildCustomPosterCatalogItem(row)
+                                const typeLabel = (WALL_ART_TYPES.find((t) => t.id === row.art_type) || WALL_ART_TYPES[0]).label
                                 return (
                                   <div key={row.id} className="cat-item custom-item-row" onClick={() => engineRef.current.addItem(cat.id)}>
                                     <div className="swatch" style={{ padding: 0 }}>
@@ -2043,7 +2044,7 @@ export default function App() {
                                     </div>
                                     <div className="cat-info">
                                       <div className="name">{cat.name}</div>
-                                      <div className="meta">{row.width_in}" × {row.height_in}"</div>
+                                      <div className="meta">{typeLabel} · {row.width_in}" × {row.height_in}"</div>
                                     </div>
                                     <button
                                       className="remove-btn"

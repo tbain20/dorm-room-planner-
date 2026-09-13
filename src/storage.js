@@ -1258,10 +1258,11 @@ export async function listAllCustomItemsForReview() {
   return data
 }
 
-// custom_posters (migration 016) — a user's own uploaded artwork, placed as a flat framed panel
-// sized to a standard poster preset. Same "personal, registered into the live catalog lookup"
-// pattern as custom_items (see catalog.js's buildCustomPosterCatalogItem/registerCustomCatalogItem)
-// — a synthesized entry uses `image_url` as a texture instead of a stand-in's 3D model.
+// custom_posters (migration 016, art_type column added in 021) — a user's own uploaded artwork
+// (poster/flag/tapestry — see catalog.js's WALL_ART_TYPES), placed as a flat framed panel sized to a
+// standard preset for its type. Same "personal, registered into the live catalog lookup" pattern as
+// custom_items (see catalog.js's buildCustomPosterCatalogItem/registerCustomCatalogItem) — a
+// synthesized entry uses `image_url` as a texture instead of a stand-in's 3D model.
 //
 // Path is user-id-prefixed (same as thumbnailPath in this file) so the custom-posters bucket's
 // storage RLS — which checks the first path segment against auth.uid() — allows the upload, and
@@ -1271,7 +1272,7 @@ function posterPath(userId, file) {
   return `${userId}/${crypto.randomUUID()}.${ext}`
 }
 
-const CUSTOM_POSTER_COLUMNS = 'id, name, image_url, product_url, width_in, height_in, created_at'
+const CUSTOM_POSTER_COLUMNS = 'id, name, image_url, product_url, width_in, height_in, art_type, created_at'
 
 export async function listMyCustomPosters() {
   const client = requireClient()
@@ -1285,7 +1286,7 @@ export async function listMyCustomPosters() {
   return data
 }
 
-export async function uploadCustomPoster({ file, name, widthIn, heightIn, productUrl }) {
+export async function uploadCustomPoster({ file, name, widthIn, heightIn, productUrl, artType }) {
   const client = requireClient()
   const user = await requireUser(client)
   const clean = name.trim()
@@ -1305,6 +1306,7 @@ export async function uploadCustomPoster({ file, name, widthIn, heightIn, produc
       product_url: productUrl?.trim() || null,
       width_in: widthIn,
       height_in: heightIn,
+      art_type: artType || 'poster',
     })
     .select(CUSTOM_POSTER_COLUMNS)
     .single()

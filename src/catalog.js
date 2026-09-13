@@ -351,11 +351,13 @@ export const CATALOG = [
   // normally. Uses throwPillow.glb (Tyler's real scan) with the same pose options as bed-pillow.
   // dims bumped from a cosmetic 1.3' cube to 1.6' (~19") — closer to a real decorative throw
   // pillow's size and less easily lost/hidden under a comforter or bed-pillow at the old scale.
-  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4ypPLsv', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  // skipsComforter (added): a decorative throw pillow should land on the sheets/mattress level,
+  // not perched on top of a placed comforter — same flag bed-pillow above already uses, same reason.
+  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4ypPLsv', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
   // Eco-Friendly tier — Tyler's link pass gave the same generic Amazon search link as the moderate/premium tiers above (no single specific product), so this stays a generic pick too, same spirit as those two.
-  { id: 'decorative-pillow-eco', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'eco', name: 'Decorative Pillow (Amazon)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-eco', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'eco', name: 'Decorative Pillow (Amazon)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/throwPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
 
   // ---- Furniture & Organization ----
   // No plain "Twin XL Bed Frame" here anymore — colgate-bed (below, in PROVIDED_CATALOG) already
@@ -392,7 +394,8 @@ export const CATALOG = [
     bedHeights: FULL_BED_HEIGHTS, isBed: true, mattressDims: [6.2, 4.2],
     extraModels: [
       { modelUrl: '/models/colgateSlat.glb', dims: [6.1, 4.2, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, movesWithHeight: true, stackOffset: 0 },
-      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0x1e2f4f, movesWithHeight: true, stackOffset: 0.25, isMattress: true },
+      // White mattress per Tyler's request — matches BEDDING_COLOR_SWATCHES[0], was navy.
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.2, 4.2, 0.5], color: 0xf2ede1, movesWithHeight: true, stackOffset: 0.25, isMattress: true },
       { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 4.5, 2.2], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.1, yOffset: 0 },
     ],
     relatedIds: ['mattress-topper', 'sheet-set', 'nightstand', 'chk:mattress-protector', 'chk:comforter'],
@@ -425,10 +428,22 @@ export const CATALOG = [
   // width feeds _fitComforterToBed (roomEngine.js) automatically: queen/king (>= 3.6ft) get
   // fullComforter.glb, twin/full get twinComforter.glb, same as every other bed. No bedHeights —
   // these are plain fixed-height frames, not Colgate's adjustable-peg lofted bed.
+  // Rebuilt to the same split Colgate construction as bed-full above (colgateHeadboard.glb at both
+  // ends + colgateSlat.glb + colgateMattress.glb, white) instead of the single fused colgateBed.glb
+  // mesh, per Tyler's request that twin/full/queen/king all match the Colgate beds. Fixed (non-
+  // adjustable) slat/mattress height rather than bedHeights — these are plain purchasable frames
+  // like every other non-Colgate bed in the catalog (bed-bunk has no bedHeights either) — using
+  // bed-full's own "standard" peg values (slat 0.8, mattress 1.05) as the fixed height.
   {
-    id: 'bed-twin', name: 'Twin Bed', price: 279, retailer: 'Amazon', dims: [6.6, 3.6, 2.0], primaryModelFitDims: [6.6, 3.6, 2.0], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
-    isBed: true, mattressDims: [6.33, 3.25], mattressTopY: 0.7,
+    id: 'bed-twin', name: 'Twin Bed', price: 279, retailer: 'Amazon', dims: [6.6, 3.6, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2,
+    primaryModelFitDims: [0.2, 3.6, 2.0], primaryModelOffsetX: -3.2,
+    isBed: true, mattressDims: [6.33, 3.25], mattressTopY: 1.55,
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.3, 3.3, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 0.8 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.33, 3.25, 0.5], color: 0xf2ede1, yOffset: 1.05, isMattress: true },
+      { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 3.6, 2.0], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.2, yOffset: 0 },
+    ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
   {
@@ -437,16 +452,30 @@ export const CATALOG = [
     isBed: true, mattressDims: [6.33, 4.5], mattressTopY: 0.7,
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
+  // Same rebuilt split-Colgate construction as bed-twin above.
   {
-    id: 'bed-queen', name: 'Queen Bed', price: 379, retailer: 'Amazon', dims: [6.95, 5.3, 2.0], primaryModelFitDims: [6.95, 5.3, 2.0], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
-    isBed: true, mattressDims: [6.67, 5.0], mattressTopY: 0.7,
+    id: 'bed-queen', name: 'Queen Bed', price: 379, retailer: 'Amazon', dims: [6.95, 5.3, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2,
+    primaryModelFitDims: [0.2, 5.3, 2.0], primaryModelOffsetX: -3.375,
+    isBed: true, mattressDims: [6.67, 5.0], mattressTopY: 1.55,
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.65, 5.0, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 0.8 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 5.0, 0.5], color: 0xf2ede1, yOffset: 1.05, isMattress: true },
+      { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 5.3, 2.0], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.375, yOffset: 0 },
+    ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
+  // Same rebuilt split-Colgate construction as bed-twin above.
   {
-    id: 'bed-king', name: 'King Bed', price: 449, retailer: 'Amazon', dims: [6.95, 6.65, 2.0], primaryModelFitDims: [6.95, 6.65, 2.0], color: 0xc9a876,
-    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateBed.glb', tintMaterial: true,
-    isBed: true, mattressDims: [6.67, 6.33], mattressTopY: 0.7,
+    id: 'bed-king', name: 'King Bed', price: 449, retailer: 'Amazon', dims: [6.95, 6.65, 2.0], color: 0xc9a876,
+    category: 'Furniture & Organization', subcategory: 'Bed', modelUrl: '/models/colgateHeadboard.glb', modelRotationY: Math.PI / 2,
+    primaryModelFitDims: [0.2, 6.65, 2.0], primaryModelOffsetX: -3.375,
+    isBed: true, mattressDims: [6.67, 6.33], mattressTopY: 1.55,
+    extraModels: [
+      { modelUrl: '/models/colgateSlat.glb', dims: [6.65, 6.35, 0.25], rotationY: Math.PI / 2, color: 0xc9a876, yOffset: 0.8 },
+      { modelUrl: '/models/colgateMattress.glb', dims: [6.67, 6.33, 0.5], color: 0xf2ede1, yOffset: 1.05, isMattress: true },
+      { modelUrl: '/models/colgateHeadboard.glb', dims: [0.2, 6.65, 2.0], rotationY: Math.PI / 2 + Math.PI, xOffset: 3.375, yOffset: 0 },
+    ],
     relatedIds: ['mattress-topper', 'sheet-set', 'chk:mattress-protector', 'pillowcase-set', 'chk:comforter'],
   },
   // Storage Bins — ✅ fully researched. Mapped onto the existing under-bed-bins slot as the
@@ -550,11 +579,12 @@ export const CATALOG = [
   // that isn't at the desk."
   { id: 'accent-chair', name: 'Accent Chair', price: 149, retailer: 'IKEA', dims: [2.6, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeChair.glb', relatedIds: ['lamp', 'rug', 'throw-pillow'] },
   { id: 'loveseat', name: 'Loveseat', price: 299, retailer: 'Amazon', dims: [4.3, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
-  // Boneless Corduroy Sofa — added from Tyler's link pass. Bigger than the loveseat above (a real
-  // 3-seater vs. a 2-seater), so it reuses the same loungeSofa.glb silhouette at a larger scale
-  // rather than sourcing a new model. dims/price are estimates (not retrievable via automated
-  // fetch from the product page) — double-check both before relying on them.
-  { id: 'corduroy-sofa', name: 'PATAVOT Boneless Corduroy 3-Seater Sofa', price: 320, retailer: 'Amazon', productUrl: 'https://amzn.to/4gHLsCL', dims: [6.2, 2.9, 2.7], color: 0x6b5847, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
+  // Boneless Corduroy Sofa — now uses Tyler's own real scan (public/models/bonelessSofa.glb),
+  // replacing the earlier loungeSofa.glb stand-in. dims from the real product spec — 70"D x 33"W x
+  // 26"H — read as width=70"/depth=33" (this app's width axis is the seating span, and the model's
+  // own bbox is wide/shallow the same way a real 3-seater is; a literal 33"-wide/70"-deep sofa
+  // wouldn't match either the model or a real sofa's proportions).
+  { id: 'corduroy-sofa', name: 'PATAVOT Boneless Corduroy 3-Seater Sofa', price: 320, retailer: 'Amazon', productUrl: 'https://amzn.to/4gHLsCL', dims: [5.83, 2.75, 2.17], color: 0x6b5847, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/bonelessSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
   // TV — Type C generic search; retailer switched Best Buy → Amazon per Tyler's final-links pass.
   // canWallMount (not wallMountable): the TV starts on the floor like any normal item, but the
   // selection panel's "Mount on wall" button (App.jsx) can flip a *placed instance* into wall
@@ -589,47 +619,58 @@ export const CATALOG = [
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.
-  { id: 'fridge-budget', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'budget', name: 'Upstreman Mini Fridge', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/46JLc09', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
-  { id: 'fridge', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'moderate', name: 'DUMOS Mini Fridge', price: 150, retailer: 'Amazon', productUrl: 'https://amzn.to/4xaviqs', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
-  { id: 'fridge-premium', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'premium', name: 'Frostorm Mini Fridge', price: 220, retailer: 'Amazon', productUrl: 'https://amzn.to/3TiVmSr', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenFridgeSmall.glb', relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge-budget', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'budget', name: 'Upstreman Mini Fridge', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/46JLc09', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'moderate', name: 'DUMOS Mini Fridge', price: 150, retailer: 'Amazon', productUrl: 'https://amzn.to/4xaviqs', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge-premium', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'premium', name: 'Frostorm Mini Fridge', price: 220, retailer: 'Amazon', productUrl: 'https://amzn.to/3TiVmSr', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
   // Microwave — ✅ fully researched category, but the doc didn't list prices for any of the three
   // picks — estimates, not sourced (see note at top of file).
-  { id: 'microwave-budget', groupId: 'microwave', groupLabel: 'Microwave', tier: 'budget', name: 'Chefman Compact Microwave', price: 60, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6Rho', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
-  { id: 'microwave', groupId: 'microwave', groupLabel: 'Microwave', tier: 'moderate', name: 'Farberware 1000W Microwave', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4yq9PuS', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
-  { id: 'microwave-premium', groupId: 'microwave', groupLabel: 'Microwave', tier: 'premium', name: 'Toshiba Microwave', price: 100, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6W4G', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'microwave-budget', groupId: 'microwave', groupLabel: 'Microwave', tier: 'budget', name: 'Chefman Compact Microwave', price: 60, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6Rho', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'microwave', groupId: 'microwave', groupLabel: 'Microwave', tier: 'moderate', name: 'Farberware 1000W Microwave', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4yq9PuS', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  { id: 'microwave-premium', groupId: 'microwave', groupLabel: 'Microwave', tier: 'premium', name: 'Toshiba Microwave', price: 100, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6W4G', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
   // Retro tier (replaces the eco tier other groups have — Tyler asked for a retro-style pick here instead) — real product from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
-  { id: 'microwave-retro', groupId: 'microwave', groupLabel: 'Microwave', tier: 'retro', name: 'Nostalgia Retro Countertop Microwave Oven (0.9 cu ft, 800W)', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/4ygVNve', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
-  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Amazon', productUrl: 'https://amzn.to/3TutnPL', dims: [0.7, 0.9, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/coffeeMaker.glb', relatedIds: ['electric-kettle', 'fridge'] },
-  { id: 'air-fryer', name: 'Air Fryer', price: 79, retailer: 'Amazon', productUrl: 'https://amzn.to/4xjWFP0', dims: [1.0, 1.0, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/airFryer.glb', relatedIds: ['fridge', 'microwave'] },
-  { id: 'rice-cooker', name: 'Rice Cooker', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/4r7vl56', dims: [0.8, 0.8, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/riceCooker.glb', relatedIds: ['fridge', 'microwave'] },
-  { id: 'toaster', name: 'Toaster', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4r4pspn', dims: [1.0, 0.6, 0.7], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/toaster.glb', relatedIds: ['coffee-maker', 'fridge'] },
-  { id: 'ice-maker', name: 'EUHOMY Countertop Ice Maker', price: 130, retailer: 'Amazon', productUrl: 'https://amzn.to/4gQ1rPq', dims: [0.85, 1.1, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/iceMaker.glb', relatedIds: ['fridge'] },
+  { id: 'microwave-retro', groupId: 'microwave', groupLabel: 'Microwave', tier: 'retro', name: 'Nostalgia Retro Countertop Microwave Oven (0.9 cu ft, 800W)', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/4ygVNve', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
+  // dims un-stretched from the model's own natural (deep, narrow) proportions — [0.7, 0.9, 1.1]
+  // squashed the model's real depth to under half its natural width-relative proportion, which
+  // read as "too wide" from straight on. See curated-research-FINAL.md pass notes.
+  { id: 'coffee-maker', name: 'Coffee Maker', price: 39, retailer: 'Amazon', productUrl: 'https://amzn.to/3TutnPL', dims: [0.62, 1.25, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/coffeeMaker.glb', tintMaterial: true, colorable: true, relatedIds: ['electric-kettle', 'fridge'] },
+  { id: 'air-fryer', name: 'Air Fryer', price: 79, retailer: 'Amazon', productUrl: 'https://amzn.to/4xjWFP0', dims: [1.0, 1.0, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/airFryer.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'microwave'] },
+  { id: 'rice-cooker', name: 'Rice Cooker', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/4r7vl56', dims: [0.8, 0.8, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/riceCooker.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'microwave'] },
+  { id: 'toaster', name: 'Toaster', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4r4pspn', dims: [1.0, 0.6, 0.7], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/toaster.glb', tintMaterial: true, colorable: true, relatedIds: ['coffee-maker', 'fridge'] },
+  { id: 'ice-maker', name: 'EUHOMY Countertop Ice Maker', price: 130, retailer: 'Amazon', productUrl: 'https://amzn.to/4gQ1rPq', dims: [0.85, 1.1, 1.1], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/iceMaker.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge'] },
   // Electric Kettle — ✅ fully researched category, but the doc didn't list prices for any of the
   // three picks — estimates, not sourced (see note at top of file).
-  { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4zSthSm', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
-  { id: 'electric-kettle', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'moderate', name: 'Cosori 1.7L Borosilicate Glass Electric Kettle', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4xBFPfo', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
-  { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Meedome Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4xDCoop', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle-budget', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'budget', name: 'Amazon Basics Electric Kettle (1500W)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4zSthSm', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', tintMaterial: true, colorable: true, relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'moderate', name: 'Cosori 1.7L Borosilicate Glass Electric Kettle', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4xBFPfo', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', tintMaterial: true, colorable: true, relatedIds: ['coffee-maker'] },
+  { id: 'electric-kettle-premium', groupId: 'electric-kettle', groupLabel: 'Electric Kettle', tier: 'premium', name: 'Meedome Electric Kettle w/ Tea Infuser', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4xDCoop', dims: [0.6, 0.6, 0.8], color: 0xc9c9c9, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/electricKettle.glb', tintMaterial: true, colorable: true, relatedIds: ['coffee-maker'] },
 
   // ---- Cleaning Supplies ----
   { id: 'trash-can', name: 'Trash Can', price: 15, retailer: 'Amazon', productUrl: 'https://amzn.to/4gZ5Vlp', dims: [1.0, 1.0, 1.8], color: 0x7a7a7a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/trashcan.glb', relatedIds: ['chk:trash-bags', 'chk:recycling-bin'] },
-  { id: 'handheld-vacuum', name: 'Handheld Vacuum', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4A4MUGY', dims: [0.5, 1.1, 0.6], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/vacuum.glb', relatedIds: ['trash-can'] },
+  // Model is a full upright/stick vacuum (long handle + floor head), not a handheld dustbuster —
+  // resized off the model's own real bbox ratio scaled to a real ~50" upright height, name updated
+  // to match. Id kept stable so saved layouts referencing it still resolve.
+  { id: 'handheld-vacuum', name: 'Upright Vacuum', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4A4MUGY', dims: [0.87, 0.93, 4.17], color: 0x3a3a3a, category: 'Cleaning Supplies', subcategory: 'Trash', modelUrl: '/models/vacuum.glb', tintMaterial: true, colorable: true, relatedIds: ['trash-can'] },
 
   // ---- Laundry ----
-  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4yygenK', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/dryingRack.glb', relatedIds: ['hamper', 'chk:detergent'] },
+  { id: 'drying-rack', name: 'Drying Rack', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4yygenK', dims: [2.0, 1.3, 3.3], color: 0xb0b0b0, category: 'Laundry', subcategory: 'Optional', modelUrl: '/models/dryingRack.glb', tintMaterial: true, colorable: true, relatedIds: ['hamper', 'chk:detergent'] },
 
   // ---- Bathroom ----
-  { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4iZVTD7', dims: [0.8, 0.5, 1.5], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', modelUrl: '/models/showerCaddy.glb', relatedIds: ['chk:shower-shoes'] },
+  // Height halved (1.5 -> 0.75) per Tyler's "at least half the height" — was reading far too tall
+  // for a portable caddy. colorable added.
+  { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4iZVTD7', dims: [0.8, 0.5, 0.75], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', modelUrl: '/models/showerCaddy.glb', tintMaterial: true, colorable: true, relatedIds: ['chk:shower-shoes'] },
 
   // ---- Sleep & Comfort ----
-  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4j4gciK', dims: [1.3, 1.3, 3.3], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/towerFan.glb', relatedIds: ['humidifier'] },
+  // dims from Tyler's real product spec: 11.81"D x 11.81"W x 36.22"H (÷12) — was rendering much too
+  // big/wide. colorable added (every Sleep & Comfort item now has a color option).
+  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4j4gciK', dims: [0.98, 0.98, 3.02], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/towerFan.glb', tintMaterial: true, colorable: true, relatedIds: ['humidifier'] },
   // Desk Fan — real stated dims (11.1"W x 6.3"D x 10.9"H) convert to ~0.9 x 0.5 x 0.9 ft; price is
   // an estimate (not retrievable via automated fetch) — double-check before relying on it.
-  { id: 'desk-fan', name: 'Amazon Basics Air Circulator Desk Fan', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/3Va20eh', dims: [0.9, 0.5, 0.9], color: 0x2b2b2b, category: 'Sleep & Comfort', modelUrl: '/models/deskFan.glb', relatedIds: ['fan'] },
-  { id: 'humidifier', name: 'Humidifier', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4r3U5uU', dims: [0.8, 0.8, 1.2], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/humidifier.glb', relatedIds: ['fan'] },
+  { id: 'desk-fan', name: 'Amazon Basics Air Circulator Desk Fan', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/3Va20eh', dims: [0.9, 0.5, 0.9], color: 0x2b2b2b, category: 'Sleep & Comfort', modelUrl: '/models/deskFan.glb', tintMaterial: true, colorable: true, relatedIds: ['fan'] },
+  { id: 'humidifier', name: 'Humidifier', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/4r3U5uU', dims: [0.8, 0.8, 1.2], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/humidifier.glb', tintMaterial: true, colorable: true, relatedIds: ['fan'] },
 
   // ---- Entertainment ----
   { id: 'instrument', name: 'Guitar', price: 199, retailer: 'Amazon', productUrl: 'https://amzn.to/46iucy8', dims: [1.3, 0.5, 3.5], color: 0x8a6b4f, category: 'Entertainment', subcategory: 'Hobbies', modelUrl: '/models/guitar.glb', relatedIds: ['shelf'] },
-  { id: 'bluetooth-speaker', name: 'Bluetooth Speaker', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4ywp6tZ', dims: [0.6, 0.6, 0.9], color: 0x1b1b1b, category: 'Entertainment', subcategory: 'Hobbies', modelUrl: '/models/bluetoothSpeaker.glb', relatedIds: ['tv', 'desk'] },
+  // dims from Tyler's real product spec: 7.93"W x 3.56"D x 2.06"H (÷12). colorable added.
+  { id: 'bluetooth-speaker', name: 'Bluetooth Speaker', price: 40, retailer: 'Amazon', productUrl: 'https://amzn.to/4ywp6tZ', dims: [0.66, 0.30, 0.17], color: 0x1b1b1b, category: 'Entertainment', subcategory: 'Hobbies', modelUrl: '/models/bluetoothSpeaker.glb', tintMaterial: true, colorable: true, relatedIds: ['tv', 'desk'] },
 
   // ---- Decor ----
   // Area Rug — ✅ fully researched (rectangular 5x3 only — rug-round/rug-square below are shape
@@ -647,15 +688,15 @@ export const CATALOG = [
   // curated-research-FINAL.md) but is deliberately deferring wiring it in until later, same as
   // Shower Caddy and Fan above — this just unblocks modeling.
   { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', productUrl: 'https://www.amazon.com', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['dresser'] }, // TODO: placeholder link, replace with real product/search link
-  { id: 'poster', name: 'Poster', price: 12, retailer: 'Amazon', dims: [2.0, 0.05, 2.7], color: 0x4d6373, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster-landscape', 'flag'] },
-  { id: 'poster-landscape', name: 'Wide Print Poster', price: 18, retailer: 'Amazon', dims: [3.0, 0.05, 2.0], color: 0x6b4f36, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
-  { id: 'flag', name: 'Flag / Banner', price: 15, retailer: 'Amazon', dims: [3.0, 0.05, 1.8], color: 0xb5654a, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster', 'tapestry'] },
-  { id: 'tapestry', name: 'Tapestry', price: 22, retailer: 'Amazon', dims: [4.5, 0.05, 5.5], color: 0x7a3f6b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['flag', 'chk:string-lights'] },
+  // Poster / Flag / Tapestry — no longer plain flat-color catalog entries. Per Tyler's request
+  // they're now upload-only, reachable through the generalized "Custom Wall Art" flow (see
+  // buildCustomPosterCatalogItem/WALL_ART_SIZE_PRESETS below and PosterUploadForm.jsx) instead of a
+  // colored placeholder box you could add with no artwork of your own.
   // Curtains — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
   // remaining-longtail-picks.md). No dedicated "Window" subcategory exists for one item — filed
   // under Wall alongside the other window/wall dressing items (tapestry, flag) it's closest to.
-  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['tapestry', 'chk:string-lights'] },
-  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['poster'] },
+  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['chk:string-lights'] },
+  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: [] },
   { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['mirror'] },
 
   // ---- Optional Luxury Items ----
@@ -910,23 +951,45 @@ export function unregisterCustomCatalogItem(id) {
   if (idx >= 0) ALL_CATALOG_ITEMS.splice(idx, 1)
 }
 
-// Poster/artwork import (Session 5) — standard sold/framed sizes rather than free-form dimensions,
-// same simplification the real 'poster'/'poster-landscape' CATALOG entries above already made.
-// Values in inches (how these sizes are actually marketed) alongside the feet conversion the room
-// engine needs everywhere else.
-export const POSTER_SIZE_PRESETS = [
-  { label: '11" × 17"', widthIn: 11, heightIn: 17 },
-  { label: '18" × 24"', widthIn: 18, heightIn: 24 },
-  { label: '24" × 36"', widthIn: 24, heightIn: 36 },
+// Custom Wall Art import (Session 5, generalized) — Poster/Flag/Tapestry each get their own
+// standard sold-size presets rather than free-form dimensions (the "Custom" width/height fields in
+// PosterUploadForm.jsx still cover anything a preset doesn't). Values in inches (how these sizes are
+// actually marketed) alongside the feet conversion the room engine needs everywhere else. Flag/
+// tapestry defaults are ported from the old flat-color 'flag'/'tapestry' CATALOG entries this
+// replaced (3.0'×1.8' and 4.5'×5.5' respectively).
+export const WALL_ART_TYPES = [
+  { id: 'poster', label: 'Poster' },
+  { id: 'flag', label: 'Flag / Banner' },
+  { id: 'tapestry', label: 'Tapestry' },
 ]
 
+export const WALL_ART_SIZE_PRESETS = {
+  poster: [
+    { label: '11" × 17"', widthIn: 11, heightIn: 17 },
+    { label: '18" × 24"', widthIn: 18, heightIn: 24 },
+    { label: '24" × 36"', widthIn: 24, heightIn: 36 },
+  ],
+  flag: [
+    { label: '36" × 22"', widthIn: 36, heightIn: 22 },
+  ],
+  tapestry: [
+    { label: '54" × 66"', widthIn: 54, heightIn: 66 },
+  ],
+}
+
+// Kept as an alias — PosterUploadForm.jsx's default type is 'poster', same 3 presets as before.
+export const POSTER_SIZE_PRESETS = WALL_ART_SIZE_PRESETS.poster
+
 // Builds a catalog-shaped object from a custom_posters DB row (see storage.js's
-// listMyCustomPosters/uploadCustomPoster) — same [width, depth, height] dims convention as the
-// real 'poster' entry above (a thin flat panel, depth is just a frame's worth of thickness), but
-// `posterImageUrl` in place of a modelUrl/color — roomEngine.js's _loadItemMesh checks for that
-// field first and builds a textured panel (the uploaded image on its two large faces, a plain
-// frame color on the thin edges) instead of loading a glTF model or a flat-color placeholder box.
+// listMyCustomPosters/uploadCustomPoster) — [width, depth, height] dims convention (a thin flat
+// panel, depth is just a frame's worth of thickness), with `posterImageUrl` in place of a
+// modelUrl/color — roomEngine.js's _loadItemMesh checks for that field first and builds a textured
+// panel (the uploaded image on its two large faces, a plain frame color on the thin edges) instead
+// of loading a glTF model or a flat-color placeholder box. row.art_type ('poster'/'flag'/'tapestry',
+// see migration 021) only affects the label shown here — rendering is identical for all three, a
+// real per-type frame/hem treatment wasn't asked for.
 export function buildCustomPosterCatalogItem(row) {
+  const type = WALL_ART_TYPES.find((t) => t.id === row.art_type) || WALL_ART_TYPES[0]
   return {
     id: `poster-${row.id}`,
     customPosterId: row.id,
@@ -941,6 +1004,7 @@ export function buildCustomPosterCatalogItem(row) {
     wallMountable: true,
     posterImageUrl: row.image_url,
     isCustomPoster: true,
+    artType: type.id,
     relatedIds: [],
   }
 }

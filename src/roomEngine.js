@@ -2815,6 +2815,20 @@ export class RoomEngine {
     // bedOnly bedding (see catalog.js) is authored independent of any specific bed's rotation —
     // align it to whatever the bed underneath is actually facing instead of always landing at 0°.
     if (sourceCat && sourceCat.bedOnly) source.mesh.rotation.y = target.mesh.rotation.y
+    // matchBaseFootprint (the mattress topper) always sits directly on the actual bed's mattress,
+    // under anything already stacked there (a comforter, pillows, …) — redirect target up to the
+    // root bed instead of landing on top of whatever _findBedAutoStackTarget's/the manual "Put on
+    // top of…" picker's target happened to be (previously the current top-of-stack, which stacked a
+    // newly-added topper wrongly on top of existing bedding instead of under it).
+    if (sourceCat && sourceCat.matchBaseFootprint) {
+      let bedTarget = target
+      while (bedTarget) {
+        const bedTargetCat = ALL_ITEMS.find((c) => c.id === bedTarget.catalogId)
+        if (bedTargetCat && bedTargetCat.isBed) break
+        bedTarget = bedTarget.stackedOnUid != null ? this.placedItems.find((p) => p.uid === bedTarget.stackedOnUid) : null
+      }
+      if (bedTarget) target = bedTarget
+    }
     // matchBaseFootprint (the mattress topper) always resizes to the exact surface it's currently
     // resting on — the bed's real mattressDims if stacked directly on a bed, or whatever the base's
     // own current footprint is otherwise.
@@ -2879,6 +2893,16 @@ export class RoomEngine {
       source.mesh.position.z += source.pillowSideOffset * Math.cos(rot)
     }
     source.stackedOnUid = target.uid
+    // matchBaseFootprint (the mattress topper) was just inserted directly on the bed above — splice
+    // it beneath whatever was already resting there (comforter, pillows, …) instead of leaving them
+    // sitting on the mattress underneath the topper: reparent every other item that was directly on
+    // the bed onto the topper, then ride them up to its new top surface.
+    if (sourceCat && sourceCat.matchBaseFootprint) {
+      this.placedItems
+        .filter((p) => p.uid !== sourceUid && p.stackedOnUid === target.uid)
+        .forEach((p) => { p.stackedOnUid = sourceUid })
+      this._restackAbove(sourceUid)
+    }
     if (this.selected && this.selected.uid === sourceUid) this._emitSelection()
   }
 
