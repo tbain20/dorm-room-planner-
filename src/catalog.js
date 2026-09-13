@@ -558,7 +558,7 @@ export const CATALOG = [
   // retailer switched Target → Amazon so catalogItemLink()'s generic-search fallback matches.
   // modelUrl swapped to Tyler's own real scan (public/models/ottoman.glb, added 2026-09-02) —
   // replaces the old Kenney-kit loungeSofaOttoman.glb stand-in.
-  { id: 'ottoman', name: 'Storage Ottoman', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/ottoman.glb', tintMaterial: true, colorable: true, relatedIds: ['throw-pillow', 'rug'] },
+  { id: 'ottoman', name: 'Storage Ottoman', price: 34, retailer: 'Amazon', productUrl: null, dims: [1.5, 1.5, 1.3], color: 0x9c7a4d, category: 'Furniture & Organization', subcategory: 'General Storage', modelUrl: '/models/ottoman.glb', tintMaterial: true, colorable: true, relatedIds: ['decorative-pillow', 'rug'] },
   { id: 'lamp', name: 'Floor Lamp', price: 34, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xe8a33d, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampRoundFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   { id: 'lamp-square', name: 'Square Floor Lamp', price: 39, retailer: 'Target', dims: [1.0, 1.0, 5.2], color: 0xb08d57, category: 'Furniture & Organization', subcategory: 'Lighting', modelUrl: '/models/lampSquareFloor.glb', relatedIds: ['accent-chair', 'chk:string-lights'] },
   // Desk Lamp — ✅ fully researched. desklamp.glb's own arm/shade extends along its local Z axis
@@ -577,14 +577,24 @@ export const CATALOG = [
   // Seating: no non-desk-chair option existed before this — a bean bag already lived under
   // Optional Luxury Items, but nothing here covered "an actual chair or small sofa to sit in
   // that isn't at the desk."
-  { id: 'accent-chair', name: 'Accent Chair', price: 149, retailer: 'IKEA', dims: [2.6, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeChair.glb', relatedIds: ['lamp', 'rug', 'throw-pillow'] },
-  { id: 'loveseat', name: 'Loveseat', price: 299, retailer: 'Amazon', dims: [4.3, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
+  { id: 'accent-chair', name: 'Accent Chair', price: 149, retailer: 'IKEA', dims: [2.6, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeChair.glb', relatedIds: ['lamp', 'rug', 'decorative-pillow'] },
+  { id: 'loveseat', name: 'Loveseat', price: 299, retailer: 'Amazon', dims: [4.3, 2.6, 2.8], color: 0xb5654a, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/loungeSofa.glb', relatedIds: ['decorative-pillow', 'rug', 'lamp'] },
   // Boneless Corduroy Sofa — now uses Tyler's own real scan (public/models/bonelessSofa.glb),
   // replacing the earlier loungeSofa.glb stand-in. dims from the real product spec — 70"D x 33"W x
   // 26"H — read as width=70"/depth=33" (this app's width axis is the seating span, and the model's
   // own bbox is wide/shallow the same way a real 3-seater is; a literal 33"-wide/70"-deep sofa
   // wouldn't match either the model or a real sofa's proportions).
-  { id: 'corduroy-sofa', name: 'PATAVOT Boneless Corduroy 3-Seater Sofa', price: 320, retailer: 'Amazon', productUrl: 'https://amzn.to/4gHLsCL', dims: [5.83, 2.75, 2.17], color: 0x6b5847, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/bonelessSofa.glb', relatedIds: ['throw-pillow', 'rug', 'lamp'] },
+  { id: 'corduroy-sofa', name: 'PATAVOT Boneless Corduroy 3-Seater Sofa', price: 320, retailer: 'Amazon', productUrl: 'https://amzn.to/4gHLsCL', dims: [5.83, 2.75, 2.17], color: 0x6b5847, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/bonelessSofa.glb', relatedIds: ['decorative-pillow', 'rug', 'lamp'] },
+  // Bean Bag Chair — moved here from Optional Luxury Items per Tyler's request ("add bean bag
+  // chair to furniture"), now wired to Tyler's real scan (beanBag.glb, tintMaterial since it
+  // carries no texture). dims corrected to the new model's real proportions — the old placeholder
+  // (loungeChairRelax.glb) dims [2.8,2.8,2.5] were nearly cube-shaped, but the real scan is much
+  // flatter (natural height ≈ half its width).
+  { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'ILPEOD Basic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4zVokbr', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
+  { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4A2dIre', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
+  { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://amzn.to/4A21oHs', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
+  // Eco-Friendly tier — real pick from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
+  { id: 'beanbag-eco', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'eco', name: 'Hobestluk 4ft Memory Foam Bean Bag Chair', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/3UDjEa9', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
   // TV — Type C generic search; retailer switched Best Buy → Amazon per Tyler's final-links pass.
   // canWallMount (not wallMountable): the TV starts on the floor like any normal item, but the
   // selection panel's "Mount on wall" button (App.jsx) can flip a *placed instance* into wall
@@ -619,9 +629,9 @@ export const CATALOG = [
 
   // ---- Kitchen & Food ----
   // Mini Fridge — ✅ fully researched.
-  { id: 'fridge-budget', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'budget', name: 'Upstreman Mini Fridge', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/46JLc09', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
-  { id: 'fridge', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'moderate', name: 'DUMOS Mini Fridge', price: 150, retailer: 'Amazon', productUrl: 'https://amzn.to/4xaviqs', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
-  { id: 'fridge-premium', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'premium', name: 'Frostorm Mini Fridge', price: 220, retailer: 'Amazon', productUrl: 'https://amzn.to/3TiVmSr', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave', 'snack-cart'] },
+  { id: 'fridge-budget', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'budget', name: 'Upstreman Mini Fridge', price: 110, retailer: 'Amazon', productUrl: 'https://amzn.to/46JLc09', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave'] },
+  { id: 'fridge', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'moderate', name: 'DUMOS Mini Fridge', price: 150, retailer: 'Amazon', productUrl: 'https://amzn.to/4xaviqs', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave'] },
+  { id: 'fridge-premium', groupId: 'fridge', groupLabel: 'Mini Fridge', tier: 'premium', name: 'Frostorm Mini Fridge', price: 220, retailer: 'Amazon', productUrl: 'https://amzn.to/3TiVmSr', dims: [1.6, 1.8, 2.9], color: 0xe4e4e4, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/miniFridge.glb', tintMaterial: true, colorable: true, relatedIds: ['microwave'] },
   // Microwave — ✅ fully researched category, but the doc didn't list prices for any of the three
   // picks — estimates, not sourced (see note at top of file).
   { id: 'microwave-budget', groupId: 'microwave', groupLabel: 'Microwave', tier: 'budget', name: 'Chefman Compact Microwave', price: 60, retailer: 'Amazon', productUrl: 'https://amzn.to/4dr6Rho', dims: [1.8, 1.4, 1.0], color: 0x2b2b2b, category: 'Kitchen & Food', subcategory: 'Appliances', modelUrl: '/models/kitchenMicrowave.glb', tintMaterial: true, colorable: true, relatedIds: ['fridge', 'chk:microwave-safe-containers'] },
@@ -674,45 +684,52 @@ export const CATALOG = [
 
   // ---- Decor ----
   // Area Rug — ✅ fully researched (rectangular 5x3 only — rug-round/rug-square below are shape
-  // variants the research didn't cover, left as single entries).
-  { id: 'rug-budget', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'budget', name: 'OLANLY Washable Shaggy Rug 5x3', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/3UG3mgL', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', isRug: true, relatedIds: ['throw-pillow', 'plant'] },
-  { id: 'rug', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'moderate', name: 'Soalmost Washable Vintage Rug 5x3', price: 42, retailer: 'Amazon', productUrl: 'https://amzn.to/3SBZRHz', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', isRug: true, relatedIds: ['throw-pillow', 'plant'] },
-  { id: 'rug-premium', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'premium', name: 'Nourison Rug 5x3 (OEKO-TEX Certified)', price: 65, retailer: 'Amazon', productUrl: 'https://amzn.to/4A6RTam', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', isRug: true, relatedIds: ['throw-pillow', 'plant'] },
+  // variants the research didn't cover, left as single entries). colorable (added): clicking any
+  // rug now prompts for a color first (see App.jsx's colorPrompt 'rug' kind) rather than adding it
+  // in its catalog-default color and leaving the swatch picker for afterward.
+  { id: 'rug-budget', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'budget', name: 'OLANLY Washable Shaggy Rug 5x3', price: 30, retailer: 'Amazon', productUrl: 'https://amzn.to/3UG3mgL', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow', 'plant'] },
+  { id: 'rug', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'moderate', name: 'Soalmost Washable Vintage Rug 5x3', price: 42, retailer: 'Amazon', productUrl: 'https://amzn.to/3SBZRHz', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow', 'plant'] },
+  { id: 'rug-premium', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'premium', name: 'Nourison Rug 5x3 (OEKO-TEX Certified)', price: 65, retailer: 'Amazon', productUrl: 'https://amzn.to/4A6RTam', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow', 'plant'] },
   // Eco-Friendly tier — real pick from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
-  { id: 'rug-eco', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'eco', name: 'Keeko Washable Memory Foam Rug', price: 38, retailer: 'Amazon', productUrl: 'https://amzn.to/4gFpMqW', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', isRug: true, relatedIds: ['throw-pillow', 'plant'] },
-  { id: 'rug-round', name: 'Round Rug', price: 39, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRound.glb', isRug: true, relatedIds: ['throw-pillow'] },
-  { id: 'rug-square', name: 'Square Rug', price: 45, retailer: 'Target', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugSquare.glb', isRug: true, relatedIds: ['throw-pillow'] },
-  { id: 'plant', name: 'Potted Plant', price: 29, retailer: 'Target', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
-  { id: 'throw-pillow', name: 'Throw Pillow', price: 15, retailer: 'Target', dims: [1.3, 1.3, 1.3], color: 0xc27a5e, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pillow.glb', relatedIds: ['loveseat', 'accent-chair'] },
-  // Mirror — placeholder link for now. Tyler has real tiered research already (see
-  // curated-research-FINAL.md) but is deliberately deferring wiring it in until later, same as
-  // Shower Caddy and Fan above — this just unblocks modeling.
-  { id: 'mirror', name: 'Full-Length Mirror', price: 29, retailer: 'Target', productUrl: 'https://www.amazon.com', dims: [1.3, 0.2, 4.9], color: 0xaad4e8, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['dresser'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'rug-eco', groupId: 'rug', groupLabel: 'Area Rug 5x3', tier: 'eco', name: 'Keeko Washable Memory Foam Rug', price: 38, retailer: 'Amazon', productUrl: 'https://amzn.to/4gFpMqW', dims: [5.0, 3.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRectangle.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow', 'plant'] },
+  { id: 'rug-round', name: 'Round Rug', price: 39, retailer: 'Amazon', productUrl: 'https://amzn.to/4gZaVGI', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugRound.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow'] },
+  { id: 'rug-square', name: 'Square Rug', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4h5wG7I', dims: [4.0, 4.0, 0.06], color: 0x7a3f3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/rugSquare.glb', tintMaterial: true, colorable: true, isRug: true, relatedIds: ['decorative-pillow'] },
+  // Potted Plant — now a small/medium/large tiered group (id 'plant' kept as the 'medium' tier for
+  // backward compat, same convention every other tiered group here follows). Same product/link at
+  // every size (no per-size research), dims scaled off the model's own proportions.
+  { id: 'plant-small', groupId: 'plant', groupLabel: 'Potted Plant', tier: 'small', name: 'Potted Plant (Small)', price: 19, retailer: 'Amazon', productUrl: 'https://amzn.to/4h6Ce1Y', dims: [0.9, 0.9, 1.6], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
+  { id: 'plant', groupId: 'plant', groupLabel: 'Potted Plant', tier: 'medium', name: 'Potted Plant (Medium)', price: 29, retailer: 'Amazon', productUrl: 'https://amzn.to/4h6Ce1Y', dims: [1.3, 1.3, 2.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
+  { id: 'plant-large', groupId: 'plant', groupLabel: 'Potted Plant', tier: 'large', name: 'Potted Plant (Large)', price: 39, retailer: 'Amazon', productUrl: 'https://amzn.to/4h6Ce1Y', dims: [1.8, 1.8, 3.5], color: 0x4d6b3f, category: 'Decor', subcategory: 'Room', modelUrl: '/models/pottedPlant.glb', relatedIds: ['rug'] },
+  // Mirror — now a small/medium/large tiered group, wired to Tyler's real scan (mirror.glb,
+  // tintMaterial since — like every other Tyler scan — it carries no texture of its own). White by
+  // default (colorable) per Tyler's request; dims scaled off the model's real bbox ratio
+  // (width ≈ 0.62× height).
+  { id: 'mirror-small', groupId: 'mirror', groupLabel: 'Full-Length Mirror', tier: 'small', name: 'Full-Length Mirror (Small)', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4A9akuK', dims: [2.2, 0.15, 3.5], color: 0xffffff, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/mirror.glb', tintMaterial: true, colorable: true, relatedIds: ['dresser'] },
+  { id: 'mirror', groupId: 'mirror', groupLabel: 'Full-Length Mirror', tier: 'medium', name: 'Full-Length Mirror (Medium)', price: 29, retailer: 'Amazon', productUrl: 'https://amzn.to/4A9akuK', dims: [2.8, 0.15, 4.5], color: 0xffffff, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/mirror.glb', tintMaterial: true, colorable: true, relatedIds: ['dresser'] },
+  { id: 'mirror-large', groupId: 'mirror', groupLabel: 'Full-Length Mirror', tier: 'large', name: 'Full-Length Mirror (Large)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/4A9akuK', dims: [3.4, 0.15, 5.5], color: 0xffffff, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/mirror.glb', tintMaterial: true, colorable: true, relatedIds: ['dresser'] },
   // Poster / Flag / Tapestry — no longer plain flat-color catalog entries. Per Tyler's request
   // they're now upload-only, reachable through the generalized "Custom Wall Art" flow (see
   // buildCustomPosterCatalogItem/WALL_ART_SIZE_PRESETS below and PosterUploadForm.jsx) instead of a
-  // colored placeholder box you could add with no artwork of your own.
-  // Curtains — ⚠️ reasonable pick, not tiered (long-tail commodity pass, see
-  // remaining-longtail-picks.md). No dedicated "Window" subcategory exists for one item — filed
-  // under Wall alongside the other window/wall dressing items (tapestry, flag) it's closest to.
-  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: null, dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['chk:string-lights'] },
-  { id: 'corkboard', name: 'Corkboard', price: 14, retailer: 'Target', dims: [2.0, 0.1, 1.5], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: [] },
-  { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Target', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, relatedIds: ['mirror'] },
+  // colored placeholder box you could add with no artwork of your own. WALL_ART_DEFAULT_LINKS below
+  // supplies each type's real affiliate link as the shopping-list buy link for an upload of that
+  // type, unless the uploader gave their own productUrl.
+  // Curtains — windowMountOnly (new): rather than a plain wall-mounted panel at its own fixed
+  // dims, this now attaches to (and is sized to exactly cover) the room's currently-selected
+  // window — see roomEngine.js's _fitCurtainToWindow/_windowMountPlacement. curtainToggle (new)
+  // adds the Down (blackout, visible)/Up (clear, hidden) picker in the selection panel — see
+  // roomEngine.js's setCurtainState. dims here is just the pre-placement/thumbnail default; the
+  // real per-instance size always comes from whichever window it's on.
+  { id: 'curtains', name: 'Blackout Curtain Panel w/ Grommets', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4AcYeks', dims: [3.0, 0.1, 5.5], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', windowMountOnly: true, curtainToggle: true, relatedIds: ['chk:string-lights'] },
+  // Corkboard — now a small/medium/large tiered group, wired to Tyler's real scan (corkBoard.glb).
+  // dims scaled off the model's real bbox ratio (height ≈ 0.55× width) — the old single-size entry
+  // (2.0 × 1.5) was noticeably taller relative to its width than the actual model.
+  { id: 'corkboard-small', groupId: 'corkboard', groupLabel: 'Corkboard', tier: 'small', name: 'Corkboard (Small)', price: 10, retailer: 'Amazon', productUrl: 'https://amzn.to/4h53gXt', dims: [1.3, 0.1, 0.7], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/corkBoard.glb', tintMaterial: true, relatedIds: [] },
+  { id: 'corkboard', groupId: 'corkboard', groupLabel: 'Corkboard', tier: 'medium', name: 'Corkboard (Medium)', price: 14, retailer: 'Amazon', productUrl: 'https://amzn.to/4h53gXt', dims: [2.0, 0.1, 1.1], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/corkBoard.glb', tintMaterial: true, relatedIds: [] },
+  { id: 'corkboard-large', groupId: 'corkboard', groupLabel: 'Corkboard', tier: 'large', name: 'Corkboard (Large)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/4h53gXt', dims: [3.0, 0.1, 1.6], color: 0xc9a876, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/corkBoard.glb', tintMaterial: true, relatedIds: [] },
+  { id: 'wall-clock', name: 'Wall Clock', price: 16, retailer: 'Amazon', productUrl: 'https://amzn.to/4AcxFvB', dims: [1.0, 0.1, 1.0], color: 0x2b2b2b, category: 'Decor', subcategory: 'Wall', wallMountable: true, modelUrl: '/models/wallClock.glb', tintMaterial: true, relatedIds: ['mirror'] },
 
   // ---- Optional Luxury Items ----
-  // Bean Bag Chair — ✅ fully researched.
-  { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'ILPEOD Basic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4zVokbr', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4A2dIre', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://amzn.to/4A21oHs', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  // Eco-Friendly tier — real pick from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
-  { id: 'beanbag-eco', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'eco', name: 'Hobestluk 4ft Memory Foam Bean Bag Chair', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/3UDjEa9', dims: [2.8, 2.8, 2.5], color: 0xc1502e, category: 'Optional Luxury Items', modelUrl: '/models/loungeChairRelax.glb', relatedIds: ['rug', 'throw-pillow'] },
-  { id: 'snack-cart', name: 'Snack Cart', price: 49, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.5, 1.3, 2.5], color: 0xb08d57, category: 'Optional Luxury Items', modelUrl: '/models/sideTable.glb', relatedIds: ['fridge'] }, // TODO: placeholder link, replace with real product/search link
-  // Makeup Mirror — a freestanding vanity mirror meant to sit on a desk, not wall-mounted (it used
-  // to be wallMountable; Tyler asked for it to go back to a desk item). No special "desk-only"
-  // flag needed — like any other placeable item it drops on the floor by default and the existing
-  // generic "Put on top of…" stacking flow (see roomEngine.js's stackItemOn) lets it be moved onto
-  // any placed desk in the room.
-  { id: 'makeup-mirror', name: 'Makeup Mirror', price: 25, retailer: 'Amazon', productUrl: 'https://www.amazon.com', dims: [1.3, 0.15, 1.6], color: 0xc9a876, category: 'Decor', subcategory: 'Room', modelUrl: '/models/makeupmirror.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'colgate-desk', 'desk-lamp'] }, // TODO: placeholder link, replace with real product/search link
+  { id: 'makeup-mirror', name: 'Makeup Mirror', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/46XxO8M', dims: [1.3, 0.15, 1.6], color: 0xffffff, category: 'Decor', subcategory: 'Room', modelUrl: '/models/makeupmirror.glb', tintMaterial: true, colorable: true, relatedIds: ['desk', 'colgate-desk', 'desk-lamp'] },
 ]
 
 // Furniture Colgate already provides in every standard residence hall room — the student isn't
@@ -980,14 +997,26 @@ export const WALL_ART_SIZE_PRESETS = {
 // Kept as an alias — PosterUploadForm.jsx's default type is 'poster', same 3 presets as before.
 export const POSTER_SIZE_PRESETS = WALL_ART_SIZE_PRESETS.poster
 
+// Real affiliate links for a ready-made version of each wall art type — used as the shopping-list
+// buy link for a custom upload of that type when the uploader didn't paste their own Product URL
+// (see buildCustomPosterCatalogItem below). Per Tyler: "when a user uploads an item they'll be
+// asked what the item is [the Type picker], based on what they choose the link will get added to
+// the shopping list."
+export const WALL_ART_DEFAULT_LINKS = {
+  poster: 'https://amzn.to/4A2Z82O',
+  flag: 'https://amzn.to/46XuoD0',
+  tapestry: 'https://amzn.to/3Vc2kZX',
+}
+
 // Builds a catalog-shaped object from a custom_posters DB row (see storage.js's
 // listMyCustomPosters/uploadCustomPoster) — [width, depth, height] dims convention (a thin flat
 // panel, depth is just a frame's worth of thickness), with `posterImageUrl` in place of a
 // modelUrl/color — roomEngine.js's _loadItemMesh checks for that field first and builds a textured
 // panel (the uploaded image on its two large faces, a plain frame color on the thin edges) instead
 // of loading a glTF model or a flat-color placeholder box. row.art_type ('poster'/'flag'/'tapestry',
-// see migration 021) only affects the label shown here — rendering is identical for all three, a
-// real per-type frame/hem treatment wasn't asked for.
+// see migration 021) picks the label here and, when the uploader left Product URL blank, which of
+// WALL_ART_DEFAULT_LINKS's real affiliate links appears on the shopping list — rendering itself is
+// identical for all three, a real per-type frame/hem treatment wasn't asked for.
 export function buildCustomPosterCatalogItem(row) {
   const type = WALL_ART_TYPES.find((t) => t.id === row.art_type) || WALL_ART_TYPES[0]
   return {
@@ -996,7 +1025,7 @@ export function buildCustomPosterCatalogItem(row) {
     name: row.name,
     price: 0,
     retailer: 'Your Upload',
-    productUrl: row.product_url || null,
+    productUrl: row.product_url || WALL_ART_DEFAULT_LINKS[type.id] || null,
     dims: [row.width_in / 12, 0.05, row.height_in / 12],
     color: 0xe8e0cf,
     category: 'Decor',
@@ -1005,6 +1034,64 @@ export function buildCustomPosterCatalogItem(row) {
     posterImageUrl: row.image_url,
     isCustomPoster: true,
     artType: type.id,
+    relatedIds: [],
+  }
+}
+
+// Custom Rug import — same "upload your own artwork, place it as a real object" pattern as Custom
+// Wall Art above (see buildCustomPosterCatalogItem), just floor-flat instead of wall-hung, and with
+// a shape choice (round/square rugs can't just be "wide × tall" the way a poster can). See
+// storage.js's listMyCustomRugs/uploadCustomRug and roomEngine.js's _buildRugMesh (checks for
+// `rugImageUrl` the same way _loadItemMesh already checks `posterImageUrl`).
+export const RUG_SHAPES = [
+  { id: 'rectangle', label: 'Rectangle' },
+  { id: 'round', label: 'Round' },
+  { id: 'square', label: 'Square' },
+]
+
+// Rectangle presets are widthIn/heightIn (a real 5×3/5×8/8×10 footprint); round/square presets are
+// a single diameter/side stored in widthIn (heightIn mirrors it) since RugUploadForm.jsx's "Custom"
+// option for those two shapes only asks for one dimension, not two.
+export const RUG_SIZE_PRESETS = {
+  rectangle: [
+    { label: "5' × 3'", widthIn: 60, heightIn: 36 },
+    { label: "5' × 8'", widthIn: 60, heightIn: 96 },
+    { label: "8' × 10'", widthIn: 96, heightIn: 120 },
+  ],
+  round: [
+    { label: "4' diameter", widthIn: 48, heightIn: 48 },
+    { label: "5' diameter", widthIn: 60, heightIn: 60 },
+    { label: "6' diameter", widthIn: 72, heightIn: 72 },
+  ],
+  square: [
+    { label: "4' × 4'", widthIn: 48, heightIn: 48 },
+    { label: "5' × 5'", widthIn: 60, heightIn: 60 },
+    { label: "6' × 6'", widthIn: 72, heightIn: 72 },
+  ],
+}
+
+// Builds a catalog-shaped object from a custom_rugs DB row. dims follows the same [width, depth,
+// height] convention every rug in CATALOG uses (0.06ft = a rug's real-world thickness) — for a
+// round rug, width_in doubles as the diameter on both floor axes since there's no separate
+// width/height to a circle.
+export function buildCustomRugCatalogItem(row) {
+  const shape = RUG_SHAPES.find((s) => s.id === row.shape) || RUG_SHAPES[0]
+  const depthIn = shape.id === 'round' ? row.width_in : row.height_in
+  return {
+    id: `rug-${row.id}`,
+    customRugId: row.id,
+    name: row.name,
+    price: 0,
+    retailer: 'Your Upload',
+    productUrl: row.product_url || null,
+    dims: [row.width_in / 12, depthIn / 12, 0.06],
+    color: 0x9c8a6b,
+    category: 'Decor',
+    subcategory: 'Room',
+    isRug: true,
+    rugImageUrl: row.image_url,
+    rugShape: shape.id,
+    isCustomRug: true,
     relatedIds: [],
   }
 }

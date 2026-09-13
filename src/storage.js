@@ -1329,3 +1329,67 @@ export async function deleteCustomPoster(id, imageUrl) {
   const path = imageUrl?.split('/custom-posters/')[1]
   if (path) client.storage.from('custom-posters').remove([decodeURIComponent(path)]).catch(() => {})
 }
+
+// custom_rugs (migration 022) — a user's own uploaded rug design, placed as a flat textured floor
+// slab in the shape they picked (see catalog.js's RUG_SHAPES/buildCustomRugCatalogItem). Otherwise
+// an exact copy of the custom_posters trio above — same bucket/RLS shape, same
+// "personal, registered into the live catalog lookup" pattern, just a different table/bucket and a
+// `shape` column instead of `art_type`.
+function rugPath(userId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+  return `${userId}/${crypto.randomUUID()}.${ext}`
+}
+
+const CUSTOM_RUG_COLUMNS = 'id, name, image_url, product_url, shape, width_in, height_in, created_at'
+
+export async function listMyCustomRugs() {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { data, error } = await client
+    .from('custom_rugs')
+    .select(CUSTOM_RUG_COLUMNS)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function uploadCustomRug({ file, name, shape, widthIn, heightIn, productUrl }) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const clean = name.trim()
+  if (!clean) throw new Error('Rug name required')
+  const path = rugPath(user.id, file)
+  const { error: uploadError } = await client.storage.from('custom-rugs').upload(path, file, {
+    contentType: file.type || 'image/jpeg',
+  })
+  if (uploadError) throw uploadError
+  const imageUrl = client.storage.from('custom-rugs').getPublicUrl(path).data.publicUrl
+  const { data, error } = await client
+    .from('custom_rugs')
+    .insert({
+      user_id: user.id,
+      name: clean,
+      image_url: imageUrl,
+      product_url: productUrl?.trim() || null,
+      shape: shape || 'rectangle',
+      width_in: widthIn,
+      height_in: heightIn,
+    })
+    .select(CUSTOM_RUG_COLUMNS)
+    .single()
+  if (error) {
+    client.storage.from('custom-rugs').remove([path]).catch(() => {})
+    throw error
+  }
+  return data
+}
+
+export async function deleteCustomRug(id, imageUrl) {
+  const client = requireClient()
+  const user = await requireUser(client)
+  const { error } = await client.from('custom_rugs').delete().eq('id', id).eq('user_id', user.id)
+  if (error) throw error
+  const path = imageUrl?.split('/custom-rugs/')[1]
+  if (path) client.storage.from('custom-rugs').remove([decodeURIComponent(path)]).catch(() => {})
+}

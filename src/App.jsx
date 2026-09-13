@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { RoomEngine } from './roomEngine.js'
-import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, BEDDING_COLOR_SWATCHES, WALL_ART_TYPES } from './catalog.js'
+import { CATALOG, CATEGORY_ORDER, CATEGORY_ICONS, PROVIDED_CATALOG, colgateDefaultLayout, loungeDefaultLayout, catalogItemLink, resolveRelatedItems, layoutShopSummary, buildCustomCatalogItem, registerCustomCatalogItem, unregisterCustomCatalogItem, buildCustomPosterCatalogItem, buildCustomRugCatalogItem, BEDDING_COLOR_SWATCHES, WALL_ART_TYPES, RUG_SHAPES } from './catalog.js'
 import CatalogThumb from './CatalogThumb.jsx'
 import SaveToBoardMenu from './SaveToBoardMenu.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
 import CustomItemForm from './CustomItemForm.jsx'
 import PosterUploadForm from './PosterUploadForm.jsx'
+import RugUploadForm from './RugUploadForm.jsx'
 import { UNIT_SYSTEMS, DEFAULT_UNIT_SYSTEM, formatLength } from './units.js'
 import { CHECKLIST_CATEGORY_ORDER } from './checklistItems.js'
 import {
@@ -20,6 +21,7 @@ import {
   leaveLayoutCollaboration, removeCollaborator, saveSharedLayout, listSharedWithMe, getLayoutForEditing,
   listMyCustomItems, createCustomItem, deleteCustomItem,
   listMyCustomPosters, uploadCustomPoster, deleteCustomPoster,
+  listMyCustomRugs, uploadCustomRug, deleteCustomRug,
 } from './storage.js'
 
 const REPORT_REASONS = ['Spam', 'Inappropriate', 'Other']
@@ -52,7 +54,7 @@ export const ROOM_TYPE_DEFAULTS = {
 // personal-room furniture at all (see loungeDefaultLayout, catalog.js) so it has no entry here.
 const COLGATE_SET_COUNTS = { single: 1, double: 2, triple: 3 }
 
-const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium', eco: '🌱 Eco-Friendly', retro: '📻 Retro' }
+const TIER_LABELS = { budget: 'Budget', moderate: 'Moderate', premium: 'Premium', eco: '🌱 Eco-Friendly', retro: '📻 Retro', small: 'Small', medium: 'Medium', large: 'Large' }
 
 // One catalog card for a tiered conceptual item (e.g. "Mattress Topper") — a shared thumbnail
 // and dims up top, then a small budget/moderate/premium option per tier. Each option adds that
@@ -328,6 +330,11 @@ export default function App() {
   const [customPosters, setCustomPosters] = useState([])
   const [customPostersError, setCustomPostersError] = useState('')
   const [showPosterUploadForm, setShowPosterUploadForm] = useState(false)
+  // Custom rugs — same registry pattern as custom posters above, just a floor rug instead of a
+  // wall panel. See catalog.js's buildCustomRugCatalogItem.
+  const [customRugs, setCustomRugs] = useState([])
+  const [customRugsError, setCustomRugsError] = useState('')
+  const [showRugUploadForm, setShowRugUploadForm] = useState(false)
   // Still named "browse*" — now the error/notice surface for the Saved tab's "Saved from others"
   // actions (like/save/copy on a PublicLayoutRow there), which is the same handful of handlers
   // Browse used to share this state with before it moved to BrowsePage.jsx.
@@ -559,6 +566,10 @@ export default function App() {
         prev.forEach((row) => unregisterCustomCatalogItem(`poster-${row.id}`))
         return []
       })
+      setCustomRugs((prev) => {
+        prev.forEach((row) => unregisterCustomCatalogItem(`rug-${row.id}`))
+        return []
+      })
       return
     }
     getMyProfile().then(setMyProfile).catch(() => {})
@@ -582,6 +593,12 @@ export default function App() {
         setCustomPosters(rows)
       })
       .catch((err) => setCustomPostersError(err.message))
+    listMyCustomRugs()
+      .then((rows) => {
+        rows.forEach((row) => registerCustomCatalogItem(buildCustomRugCatalogItem(row)))
+        setCustomRugs(rows)
+      })
+      .catch((err) => setCustomRugsError(err.message))
   }, [session])
 
   useEffect(() => {
@@ -800,12 +817,14 @@ export default function App() {
   }
 
   // Single entry point for "add this catalog item" clicks (the main catalog list, its tiered
-  // group cards, and the "GOES WELL WITH"/+Room suggestions). Three groups ask what color before
+  // group cards, and the "GOES WELL WITH"/+Room suggestions). Four groups ask what color before
   // doing anything (see the colorPrompt modal below, and its own comment above the state
   // declaration): pillowcases and sheets have no placeable model of their own (they re-tint
-  // something already in the room — pillows, a bed's mattress), and the throw blanket dresses the
+  // something already in the room — pillows, a bed's mattress), the throw blanket dresses the
   // bed with a real model but still asks first so it renders in the chosen color instead of its
-  // own tier default. Every other catalog item is unaffected and just adds normally.
+  // own tier default, and a rug (a real placeable model) asks first purely per Tyler's request —
+  // added in that color instead of the catalog default + a later swatch pick. Every other catalog
+  // item is unaffected and just adds normally.
   function handleAddCatalogItem(catalogId) {
     const cat = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === catalogId)
     if (cat && cat.recolorsPillows) {
@@ -818,6 +837,10 @@ export default function App() {
     }
     if (cat && cat.dressesBed && cat.groupId === 'blanket-throw') {
       setColorPrompt({ cat, kind: 'throw-blanket' })
+      return
+    }
+    if (cat && cat.isRug && cat.colorable) {
+      setColorPrompt({ cat, kind: 'rug' })
       return
     }
     engineRef.current.addItem(catalogId)
@@ -868,6 +891,26 @@ export default function App() {
       setCustomPosters((prev) => prev.filter((row) => row.id !== id))
     } catch (err) {
       setCustomPostersError(err.message)
+    }
+  }
+
+  // Custom rugs — same "register into the live catalog on create, unregister on delete" flow as
+  // custom posters above.
+  async function handleUploadRug(payload) {
+    const row = await uploadCustomRug(payload)
+    registerCustomCatalogItem(buildCustomRugCatalogItem(row))
+    setCustomRugs((prev) => [...prev, row])
+    setShowRugUploadForm(false)
+  }
+
+  async function handleDeleteCustomRug(id, imageUrl) {
+    setCustomRugsError('')
+    try {
+      await deleteCustomRug(id, imageUrl)
+      unregisterCustomCatalogItem(`rug-${id}`)
+      setCustomRugs((prev) => prev.filter((row) => row.id !== id))
+    } catch (err) {
+      setCustomRugsError(err.message)
     }
   }
 
@@ -1749,6 +1792,29 @@ export default function App() {
               </div>
             )}
 
+            {selection.cat.curtainToggle && (
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>
+                  Curtain
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[{ value: 'down', label: 'Down (Blackout)' }, { value: 'up', label: 'Up (Clear)' }].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => engineRef.current.setCurtainState(selection.uid, value)}
+                      style={{
+                        flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
+                        background: (selection.curtainState || 'down') === value ? 'var(--accent)' : 'var(--paper-shadow)',
+                        color: (selection.curtainState || 'down') === value ? '#fff' : 'var(--ink-soft)',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selection.cat.canWallMount && (
               <>
                 <button
@@ -2050,6 +2116,37 @@ export default function App() {
                                       className="remove-btn"
                                       title="Delete"
                                       onClick={(e) => { e.stopPropagation(); handleDeleteCustomPoster(row.id, row.image_url) }}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </>
+                          )}
+                          <button className="custom-item-trigger" onClick={() => setShowRugUploadForm(true)}>
+                            + Upload custom rug
+                          </button>
+                          {customRugsError && <div className="board-popover-error" style={{ marginBottom: 8 }}>{customRugsError}</div>}
+                          {customRugs.length > 0 && (
+                            <>
+                              <div className="subcategory-label">My Rugs</div>
+                              {customRugs.map((row) => {
+                                const cat = buildCustomRugCatalogItem(row)
+                                const shapeLabel = (RUG_SHAPES.find((s) => s.id === row.shape) || RUG_SHAPES[0]).label
+                                return (
+                                  <div key={row.id} className="cat-item custom-item-row" onClick={() => engineRef.current.addItem(cat.id)}>
+                                    <div className="swatch" style={{ padding: 0 }}>
+                                      <img src={row.image_url} alt="" className="swatch-img" />
+                                    </div>
+                                    <div className="cat-info">
+                                      <div className="name">{cat.name}</div>
+                                      <div className="meta">{shapeLabel} · {row.width_in}" × {row.height_in}"</div>
+                                    </div>
+                                    <button
+                                      className="remove-btn"
+                                      title="Delete"
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteCustomRug(row.id, row.image_url) }}
                                     >
                                       ×
                                     </button>
@@ -2720,6 +2817,7 @@ export default function App() {
               {colorPrompt.kind === 'sheets' && 'Choose a sheet color'}
               {colorPrompt.kind === 'pillowcases' && 'Choose a pillowcase color'}
               {colorPrompt.kind === 'throw-blanket' && 'Choose a throw blanket color'}
+              {colorPrompt.kind === 'rug' && 'Choose a rug color'}
             </h2>
             <div className="rsub">
               {colorPrompt.kind === 'sheets' &&
@@ -2728,6 +2826,8 @@ export default function App() {
                 `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors ${cart.filter((c) => c.cat?.isBed).length > 1 ? "your selected bed's pillows" : 'every pillow already in your room'}.`}
               {colorPrompt.kind === 'throw-blanket' &&
                 `Pick a color for ${colorPrompt.cat.name} before it dresses your bed.`}
+              {colorPrompt.kind === 'rug' &&
+                `Pick a color for ${colorPrompt.cat.name} before it's placed.`}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               {BEDDING_COLOR_SWATCHES.map((hex) => (
@@ -2736,7 +2836,7 @@ export default function App() {
                   onClick={() => {
                     if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
-                    else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
                   title={`#${hex.toString(16).padStart(6, '0')}`}
@@ -2892,6 +2992,10 @@ export default function App() {
 
       {showPosterUploadForm && (
         <PosterUploadForm onCreate={handleUploadPoster} onClose={() => setShowPosterUploadForm(false)} />
+      )}
+
+      {showRugUploadForm && (
+        <RugUploadForm onCreate={handleUploadRug} onClose={() => setShowRugUploadForm(false)} />
       )}
 
       {showReceipt && (

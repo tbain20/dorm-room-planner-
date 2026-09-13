@@ -437,6 +437,26 @@ function DesignEditor({ initialDesign, onExit }) {
                     </div>
                   </div>
                 )}
+                {selection.cat.curtainToggle && (
+                  <div style={{ marginBottom: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--ink-soft)', marginBottom: 6 }}>Curtain</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {[{ value: 'down', label: 'Down (Blackout)' }, { value: 'up', label: 'Up (Clear)' }].map(({ value, label }) => (
+                        <button
+                          key={value}
+                          onClick={() => engineRef.current.setCurtainState(selection.uid, value)}
+                          style={{
+                            flex: 1, border: 'none', borderRadius: 8, padding: 7, fontSize: 11, cursor: 'pointer',
+                            background: (selection.curtainState || 'down') === value ? 'var(--accent)' : 'var(--paper-shadow)',
+                            color: (selection.curtainState || 'down') === value ? '#fff' : 'var(--ink-soft)',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button
                   style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0, marginTop: 4 }}
                   onClick={() => engineRef.current.removeItem(selection.uid)}

@@ -21,6 +21,7 @@ const WINDOW_MAX_WIDTH = 10.0
 const WINDOW_MIN_HEIGHT = 2.0
 const WINDOW_MAX_HEIGHT = 7.0
 const WINDOW_SILL_HEIGHT = 2.5 // feet off the floor to the bottom of the window
+const CURTAIN_THICKNESS = 0.1 // feet — a curtain panel's own thin depth (see _fitCurtainToWindow)
 const FEATURE_COLLISION_DEPTH = 0.2 // feet — a door/window has no real thickness of its own (see
 // _buildFeatureMesh); this stands in for it so _featureCollisionBox is a thin box, not a flat
 // zero-volume plane an item's box could never actually intersect.
@@ -463,6 +464,12 @@ export class RoomEngine {
       if (cat?.doorMountOnly) {
         const door = this._nearestDoorFeature(p.mesh.position)
         if (door) this._doorMountPlacement(p.mesh, cat, door)
+      } else if (cat?.windowMountOnly) {
+        const window = this._nearestWindowFeature(p.mesh.position)
+        if (window) {
+          this._resizeBoxMesh(p.mesh, this._fitCurtainToWindow(window))
+          this._windowMountPlacement(p.mesh, cat, window)
+        }
       } else if (this._isWallMounted(p, cat)) this._resnapWallItemToNearestWall(p.mesh, cat)
       else this._clampItemToRoom(p.mesh)
     })
@@ -685,6 +692,37 @@ export class RoomEngine {
     return mesh
   }
 
+  // Custom uploaded rug design (see catalog.js's buildCustomRugCatalogItem) — same
+  // "texture-on-a-thin-slab" idea as _buildPosterMesh above, just floor-flat and shape-aware
+  // instead of one fixed wall-panel box: rugRectangle.glb/etc.'s own pile-carpet geometry has no
+  // guaranteed usable top-face UVs to texture directly, so this renders a plain slab instead — a
+  // box for rectangle/square (texture on the +Y top face — BoxGeometry's own face-group order,
+  // same convention _buildPosterMesh's comment above explains, just top instead of front/back), or
+  // a short cylinder for round (texture on its top cap, material group 1). No frame edges — unlike
+  // a poster this isn't meant to look picture-framed, just a rug lying on the floor.
+  _buildRugMesh(cat) {
+    const [w, d, h] = cat.dims
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x9c8a6b })
+    const topMat = new THREE.MeshStandardMaterial({ color: 0x9c8a6b })
+    new THREE.TextureLoader().load(cat.rugImageUrl, (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace
+      topMat.map = texture
+      topMat.color.set(0xffffff)
+      topMat.needsUpdate = true
+    })
+    let mesh
+    if (cat.rugShape === 'round') {
+      const geo = new THREE.CylinderGeometry(w / 2, w / 2, h, 48)
+      mesh = new THREE.Mesh(geo, [baseMat, topMat, baseMat])
+    } else {
+      const geo = new THREE.BoxGeometry(w, h, d)
+      mesh = new THREE.Mesh(geo, [baseMat, baseMat, topMat, baseMat, baseMat, baseMat])
+    }
+    mesh.position.set(0, h / 2, 0)
+    mesh.userData.dims = [w, d, h]
+    return mesh
+  }
+
   // Shared with thumbnailRenderer.js (see modelFit.js) so the live 3D view and the dev-only
   // catalog thumbnail generator always agree on how a model gets fit to its dims — a second,
   // drifted copy of this logic previously mishandled a pre-applied rotation and would bake a
@@ -711,6 +749,8 @@ export class RoomEngine {
   _loadItemMesh(cat, onReady) {
     if (cat.posterImageUrl) {
       onReady(this._buildPosterMesh(cat))
+    } else if (cat.rugImageUrl) {
+      onReady(this._buildRugMesh(cat))
     } else if (cat.modelUrl) {
       this.gltfLoader.load(
         cat.modelUrl,
@@ -941,7 +981,7 @@ export class RoomEngine {
     // organizer an extra FEATURE_COLLISION_DEPTH/2 off the door plane, leaving a visible gap
     // instead of sitting flush against it.
     const cat = ALL_ITEMS.find((c) => c.id === mesh.userData.catalogId)
-    if (cat?.doorMountOnly) return
+    if (cat?.doorMountOnly || cat?.windowMountOnly) return
     for (let pass = 0; pass < 4; pass++) {
       const box = new THREE.Box3().setFromObject(mesh)
       let pushedAny = false
@@ -1014,18 +1054,28 @@ export class RoomEngine {
       }
     } else {
       // Box placeholder fallback for a matchBaseFootprint item with no model — swap geometry
-      // directly rather than rescaling, and rebuild the edge outline so it isn't left showing the
-      // old footprint's size.
-      item.mesh.geometry.dispose()
-      item.mesh.geometry = new THREE.BoxGeometry(w, h, d)
-      const oldEdges = item.mesh.children.find((c) => c.isLineSegments)
-      if (oldEdges) {
-        item.mesh.remove(oldEdges)
-        oldEdges.geometry.dispose()
-      }
-      item.mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(item.mesh.geometry), new THREE.LineBasicMaterial({ color: 0x1b2a38 })))
+      // directly rather than rescaling (see _resizeBoxMesh).
+      this._resizeBoxMesh(item.mesh, [w, d, h])
+      return
     }
     item.mesh.userData.dims = [w, d, h]
+  }
+
+  // Resizes a plain box-placeholder mesh (no glTF model — _buildBoxMesh's output) in place: swaps
+  // its geometry directly rather than rescaling, and rebuilds the edge outline so it isn't left
+  // showing the old size. Shared by _refitFootprint (the mattress topper) and
+  // _resyncWindowMountedItems (blackout curtains, whose own size has to track their window's
+  // current width/height).
+  _resizeBoxMesh(mesh, [w, d, h]) {
+    mesh.geometry.dispose()
+    mesh.geometry = new THREE.BoxGeometry(w, h, d)
+    const oldEdges = mesh.children.find((c) => c.isLineSegments)
+    if (oldEdges) {
+      mesh.remove(oldEdges)
+      oldEdges.geometry.dispose()
+    }
+    mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color: 0x1b2a38 })))
+    mesh.userData.dims = [w, d, h]
   }
 
   // Alignment aid for dragging a floor item near another one — independent X and Z snapping, each
@@ -1302,8 +1352,10 @@ export class RoomEngine {
     })
   }
 
-  // colorHex is only ever passed for a dressesBed item (the throw blanket's "what color?" prompt
-  // in App.jsx — see _applyBedDressing) — every other catalog item ignores the second argument.
+  // colorHex is passed for a dressesBed item (the throw blanket's "what color?" prompt in App.jsx
+  // — see _applyBedDressing) and, more generally, for any colorable item added via a
+  // color-prompt-before-placing flow (rugs — see App.jsx's colorPrompt 'rug' kind) — every other
+  // catalog item ignores the second argument.
   addItem(catId, colorHex) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
@@ -1349,6 +1401,23 @@ export class RoomEngine {
       })
       return
     }
+    if (cat.windowMountOnly) {
+      // Prefer whichever window is currently selected (Tyler: "automatically cover the selected
+      // window") — falls back to the first window in the room the same way doorMountOnly falls
+      // back to the first door when nothing more specific is picked.
+      const window = (this.selectedFeature && this.selectedFeature.type === 'window' ? this.selectedFeature : null) || this._firstWindowFeature()
+      if (!window) {
+        this.onNotice('Add a window to the room first.')
+        return
+      }
+      const fit = this._fitCurtainToWindow(window)
+      this._loadItemMesh({ ...cat, dims: fit }, (mesh) => {
+        this._windowMountPlacement(mesh, cat, window)
+        this._registerItem(mesh, cat)
+        this.selectItem(mesh.userData.uid)
+      })
+      return
+    }
     this._loadItemMesh(cat, (mesh) => {
       if (cat.wallMountable) {
         this._defaultWallPlacement(mesh, cat)
@@ -1357,8 +1426,9 @@ export class RoomEngine {
         mesh.position.x = jitter
         mesh.position.z = jitter
       }
-      this._registerItem(mesh, cat)
-      this.selectItem(mesh.userData.uid)
+      const uid = this._registerItem(mesh, cat)
+      if (colorHex != null && cat.colorable) this.setItemColor(uid, colorHex)
+      this.selectItem(uid)
     })
   }
 
@@ -1388,6 +1458,16 @@ export class RoomEngine {
         else {
           const door = this._nearestDoorFeature(mesh.position)
           if (door) this._doorMountPlacement(mesh, cat, door)
+        }
+      } else if (cat.windowMountOnly) {
+        // Re-fit to whichever window is nearest this restored position (loadState/duplicate/paste)
+        // — mirrors doorMountOnly's own re-association above, plus the resize a curtain (unlike a
+        // door-mounted item) needs since its size itself depends on the window.
+        const win = this._nearestWindowFeature(mesh.position)
+        if (win) {
+          const fit = this._fitCurtainToWindow(win)
+          this._resizeBoxMesh(mesh, fit)
+          this._windowMountPlacement(mesh, cat, win)
         }
       } else if (cat.canWallMount && y != null) {
         mesh.position.y = y
@@ -1536,6 +1616,69 @@ export class RoomEngine {
     })
   }
 
+  // windowMountOnly (blackout curtains) — same trio as the door helpers above, used to find
+  // something for a curtain to attach to.
+  _windowFeatures() {
+    return this.wallFeatures.filter((f) => f.type === 'window')
+  }
+
+  _firstWindowFeature() {
+    return this._windowFeatures()[0] || null
+  }
+
+  _nearestWindowFeature(point) {
+    const windows = this._windowFeatures()
+    if (!windows.length) return null
+    if (!point) return windows[0]
+    let best = windows[0]
+    let bestDist = Infinity
+    for (const w of windows) {
+      const [x, z] = this._wallConfig(w.wall).pos(w.offset)
+      const dist = Math.hypot(point.x - x, point.z - z)
+      if (dist < bestDist) {
+        bestDist = dist
+        best = w
+      }
+    }
+    return best
+  }
+
+  // A curtain's real size always tracks whatever window it's on, "no matter the dimensions" of
+  // that window (Tyler's own wording) — width overhangs the window frame by 0.3ft each side (like
+  // a real curtain rod extending past the window), and height runs from the floor up to just above
+  // the frame (WINDOW_SILL_HEIGHT + the window's own height + a little rod clearance) so it always
+  // fully covers the opening regardless of how tall or short that window's sill/height are.
+  _fitCurtainToWindow(window) {
+    return [window.width + 0.6, CURTAIN_THICKNESS, WINDOW_SILL_HEIGHT + window.height + 0.4]
+  }
+
+  // Centers a curtain on `window`, flush against its wall (same normal-offset convention every
+  // other wall item uses) and floor-to-height (unlike a doorMountOnly item, which hangs from the
+  // top — a curtain's own fitted height already starts at the floor, see _fitCurtainToWindow).
+  _windowMountPlacement(mesh, cat, window) {
+    const [, , height] = this._fitCurtainToWindow(window)
+    const cfg = this._wallConfig(window.wall)
+    const [x, z] = cfg.pos(window.offset)
+    const normal = this._wallNormal(window.wall)
+    mesh.position.set(x + normal.x * (CURTAIN_THICKNESS / 2), height / 2, z + normal.z * (CURTAIN_THICKNESS / 2))
+    mesh.rotation.y = cfg.rotY
+  }
+
+  // Keeps every windowMountOnly item glued to — and correctly *sized* to — its own window, both
+  // while the window is being dragged along its wall and after its width/height change (setFeatureSize)
+  // — the resize is the one real difference from _resyncDoorMountedItems, since nothing about a
+  // door-mounted item's own size depends on its door.
+  _resyncWindowMountedItems() {
+    this.placedItems.forEach((p) => {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      if (!cat?.windowMountOnly) return
+      const window = this._nearestWindowFeature(p.mesh.position)
+      if (!window) return
+      this._resizeBoxMesh(p.mesh, this._fitCurtainToWindow(window))
+      this._windowMountPlacement(p.mesh, cat, window)
+    })
+  }
+
   // Raycasts (using this.raycaster, already primed from the current pointer position by the
   // caller) against the room's actual wall meshes rather than an infinite floor plane — this is
   // what lets a wall item be dragged along an L-shaped notch/bump-out room's real wall layout
@@ -1624,8 +1767,10 @@ export class RoomEngine {
   // mirror, ...) unconditionally, or for a cat.canWallMount item (currently just the TV) whose
   // *this instance* has been toggled onto the wall via setWallMounted. Centralized here so every
   // site that used to check cat.wallMountable alone picks up the TV's toggle for free.
+  // windowMountOnly (blackout curtains) counts too, same reasoning as doorMountOnly — its own y (and
+  // x/z/size) is always re-derived from its window, never a freely persisted position.
   _isWallMounted(item, cat) {
-    return !!(cat?.wallMountable || cat?.doorMountOnly || (cat?.canWallMount && item?.wallMounted))
+    return !!(cat?.wallMountable || cat?.doorMountOnly || cat?.windowMountOnly || (cat?.canWallMount && item?.wallMounted))
   }
 
   // Flips a placed cat.canWallMount item (the TV) between a normal floor item and a wall-mounted
@@ -1707,6 +1852,7 @@ export class RoomEngine {
     this.placedItems.push({
       mesh, catalogId: cat.id, uid, stackedOnUid: null, bedHeightLevel: 'standard', locked: false, wallMounted: false,
       pillowPose: cat.hasPoseOptions ? 'flat' : undefined,
+      curtainState: cat.curtainToggle ? 'down' : undefined,
       colorHex: cat.colorable ? cat.color : undefined,
       // dressesBedUid (a comforter — see catalog.js) / dressingUid (a bed): the two-way link
       // _applyBedDressing sets up between a bed and whatever's currently dressing it, so removing
@@ -1815,8 +1961,9 @@ export class RoomEngine {
     // A doorMountOnly item's rotation is never a user choice — it always matches whatever door
     // it's hanging on (see selectItem's own re-snap) — so the rotate button is a no-op for it
     // rather than spinning it away from the door until the next selection silently undoes it.
+    // Same for a windowMountOnly curtain and its window.
     const cat = ALL_ITEMS.find((c) => c.id === this.selected.catalogId)
-    if (cat?.doorMountOnly) return
+    if (cat?.doorMountOnly || cat?.windowMountOnly) return
     this._pushUndo()
     this.selected.mesh.rotation.y = (this.selected.mesh.rotation.y + deltaRad) % (Math.PI * 2)
     // Anything stacked on the selected item — directly, or several layers up a bedding stack —
@@ -1876,6 +2023,7 @@ export class RoomEngine {
         if (src.bedHeightLevel && src.bedHeightLevel !== 'standard') this.setBedHeight(uid, src.bedHeightLevel)
         if (src.colorHex != null) this.setItemColor(uid, src.colorHex)
         if (src.pillowPose && src.pillowPose !== 'flat') this.setItemPose(uid, src.pillowPose)
+        if (src.curtainState && src.curtainState !== 'down') this.setCurtainState(uid, src.curtainState)
         // bedOnly items (see catalog.js) can't exist un-stacked — re-attach the duplicate to
         // whatever the original was resting on instead of leaving it floating on the floor.
         if (cat.bedOnly && src.stackedOnUid != null && this.placedItems.find((p) => p.uid === src.stackedOnUid)) {
@@ -1903,6 +2051,7 @@ export class RoomEngine {
       wallMounted: src.wallMounted,
       colorHex: src.colorHex,
       pillowPose: src.pillowPose,
+      curtainState: src.curtainState,
       stackedOnUid: src.stackedOnUid,
     }
     // One shared clipboard slot between an item and a door/window — see copySelectedFeature.
@@ -1946,6 +2095,7 @@ export class RoomEngine {
       if (c.bedHeightLevel && c.bedHeightLevel !== 'standard') this.setBedHeight(uid, c.bedHeightLevel)
       if (c.colorHex != null) this.setItemColor(uid, c.colorHex)
       if (c.pillowPose && c.pillowPose !== 'flat') this.setItemPose(uid, c.pillowPose)
+      if (c.curtainState && c.curtainState !== 'down') this.setCurtainState(uid, c.curtainState)
       if (cat.bedOnly && c.stackedOnUid != null && this.placedItems.find((p) => p.uid === c.stackedOnUid)) {
         this.stackItemOn(uid, c.stackedOnUid)
       }
@@ -1970,6 +2120,12 @@ export class RoomEngine {
     if (cat?.doorMountOnly) {
       const door = this._nearestDoorFeature(item.mesh.position)
       if (door) this._doorMountPlacement(item.mesh, cat, door)
+    } else if (cat?.windowMountOnly) {
+      const window = this._nearestWindowFeature(item.mesh.position)
+      if (window) {
+        this._resizeBoxMesh(item.mesh, this._fitCurtainToWindow(window))
+        this._windowMountPlacement(item.mesh, cat, window)
+      }
     }
     this.selected = item
     this.selectionHelper = new THREE.BoxHelper(item.mesh, item.locked ? LOCKED_SELECTION_COLOR : SELECTION_COLOR)
@@ -1989,7 +2145,7 @@ export class RoomEngine {
   // the comment above this method's caller).
   _buildRotateGizmo(item, cat) {
     this._removeRotateGizmo()
-    if (item.locked || cat?.doorMountOnly) return
+    if (item.locked || cat?.doorMountOnly || cat?.windowMountOnly) return
     const canvas = document.createElement('canvas')
     canvas.width = 220
     canvas.height = 100
@@ -2723,6 +2879,7 @@ export class RoomEngine {
       wallMounted: this.selected.wallMounted,
       colorHex: this.selected.colorHex,
       pillowPose: this.selected.pillowPose,
+      curtainState: this.selected.curtainState,
     })
   }
 
@@ -3005,6 +3162,21 @@ export class RoomEngine {
     if (this.selected && this.selected.uid === uid) this._emitSelection()
   }
 
+  // 'down' (blackout, drawn) shows the curtain normally; 'up' (open/clear) hides it outright —
+  // Tyler's own wording, "up is clear no model" — rather than, say, shrinking it to a rolled-up
+  // strip at the top, since no stand-in model exists for that and the point is just to let the
+  // window read as unobstructed.
+  setCurtainState(uid, state) {
+    const item = this.placedItems.find((p) => p.uid === uid)
+    if (!item) return
+    const cat = ALL_ITEMS.find((c) => c.id === item.catalogId)
+    if (!cat || !cat.curtainToggle || (state !== 'down' && state !== 'up')) return
+    this._pushUndo()
+    item.curtainState = state
+    item.mesh.visible = state !== 'up'
+    if (this.selected && this.selected.uid === uid) this._emitSelection()
+  }
+
   // Per-instance color override (comforter/pillows/sheets/throw blanket — see catalog.js's
   // colorable) — tintModel's traverse works generically whether the target is a glTF Group
   // (primaryModel) or a bare placeholder Mesh (sheet-set has no model), so one code path covers
@@ -3202,6 +3374,7 @@ export class RoomEngine {
           locked: p.locked,
           colorHex: p.colorHex,
           pillowPose: p.pillowPose,
+          curtainState: p.curtainState,
           // Which sheet-set/pillowcase-set tier last recolored this bed/pillow, if any (see
           // _emitCart) — without saving these, a real sheets/pillowcase purchase would silently
           // vanish off the shopping list the instant a layout gets reloaded.
@@ -3310,6 +3483,7 @@ export class RoomEngine {
             }
           }
           if (it.pillowPose && it.pillowPose !== 'flat') this.setItemPose(uid, it.pillowPose)
+          if (it.curtainState && it.curtainState !== 'down') this.setCurtainState(uid, it.curtainState)
           remaining -= 1
           if (remaining === 0) this._resolveLoadedStacking(data.items, uidsByIndex)
         }, it.y)
@@ -3528,6 +3702,19 @@ export class RoomEngine {
         else this.removeItem(p.uid)
       })
     }
+    // Same idea for a windowMountOnly curtain — can't exist off a window, so re-fit/re-glue it to
+    // whichever window is now nearest, or remove it if that was the last one.
+    if (removed.type === 'window') {
+      ;[...this.placedItems].forEach((p) => {
+        const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+        if (!cat?.windowMountOnly) return
+        const window = this._nearestWindowFeature(p.mesh.position)
+        if (window) {
+          this._resizeBoxMesh(p.mesh, this._fitCurtainToWindow(window))
+          this._windowMountPlacement(p.mesh, cat, window)
+        } else this.removeItem(p.uid)
+      })
+    }
   }
 
   // Re-reports the selected feature's current state to React — needed after any in-place
@@ -3573,6 +3760,9 @@ export class RoomEngine {
     // would skip re-applying a still-active collision tint to them, leaving a window that was
     // red before a resize looking falsely clear until its collision state actually flips.
     feature._collisionTinted = undefined
+    // A curtain's own size is derived from its window (see _fitCurtainToWindow) — resizing the
+    // window here has to grow/shrink any curtain already on it too, not just reposition it.
+    this._resyncWindowMountedItems()
     if (this.selectedFeature?.id === id) {
       this.selectedFeature = feature
       this._updateFeatureSelectionHelper()
@@ -3754,6 +3944,13 @@ export class RoomEngine {
           // as a locked item above; it still selects so color/tier/remove controls stay reachable.
           this.mode = 'orbit'
           this.selectItem(item.uid)
+        } else if (itemCat?.windowMountOnly) {
+          // A curtain's position *and* size are both entirely derived from its window (see
+          // _fitCurtainToWindow/_windowMountPlacement) — nothing here to drag independently, same
+          // fallback-to-orbit as a locked item above (Remove/Lock/Duplicate/the Up-Down toggle all
+          // still work from the selection panel).
+          this.mode = 'orbit'
+          this.selectItem(item.uid)
         } else if (this._isWallMounted(item, itemCat) && this.nearWallEntries.has(this._nearestWallMeshTo(item.mesh))) {
           // This item is mounted on whichever wall is currently nearly-invisible because it's
           // facing the camera (see _updateNearWall) — exactly the wall a click aimed at something
@@ -3927,6 +4124,7 @@ export class RoomEngine {
           this.selectedFeature.offset = offsetForFeature(this.selectedFeature, floorPt) + this.dragOffset.x
           this._repositionFeature(this.selectedFeature)
           if (this.selectedFeature.type === 'door') this._resyncDoorMountedItems()
+          else if (this.selectedFeature.type === 'window') this._resyncWindowMountedItems()
           this._updateFeatureSelectionHelper()
         }
       }
