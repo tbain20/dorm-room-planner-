@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from './useAuth.js'
 import AuthPanel from './AuthPanel.jsx'
 import RoomFallbackIcon from './RoomFallbackIcon.jsx'
@@ -123,9 +123,15 @@ export default function ProfilePage() {
   const { id } = useParams()
   const { session, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const targetId = id || session?.user?.id
   const isSelf = !!session && targetId === session.user.id
+  // Where "back" should go — the editor that opened this profile (App.jsx's handleViewProfile
+  // passes state.from) if that's how we got here, otherwise the marketing homepage, same as
+  // arriving via a direct link, the account-menu's plain "Profile" item, or a shared profile URL.
+  const backTo = location.state?.from || '/'
+  const backLabel = location.state?.from ? '← Back to room planner' : '← Dorm Room Planner'
 
   const [profile, setProfile] = useState(null)
   const [notFound, setNotFound] = useState(false)
@@ -232,7 +238,7 @@ export default function ProfilePage() {
   if (!session && !id) {
     return (
       <div className="profile-page">
-        <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
+        <Link to={backTo} className="browse-back-link">{backLabel}</Link>
         <h1 style={{ fontFamily: 'var(--font-serif)', marginTop: 16 }}>Profile</h1>
         <p style={{ color: 'var(--ink-soft)', fontSize: 13.5, marginBottom: 20 }}>Sign in to see your profile.</p>
         <AuthPanel />
@@ -243,7 +249,7 @@ export default function ProfilePage() {
   if (notFound) {
     return (
       <div className="profile-page">
-        <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
+        <Link to={backTo} className="browse-back-link">{backLabel}</Link>
         <div className="empty-note" style={{ marginTop: 20 }}>This profile doesn't exist.</div>
       </div>
     )
@@ -252,7 +258,7 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="profile-page">
-        <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
+        <Link to={backTo} className="browse-back-link">{backLabel}</Link>
         <div className="empty-note" style={{ marginTop: 20 }}>Loading…</div>
       </div>
     )
@@ -262,7 +268,7 @@ export default function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <Link to="/" className="browse-back-link">← Dorm Room Planner</Link>
+      <Link to={backTo} className="browse-back-link">{backLabel}</Link>
       {error && <div className="board-popover-error" style={{ marginTop: 10 }}>{error}</div>}
 
       <div className="profile-header">

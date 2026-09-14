@@ -102,7 +102,7 @@ const UNDO_HISTORY_LIMIT = 50 // how many past snapshots undo() can reach back t
 // React — it just takes a DOM element to render into and a set of callbacks to report state
 // changes back out to. This keeps the 3D logic testable and reusable outside the component tree.
 export class RoomEngine {
-  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange, onMeasureChange, onNotice, unitSystem }) {
+  constructor(container, { onCartChange, onSelectionChange, onFeatureSelectionChange, onStackPickModeChange, onMeasureChange, onNotice, onDirty, unitSystem }) {
     this.container = container
     this.onCartChange = onCartChange || (() => {})
     this.onSelectionChange = onSelectionChange || (() => {})
@@ -112,6 +112,11 @@ export class RoomEngine {
     // Fired for a user-facing transient notice that isn't tied to the selection panel — currently
     // just "no bed in the room yet" when a bedOnly item (see catalog.js) can't auto-place itself.
     this.onNotice = onNotice || (() => {})
+    // Fired once per _pushUndo() (see below) — i.e. right before any real, undoable edit (add/
+    // remove/move/rotate/recolor/resize/…). loadState()'s _suppressUndo guard already keeps this
+    // from firing while restoring a saved/shared layout, so callers can use it as a plain "the
+    // current room now differs from what's saved" flag without any extra bookkeeping on their end.
+    this.onDirty = onDirty || (() => {})
     // Display unit for every on-model/measuring-tool label (see units.js) — App.jsx's Units
     // selector calls setUnitSystem() to change this later; the labels it currently controls get
     // redrawn immediately (see setUnitSystem below) so switching updates on-screen text right away.
@@ -1239,13 +1244,21 @@ export class RoomEngine {
     const footEndOffset = (headEdge + footEdge) / 2
     const length = footEdge - headEdge
     // twinComforter.glb/fullComforter.glb (see public/models/LICENSES.md) are real scans of a Twin
-    // XL vs a Full comforter — 3.6ft is comfortably between this app's two mattress widths (Twin
-    // XL's 3.08-3.2ft, Full's 4.2ft), so it'll keep picking the right one if a narrower/wider bed
-    // is ever added too. This is still keyed off the actual mattress width (not sourceCat's own
-    // fixed display width above) — it's picking which real-world-sized comforter was scanned, not
-    // how big to render it.
+    // XL vs a Full comforter — 3.6ft is comfortably between this app's two narrowest mattress widths
+    // (Twin XL's 3.08-3.2ft, Full's 4.2ft), so it'll keep picking the right one of the two scans for
+    // any bed at or above Full width too (Queen/King included — there's no wider scan to switch to,
+    // but fullComforter.glb's own draping reads closer to correct on those than the twin scan would).
     const modelUrl = matWidth < 3.6 ? '/models/twinComforter.glb' : '/models/fullComforter.glb'
-    return { dims: [length, sourceCat.dims[1], sourceCat.dims[2]], footEndOffset, modelUrl }
+    // Width (dims[1]) used to stay fixed at sourceCat's own catalog value (4.6') on every bed —
+    // barely wide enough to drape a Twin XL mattress (3.08'), but Full (4.2-4.5'), Queen (5.0') and
+    // King (6.33') mattresses eat into that same fixed overhang or blow past it outright, so the
+    // comforter read as too tight (Full) or didn't reach the edges at all (Queen/King). Deriving
+    // width from the bed's own mattress width instead — matWidth + 1.5' of overhang (0.75' per
+    // side, the same margin the old fixed value gave a Twin XL) — scales the drape up with the bed
+    // on all four, and the Math.max keeps Twin XL's own width at exactly the old fixed value (its
+    // matWidth + 1.5 comes in just under 4.6) rather than shrinking it.
+    const width = Math.max(sourceCat.dims[1], matWidth + 1.5)
+    return { dims: [length, width, sourceCat.dims[2]], footEndOffset, modelUrl }
   }
 
   // A sleeping pillow (skipsComforter — see catalog.js) gets shifted this far toward the head end
@@ -1939,6 +1952,7 @@ export class RoomEngine {
     })
     this.undoStack.push(this.getState())
     if (this.undoStack.length > UNDO_HISTORY_LIMIT) this.undoStack.shift()
+    this.onDirty()
   }
 
   // Pops the most recent pre-action snapshot and restores it. loadState(snapshot, false) is the
@@ -2737,6 +2751,7 @@ export class RoomEngine {
         else this.nearWallEntries.delete(entry)
       }
     }
+    this._updateDoorNearFade()
   }
 
   // A wall is opaque (transparent: false) by default so it renders solid without the depth-sort
@@ -2748,6 +2763,27 @@ export class RoomEngine {
       mat.transparent = near
       mat.opacity = near ? WALL_OPACITY_NEAR : WALL_OPACITY_NORMAL
     }
+  }
+
+  // A door's leaf/casing/handle (see _buildFeatureMesh) aren't part of any wallMeshes entry, so the
+  // loop above never fades them even though they sit flush on a wall that just did — left alone, a
+  // faded-out wall would leave its own door looking like a solid opaque slab floating in an
+  // otherwise-transparent wall, which defeats the point of fading the wall at all (you still can't
+  // see into the room through the doorway). Mirrors _setWallNear's same near/far opacity swap, keyed
+  // off whether any segment of the door's own wall is currently near — a notch can split one wall
+  // into several segments (see buildRoom), so this checks all of them, not just a single match.
+  _updateDoorNearFade() {
+    this.wallFeatures.forEach((feature) => {
+      if (feature.type !== 'door' || !feature.mesh) return
+      const near = this.wallMeshes.some((e) => e.wallName === feature.wall && this.nearWallEntries.has(e))
+      if (near === feature._doorNear) return
+      feature._doorNear = near
+      feature.mesh.traverse((obj) => {
+        if (!obj.material) return
+        obj.material.transparent = near
+        obj.material.opacity = near ? WALL_OPACITY_NEAR : 1
+      })
+    })
   }
 
   // A feature (door/window) has no reliable solid mesh to test against — _buildFeatureMesh draws

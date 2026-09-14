@@ -48,6 +48,12 @@ async function uploadThumbnail(client, userId, name, dataUrl) {
 // data.thumbnailDataUrl (from roomEngine's captureSnapshot()) is optional — if it's missing, or
 // the upload fails for some reason, the layout still saves fine, just without a thumbnail. A
 // screenshot is a nice-to-have for the Browse tab, not something worth blocking a save over.
+//
+// data.roomType (single/double/triple/common — see App.jsx's ROOM_TYPES), when given, is written
+// on every save, not just when publishing — setLayoutPublic below can also write this same column,
+// but only at publish time, which left it null on any layout that had never been published. The
+// dorm editor's room switcher (App.jsx's connected-room dropdown) needs to know a saved layout's
+// type up front to decide what to list, so it has to be persisted from the very first save.
 export async function saveLayout(name, data) {
   const client = requireClient()
   const user = await requireUser(client)
@@ -55,6 +61,7 @@ export async function saveLayout(name, data) {
     user_id: user.id, name, room: data.room, items: data.items, features: data.features || [],
     updated_at: new Date().toISOString(),
   }
+  if (data.roomType) patch.room_type = data.roomType
   if (data.thumbnailDataUrl) {
     try {
       patch.thumbnail_url = await uploadThumbnail(client, user.id, name, data.thumbnailDataUrl)

@@ -304,6 +304,7 @@ function DesignEditor({ initialDesign, onExit }) {
             </button>
           </div>
           <button className="rd-back-link" onClick={handleExit}>← My Designs</button>
+          <Link to="/" className="browse-back-link" style={{ display: 'inline-block', marginLeft: 10, marginBottom: 10 }}>← Home</Link>
           <div className="sub">Set this room's dimensions, then start furnishing.</div>
           {errorNotice && <div className="board-popover-error" style={{ marginBottom: 8 }}>{errorNotice}</div>}
           <div className="dim-row">

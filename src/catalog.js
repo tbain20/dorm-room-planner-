@@ -589,12 +589,13 @@ export const CATALOG = [
   // chair to furniture"), now wired to Tyler's real scan (beanBag.glb, tintMaterial since it
   // carries no texture). dims corrected to the new model's real proportions — the old placeholder
   // (loungeChairRelax.glb) dims [2.8,2.8,2.5] were nearly cube-shaped, but the real scan is much
-  // flatter (natural height ≈ half its width).
-  { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'ILPEOD Basic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4zVokbr', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
-  { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4A2dIre', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
-  { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://amzn.to/4A21oHs', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
+  // flatter (natural height ≈ half its width). colorable (+ default BEDDING_COLOR_SWATCHES palette,
+  // same as the mini fridge above) lets it be re-tinted per instance like any other fabric item.
+  { id: 'beanbag-budget', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'budget', name: 'ILPEOD Basic Bean Bag Chair', price: 45, retailer: 'Amazon', productUrl: 'https://amzn.to/4zVokbr', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, colorable: true, relatedIds: ['rug', 'decorative-pillow'] },
+  { id: 'beanbag', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'moderate', name: 'Corduroy Bean Bag Chair', price: 80, retailer: 'Amazon', productUrl: 'https://amzn.to/4A2dIre', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, colorable: true, relatedIds: ['rug', 'decorative-pillow'] },
+  { id: 'beanbag-premium', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'premium', name: 'Big Joe Fuf 7ft Giant Foam Bean Bag', price: 270, retailer: 'Amazon', productUrl: 'https://amzn.to/4A21oHs', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, colorable: true, relatedIds: ['rug', 'decorative-pillow'] },
   // Eco-Friendly tier — real pick from Tyler's link pass. Price is a market estimate (not retrievable via automated fetch) — double-check before relying on it.
-  { id: 'beanbag-eco', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'eco', name: 'Hobestluk 4ft Memory Foam Bean Bag Chair', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/3UDjEa9', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, relatedIds: ['rug', 'decorative-pillow'] },
+  { id: 'beanbag-eco', groupId: 'beanbag', groupLabel: 'Bean Bag Chair', tier: 'eco', name: 'Hobestluk 4ft Memory Foam Bean Bag Chair', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/3UDjEa9', dims: [2.8, 2.8, 1.4], color: 0xc1502e, category: 'Furniture & Organization', subcategory: 'Seating', modelUrl: '/models/beanBag.glb', tintMaterial: true, colorable: true, relatedIds: ['rug', 'decorative-pillow'] },
   // TV — Type C generic search; retailer switched Best Buy → Amazon per Tyler's final-links pass.
   // canWallMount (not wallMountable): the TV starts on the floor like any normal item, but the
   // selection panel's "Mount on wall" button (App.jsx) can flip a *placed instance* into wall
@@ -845,26 +846,24 @@ export function colgateDefaultLayout(room, count = 1) {
 
 // Default positions for a Common Room's starting furniture — the homepage's Common Room panel
 // (see HomePage.jsx) routes into the editor with this pre-placed instead of the empty room every
-// other room type gets, since a shared lounge space reads as furnished by default (couches + a
-// TV, not somebody's bed/desk). Same "not meant to be clever, just non-overlapping" spirit as
+// other room type gets, since a shared lounge space reads as furnished by default (seating, not
+// somebody's bed/desk). Same "not meant to be clever, just non-overlapping" spirit as
 // colgateDefaultLayout above, and deliberately uses ordinary purchasable CATALOG items (not
-// PROVIDED_CATALOG) since a common room's furniture isn't school-provided.
+// PROVIDED_CATALOG) since a common room's furniture isn't school-provided. Tyler's call: exactly
+// two accent chairs + one loveseat, nothing else (no TV/speaker) — sized for the 12x12 default
+// room (see ROOM_TYPE_DEFAULTS in App.jsx) rather than a bigger lounge.
 export function loungeDefaultLayout(room) {
   const byId = Object.fromEntries(CATALOG.map((c) => [c.id, c]))
   const margin = 0.3
   const loveseat = byId['loveseat']
   const chair = byId['accent-chair']
-  const tv = byId['tv']
-  const speaker = byId['bluetooth-speaker']
 
   return [
-    // Loveseat and accent chair share the back wall, angled slightly apart like a sectional.
-    { catalogId: loveseat.id, x: -room.w / 2 + loveseat.dims[0] / 2 + margin, z: -room.l / 2 + loveseat.dims[1] / 2, rotY: 0 },
+    // Loveseat centered on the back wall, an accent chair angled in at each end — a simple
+    // three-piece seating cluster facing into the room.
+    { catalogId: loveseat.id, x: 0, z: -room.l / 2 + loveseat.dims[1] / 2, rotY: 0 },
+    { catalogId: chair.id, x: -room.w / 2 + chair.dims[0] / 2 + margin, z: -room.l / 2 + chair.dims[1] / 2, rotY: 0 },
     { catalogId: chair.id, x: room.w / 2 - chair.dims[0] / 2 - margin, z: -room.l / 2 + chair.dims[1] / 2, rotY: 0 },
-    // TV on the front wall, facing back into the room toward the seating.
-    { catalogId: tv.id, x: 0, z: room.l / 2 - tv.dims[1] / 2, rotY: Math.PI },
-    // Speaker tucked beside the TV.
-    { catalogId: speaker.id, x: tv.dims[0] / 2 + margin + speaker.dims[0] / 2, z: room.l / 2 - speaker.dims[1] / 2, rotY: Math.PI },
   ]
 }
 

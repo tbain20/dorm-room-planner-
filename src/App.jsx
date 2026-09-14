@@ -46,8 +46,22 @@ export const ROOM_TYPE_DEFAULTS = {
   single: { w: 12, l: 14, h: 9 },
   double: { w: 15, l: 16, h: 9 },
   triple: { w: 18, l: 18, h: 9 },
-  common: { w: 15, l: 15, h: 9 },
+  common: { w: 12, l: 12, h: 9 },
 }
+
+// Which other room types the top-right room switcher (see RoomSwitcher below) offers from each
+// one — a personal room (Single/Double/Triple) connects to the shared Common Room its residents
+// use, and the Common Room connects back to all three personal types. Not symmetric pair-by-pair
+// (Single doesn't list Double) since those aren't actually "the same floor's rooms" the way each
+// personal type + the common room are.
+const CONNECTED_ROOM_TYPES = {
+  single: ['common'],
+  double: ['common'],
+  triple: ['common'],
+  common: ['single', 'double', 'triple'],
+}
+
+const ROOM_TYPE_LABELS = { single: 'Single', double: 'Double', triple: 'Triple', common: 'Common Room' }
 
 // How many full sets of Colgate-provided furniture (bed/desk/chair/wardrobe) a fresh room starts
 // with — one per resident, since a Double/Triple houses that many students. Common Room isn't
@@ -313,6 +327,19 @@ export default function App() {
   // (user_id, name) conflict target saveLayout already uses — instead of making the user reopen
   // the Saved tab, retype the name, and save again just to update a room they already saved once.
   const [currentLayoutName, setCurrentLayoutName] = useState(null)
+  // This room's own type (single/double/triple/common — see ROOM_TYPES), independent of
+  // publishRoomType (a Publish-modal field the user can freely relabel a public layout with).
+  // Set from handleStartNewRoom's own `type` param or a loaded layout's saved data.roomType;
+  // null for a from-scratch room that never went through either path. Drives the room switcher's
+  // "connected rooms" dropdown below (CONNECTED_ROOM_TYPES) — it needs to know what this room
+  // actually is to know which other types to offer switching to.
+  const [currentRoomType, setCurrentRoomType] = useState(null)
+  // True once anything undoable has changed the room since it was last loaded/saved — see
+  // roomEngine.js's onDirty (fired from _pushUndo, which loadState's _suppressUndo guard already
+  // keeps quiet during a load/switch). Used only to decide whether the room switcher should
+  // confirm before discarding the current room's changes; not shown anywhere in the UI itself.
+  const [isDirty, setIsDirty] = useState(false)
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false)
   const [quickSaveNotice, setQuickSaveNotice] = useState('')
   // Whether roomEngine's clipboard (copySelected/pasteItem) currently holds anything — tracked
   // here rather than re-derived from the engine every render since it only ever changes in
@@ -419,6 +446,7 @@ export default function App() {
         setNotice(msg)
         setTimeout(() => setNotice(''), 3000)
       },
+      onDirty: () => setIsDirty(true),
       unitSystem,
     })
     engineRef.current = engine
@@ -942,9 +970,10 @@ export default function App() {
     try {
       const state = engineRef.current.getState()
       const thumbnailDataUrl = engineRef.current.captureSnapshot()
-      await saveLayout(name, { ...state, thumbnailDataUrl })
+      await saveLayout(name, { ...state, thumbnailDataUrl, roomType: currentRoomType })
       setLayoutName('')
       setCurrentLayoutName(name)
+      setIsDirty(false)
       setSavedLayouts(await listLayouts())
     } catch (err) {
       setLayoutsError(err.message)
@@ -972,7 +1001,8 @@ export default function App() {
     try {
       const state = engineRef.current.getState()
       const thumbnailDataUrl = engineRef.current.captureSnapshot()
-      await saveLayout(currentLayoutName, { ...state, thumbnailDataUrl })
+      await saveLayout(currentLayoutName, { ...state, thumbnailDataUrl, roomType: currentRoomType })
+      setIsDirty(false)
       setSavedLayouts(await listLayouts())
       setQuickSaveNotice('Saved!')
       setTimeout(() => setQuickSaveNotice(''), 2000)
@@ -1002,6 +1032,8 @@ export default function App() {
     // (or under) a name you didn't choose.
     const ownedMatch = data.id ? savedLayouts.find((l) => l.id === data.id) : null
     setCurrentLayoutName(ownedMatch ? ownedMatch.name : null)
+    setCurrentRoomType(data.roomType || null)
+    setIsDirty(false)
     setTab('cart')
     // Best-effort, no dedup for v1 (see brief) — incrementLayoutViewCount() swallows its own
     // errors, so this never blocks or breaks loading the layout itself. data.id is only present
@@ -1023,6 +1055,8 @@ export default function App() {
     setSharedLayoutNotice('')
     setSharedLayoutError('')
     setCurrentLayoutName(null)
+    setCurrentRoomType(null)
+    setIsDirty(false)
   }
 
   // Entry point for the homepage's room-type showcase panels (location.state.newRoom, handled
@@ -1044,13 +1078,38 @@ export default function App() {
     setSharedLayoutError('')
     setCurrentLayoutName(null)
     setPublishRoomType(ROOM_TYPES.includes(type) ? type : '')
+    setCurrentRoomType(ROOM_TYPES.includes(type) ? type : null)
     const startingItems = type === 'common'
       ? loungeDefaultLayout(nextRoom)
       : colgateDefaultLayout(nextRoom, COLGATE_SET_COUNTS[type] || 1)
     startingItems.forEach(({ catalogId, x, z, rotY }) => {
       engineRef.current.addItemAt(catalogId, x, z, rotY)
     })
+    setIsDirty(false)
     setTab('cart')
+  }
+
+  // Top-right room switcher (mirrors the general Room Designer's own one) — lets a Single/Double/
+  // Triple jump straight to its shared Common Room and back, instead of going through the Saved
+  // tab. One entry per saved layout of a connected type (CONNECTED_ROOM_TYPES) plus, per Tyler's
+  // call, a "Start a new ___" entry for any connected type with no saved layout yet at all — so
+  // e.g. a Single with no Common Room saved anywhere still offers to create one, the same
+  // pre-furnished way the homepage's Common Room panel would.
+  const roomSwitcherEntries = (currentRoomType ? CONNECTED_ROOM_TYPES[currentRoomType] || [] : []).flatMap((type) => {
+    const matches = savedLayouts.filter((l) => l.roomType === type)
+    if (matches.length === 0) return [{ kind: 'create', type, key: `create-${type}` }]
+    return matches.map((l) => ({ kind: 'load', type, layout: l, key: `layout-${l.id}` }))
+  })
+
+  // Per Tyler's call: this app has no prior "you'll lose unsaved changes" confirmation anywhere
+  // (New Room, loading a saved layout, etc. all just do it), so a plain window.confirm is the
+  // simplest thing that's actually new here — only gated on isDirty (see roomEngine.js's onDirty)
+  // so switching a room with nothing unsaved never bothers you with a prompt at all.
+  function handleSwitchRoomEntry(entry) {
+    if (isDirty && !window.confirm('You have unsaved changes in this room. Switch rooms and lose them?')) return
+    setRoomMenuOpen(false)
+    if (entry.kind === 'load') handleLoad(entry.layout)
+    else handleStartNewRoom(entry.type)
   }
 
   // Fetches a public layout by id and loads it — used for "Based on X" links (fresh data rather
@@ -1064,9 +1123,13 @@ export default function App() {
   }
 
   // Profile pages are a real route (/profile/:id, see ProfilePage.jsx) rather than a tab inside
-  // the editor — navigating away is deliberate here, not a placeholder.
+  // the editor — navigating away is deliberate here, not a placeholder. state.from tells
+  // ProfilePage's own back link to return here instead of defaulting to the marketing homepage —
+  // every caller of this function is already somewhere inside the editor (the sidebar's own
+  // "Profile" tab, a layout author byline, a cart-row designer credit, …), so "back" should mean
+  // "back to the editor," not "back to /".
   function handleViewProfile(userId) {
-    navigate(`/profile/${userId}`)
+    navigate(`/profile/${userId}`, { state: { from: '/app' } })
   }
 
   // /layouts/:id is the shareable route added in this session (see LayoutDetailPage.jsx) — this
@@ -1416,6 +1479,7 @@ export default function App() {
           </div>
         )}
         <div id="titleblock">
+          <Link to="/" className="browse-back-link" style={{ display: 'inline-block', marginBottom: 8 }}>← Home</Link>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <h1 style={{ margin: roomPlannerCollapsed ? 0 : undefined }}>Room Planner</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -1613,6 +1677,28 @@ export default function App() {
             </>
           )}
         </div>
+
+        {roomSwitcherEntries.length > 0 && (
+          <div className="rd-room-switcher">
+            <button className="rd-room-switcher-trigger" onClick={() => setRoomMenuOpen((v) => !v)}>
+              {ROOM_TYPE_LABELS[currentRoomType]} <span aria-hidden="true">▾</span>
+            </button>
+            {roomMenuOpen && (
+              <>
+                <div className="board-popover-backdrop" onClick={() => setRoomMenuOpen(false)} />
+                <div className="rd-room-menu" onClick={(e) => e.stopPropagation()}>
+                  {roomSwitcherEntries.map((entry) => (
+                    <div key={entry.key} className="rd-room-menu-row">
+                      <button className="rd-room-menu-name" onClick={() => handleSwitchRoomEntry(entry)}>
+                        {entry.kind === 'load' ? entry.layout.name : `+ Start a new ${ROOM_TYPE_LABELS[entry.type]}`}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         <div id="hint">
           {measureState.active
