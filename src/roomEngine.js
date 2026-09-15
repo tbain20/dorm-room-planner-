@@ -3226,18 +3226,28 @@ export class RoomEngine {
     const pivot = group.userData.posePivot
     if (!pivot) return
     const [, d, h] = cat.dims
-    // "diagonal" is meant to lean the pillow mostly upright, tilted back ~30° off vertical — using
+    // "diagonal" is meant to lean the pillow mostly upright, tilted ~30° off vertical — using
     // whichever of depth/height is actually this item's *longer* axis when resting flat, not a
     // single fixed angle. A plump, roughly-cube decorative pillow has height (dims[2]) as its
     // taller resting axis, so tilting 30° off the *flat* pose (POSE_ANGLES.diagonal, -30°) already
     // leans that long axis up correctly. A flat, elongated sleeping pillow has depth (dims[1]) as
     // its real length instead — the same fixed -30° there barely lifts its short height edge,
     // leaving the long depth edge lying almost flat and poking out sideways past the headboard
-    // instead of leaning up ("small side up" per Tyler's report, wanting "long side up"). Tilting
-    // 30° off *upright* (-90°) instead whenever depth is the longer axis fixes that: both shapes
-    // now tilt the same 30° off whichever pose (flat or upright) already stands their own long
-    // axis vertical, so the long axis is always what leans up.
-    const baseAngle = pose === 'diagonal' && d > h ? -Math.PI / 2 + Math.PI / 6 : (POSE_ANGLES[pose] ?? 0)
+    // instead of leaning up ("small side up" per Tyler's report, wanting "long side up").
+    //
+    // Tilting off *upright* (-90°) instead whenever depth is the longer axis is the right idea, but
+    // -90° + 30° = -60° (mirroring how -30° sits 30° off flat's 0°) isn't equivalent the way it looks:
+    // cos(angle) — which sets the long axis's own leftover sideways (local Z) component once it's
+    // mostly vertical — is an *even* function, so -60° and -90° - 30° = -120° both tilt the long axis
+    // the same ~30° off true vertical, but land its sideways component on OPPOSITE sides (cos(-60°)=
+    // +0.5 vs cos(-120°)=-0.5). -60° pushed that long axis's sideways component the same direction the
+    // item was already nudged toward the headboard (_pillowHeadOffset), so at depth=2.3' the ~30°
+    // tilt's sideways reach (2.3/2 × 0.5 ≈ 0.58') ran past the headboard/frame edge — clipping through
+    // it, i.e. still "diagonal the wrong way" per Tyler's follow-up report even after the long axis
+    // itself was correctly the one standing up. -120° keeps the same long-axis-mostly-vertical result
+    // but flips that sideways reach to the other side, landing back inside the bed's own footprint —
+    // confirmed in-browser from directly above: the pillow no longer pokes past the frame corner.
+    const baseAngle = pose === 'diagonal' && d > h ? -Math.PI / 2 - Math.PI / 6 : (POSE_ANGLES[pose] ?? 0)
     // poseFlip (see catalog.js) mirrors the lean/stand direction for a pose-capable model whose own
     // "front" faces the opposite local way from the default POSE_ANGLES convention — unused by
     // either current pillow catalog entry, but left available for a future model that needs it.
