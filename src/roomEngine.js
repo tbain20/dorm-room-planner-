@@ -1131,12 +1131,23 @@ export class RoomEngine {
   // (mattress topper, comforter, pillows — see catalog.js) straight onto a bed instead of dropping
   // it loose on the floor. Sheets and the throw blanket don't go through this anymore — see
   // applyMattressColor/_findBedForDressing below.
+  // With 2+ beds in the room, which bed gets a newly-added piece of bedding is ambiguous, so this
+  // requires a bed to be selected first (this.selected) and always targets that one — same "select
+  // a bed first once there's more than one" gate applyMattressColor/applyPillowcaseColor already
+  // use for sheets/pillowcases, extended here to cover every other bedOnly item (mattress topper,
+  // comforter, pillows, throw blanket). A single-bed room still auto-targets with no selection
+  // required, matching prior behavior exactly.
   _findBedAutoStackTarget(cat) {
     const beds = this.placedItems.filter((p) => {
       const c = ALL_ITEMS.find((x) => x.id === p.catalogId)
       return c && c.isBed
     })
     if (!beds.length) return null
+    if (beds.length > 1) {
+      const selectedCat = this.selected ? ALL_ITEMS.find((c) => c.id === this.selected.catalogId) : null
+      if (!selectedCat?.isBed) return null
+      return this._topOfStack(this.selected.uid, cat)
+    }
     // Prefer a bed that doesn't already have this concept (groupId) dressed on it, so adding e.g.
     // a second comforter to a two-bed room dresses the *other* bed rather than double-stacking.
     const undressed = beds.find((bed) => !this._stackChainHasGroup(bed.uid, cat.groupId))
@@ -1170,11 +1181,29 @@ export class RoomEngine {
   // (a sleeping pillow — see catalog.js) stops one layer short of an isComforterLayer child
   // (the comforter) instead of continuing on to whatever's stacked above it, so the pillow lands
   // on the mattress/topper/sheets level rather than perched on top of the comforter.
+  //
+  // skipsPillowLayer (the comforter and throw blanket — see catalog.js) is the mirror image: a bed
+  // routinely has a pillow AND a comforter as *siblings* directly on the mattress/topper level (see
+  // skipsComforter above), so `this.placedItems.find` picking whichever one happens to come first in
+  // insertion order — instead of specifically the non-pillow sibling — could land a newly-added
+  // comforter/blanket stacked on top of an existing pillow. When several siblings exist at once,
+  // prefer whichever isn't a pillow (hasPoseOptions); if every sibling here is a pillow (no
+  // comforter yet), stop one level short, same as skipsComforter does, so the item lands at this
+  // mattress/topper level instead of on top of the pillow.
   _topOfStack(uid, sourceCat) {
     let current = this.placedItems.find((p) => p.uid === uid)
     while (current) {
-      const child = this.placedItems.find((p) => p.stackedOnUid === current.uid)
-      if (!child) return current
+      const children = this.placedItems.filter((p) => p.stackedOnUid === current.uid)
+      if (!children.length) return current
+      let child = children[0]
+      if (sourceCat && sourceCat.skipsPillowLayer) {
+        const nonPillow = children.find((c) => {
+          const cCat = ALL_ITEMS.find((x) => x.id === c.catalogId)
+          return !(cCat && cCat.hasPoseOptions)
+        })
+        if (!nonPillow) return current
+        child = nonPillow
+      }
       if (sourceCat && sourceCat.skipsComforter) {
         const childCat = ALL_ITEMS.find((c) => c.id === child.catalogId)
         if (childCat && childCat.isComforterLayer) return current
@@ -1257,7 +1286,11 @@ export class RoomEngine {
     // side, the same margin the old fixed value gave a Twin XL) — scales the drape up with the bed
     // on all four, and the Math.max keeps Twin XL's own width at exactly the old fixed value (its
     // matWidth + 1.5 comes in just under 4.6) rather than shrinking it.
-    const width = Math.max(sourceCat.dims[1], matWidth + 1.5)
+    // Full/Queen/King (fullComforter.glb, matWidth >= 3.6) get an extra 0.25' (3") of overhang on
+    // top of that — Tyler's report that the Full's comforter didn't fully cover the mattress at the
+    // 1.5' margin. Twin XL keeps the original 1.5' margin unchanged since only the Full was flagged.
+    const overhang = matWidth < 3.6 ? 1.5 : 1.75
+    const width = Math.max(sourceCat.dims[1], matWidth + overhang)
     return { dims: [length, width, sourceCat.dims[2]], footEndOffset, modelUrl }
   }
 
@@ -1380,7 +1413,11 @@ export class RoomEngine {
     if (cat.bedOnly) {
       const target = this._findBedAutoStackTarget(cat)
       if (!target) {
-        this.onNotice('Add a bed to the room first.')
+        const beds = this.placedItems.filter((p) => {
+          const c = ALL_ITEMS.find((x) => x.id === p.catalogId)
+          return c && c.isBed
+        })
+        this.onNotice(beds.length > 1 ? 'Select a bed first to add bedding to it.' : 'Add a bed to the room first.')
         return
       }
       // A comforter's real modelUrl depends on which bed it's about to land on — twinComforter.glb
@@ -2993,6 +3030,16 @@ export class RoomEngine {
     // onto whatever that pillow is itself resting on so a second pillow lands at the same bedding
     // level instead of piling up above the first one.
     if (sourceCat && sourceCat.hasPoseOptions) {
+      const targetCat = ALL_ITEMS.find((c) => c.id === target.catalogId)
+      if (targetCat && targetCat.hasPoseOptions && target.stackedOnUid != null) {
+        target = this.placedItems.find((p) => p.uid === target.stackedOnUid) || target
+      }
+    }
+    // skipsPillowLayer (the comforter and throw blanket — see catalog.js) manually dragged onto a
+    // pillow via "Put on top of…": redirect onto whatever that pillow itself rests on, same
+    // "land at the mattress/topper level, not on the pillow" rule _topOfStack's auto-place path
+    // enforces above.
+    if (sourceCat && sourceCat.skipsPillowLayer) {
       const targetCat = ALL_ITEMS.find((c) => c.id === target.catalogId)
       if (targetCat && targetCat.hasPoseOptions && target.stackedOnUid != null) {
         target = this.placedItems.find((p) => p.uid === target.stackedOnUid) || target

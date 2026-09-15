@@ -341,6 +341,9 @@ export default function App() {
   const [isDirty, setIsDirty] = useState(false)
   const [roomMenuOpen, setRoomMenuOpen] = useState(false)
   const [quickSaveNotice, setQuickSaveNotice] = useState('')
+  // Pending room-switcher entry, held here while the unsaved-changes "Save"/"Exit" popup below is
+  // open (see handleSwitchRoomEntry) — null whenever that popup isn't showing.
+  const [switchRoomPrompt, setSwitchRoomPrompt] = useState(null)
   // Whether roomEngine's clipboard (copySelected/pasteItem) currently holds anything — tracked
   // here rather than re-derived from the engine every render since it only ever changes in
   // response to the two button clicks below, and the engine has no change-event for it.
@@ -1102,14 +1105,45 @@ export default function App() {
   })
 
   // Per Tyler's call: this app has no prior "you'll lose unsaved changes" confirmation anywhere
-  // (New Room, loading a saved layout, etc. all just do it), so a plain window.confirm is the
-  // simplest thing that's actually new here — only gated on isDirty (see roomEngine.js's onDirty)
-  // so switching a room with nothing unsaved never bothers you with a prompt at all.
+  // (New Room, loading a saved layout, etc. all just do it) — only gated on isDirty (see
+  // roomEngine.js's onDirty) so switching a room with nothing unsaved never bothers you with a
+  // prompt at all. A dirty room instead opens the switchRoomPrompt popup below (Save / Exit) rather
+  // than a plain window.confirm, per Tyler's request for real "Save"/"Exit" buttons.
   function handleSwitchRoomEntry(entry) {
-    if (isDirty && !window.confirm('You have unsaved changes in this room. Switch rooms and lose them?')) return
+    if (isDirty) {
+      setSwitchRoomPrompt(entry)
+      return
+    }
+    performRoomSwitch(entry)
+  }
+
+  function performRoomSwitch(entry) {
     setRoomMenuOpen(false)
     if (entry.kind === 'load') handleLoad(entry.layout)
     else handleStartNewRoom(entry.type)
+  }
+
+  // switchRoomPrompt's "Save" button — quick-saves the current room under whatever name it's
+  // already saved as (same path as the main-screen Save button), then completes the pending switch.
+  // A room that's never been saved yet has no name to save under, so this falls back to the Saved
+  // tab instead (same as handleQuickSave's own fallback) and leaves the switch pending — the user
+  // can re-pick the destination room once it's named and saved.
+  async function handleSwitchRoomSave() {
+    const entry = switchRoomPrompt
+    setSwitchRoomPrompt(null)
+    if (!sharedLayout && !(session && currentLayoutName)) {
+      setTab('saved')
+      return
+    }
+    await handleQuickSave()
+    performRoomSwitch(entry)
+  }
+
+  // switchRoomPrompt's "Exit" button — discards the current room's unsaved changes and switches anyway.
+  function handleSwitchRoomExit() {
+    const entry = switchRoomPrompt
+    setSwitchRoomPrompt(null)
+    performRoomSwitch(entry)
   }
 
   // Fetches a public layout by id and loads it — used for "Based on X" links (fresh data rather
@@ -1851,6 +1885,21 @@ export default function App() {
                       />
                     )
                   })}
+                  <label
+                    title="Custom color"
+                    style={{
+                      width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                      background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                      border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
+                    }}
+                  >
+                    <input
+                      type="color"
+                      value={`#${(selection.colorHex ?? selection.cat.color).toString(16).padStart(6, '0')}`}
+                      onChange={(e) => engineRef.current.setItemColor(selection.uid, parseInt(e.target.value.slice(1), 16))}
+                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}
+                    />
+                  </label>
                 </div>
               </div>
             )}
@@ -2896,6 +2945,29 @@ export default function App() {
         </div>
       </div>
 
+      {switchRoomPrompt && (
+        <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setSwitchRoomPrompt(null)}>
+          <div id="receipt">
+            <h2>Unsaved changes</h2>
+            <div className="rsub">You have unsaved changes in this room. Save them before switching, or exit without saving?</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                onClick={handleSwitchRoomSave}
+                style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Save
+              </button>
+              <button
+                onClick={handleSwitchRoomExit}
+                style={{ flex: 1, background: 'var(--paper-shadow)', color: 'var(--ink-soft)', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Exit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {colorPrompt && (
         <div id="modal-backdrop" className="visible" onClick={(e) => e.target.id === 'modal-backdrop' && setColorPrompt(null)}>
           <div id="receipt">
@@ -2933,6 +3005,27 @@ export default function App() {
                   }}
                 />
               ))}
+              <label
+                title="Custom color"
+                style={{
+                  width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                  background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                  border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
+                }}
+              >
+                <input
+                  type="color"
+                  defaultValue="#808080"
+                  onChange={(e) => {
+                    const hex = parseInt(e.target.value.slice(1), 16)
+                    if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
+                    else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    setColorPrompt(null)
+                  }}
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}
+                />
+              </label>
             </div>
             <button
               onClick={() => setColorPrompt(null)}

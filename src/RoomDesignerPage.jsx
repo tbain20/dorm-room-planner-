@@ -435,6 +435,21 @@ function DesignEditor({ initialDesign, onExit }) {
                           style={{ width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0, background: `#${hex.toString(16).padStart(6, '0')}`, border: (selection.colorHex ?? selection.cat.color) === hex ? '2px solid var(--accent)' : '1px solid var(--paper-shadow)' }}
                         />
                       ))}
+                      <label
+                        title="Custom color"
+                        style={{
+                          width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                          background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                          border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
+                        }}
+                      >
+                        <input
+                          type="color"
+                          value={`#${(selection.colorHex ?? selection.cat.color).toString(16).padStart(6, '0')}`}
+                          onChange={(e) => engineRef.current.setItemColor(selection.uid, parseInt(e.target.value.slice(1), 16))}
+                          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}
+                        />
+                      </label>
                     </div>
                   </div>
                 )}
@@ -546,6 +561,27 @@ function DesignEditor({ initialDesign, onExit }) {
                   style={{ width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', padding: 0, background: `#${hex.toString(16).padStart(6, '0')}`, border: '1px solid var(--paper-shadow)' }}
                 />
               ))}
+              <label
+                title="Custom color"
+                style={{
+                  width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                  background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                  border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
+                }}
+              >
+                <input
+                  type="color"
+                  defaultValue="#808080"
+                  onChange={(e) => {
+                    const hex = parseInt(e.target.value.slice(1), 16)
+                    if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
+                    else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
+                    else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    setColorPrompt(null)
+                  }}
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}
+                />
+              </label>
             </div>
             <button onClick={() => setColorPrompt(null)} style={{ width: '100%', background: 'var(--paper-shadow)', color: 'var(--ink-soft)', border: 'none', padding: 10, borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>
               Cancel
