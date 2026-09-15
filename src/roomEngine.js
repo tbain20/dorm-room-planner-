@@ -3581,16 +3581,59 @@ export class RoomEngine {
     })
   }
 
+  // Bug fix: stacking used to be resolved in plain savedItems array order (insertion order at save
+  // time), which isn't the same thing as stacking depth. A mattress topper added to the room
+  // *after* a comforter/pillow already existed reparents them onto itself (matchBaseFootprint in
+  // stackItemOn) — so on a later save, the topper's own array index can land *after* the
+  // comforter's, even though the comforter's stackedOnIndex now points at the topper. Resolving in
+  // that raw order called stackItemOn(comforter, topper) while the topper was still sitting at its
+  // freshly-registered, un-stacked floor position (bedOnly items get no special y-placement in
+  // addItemAt — see loadState above), so the comforter/pillow inherited that wrong, off-the-bed
+  // height instead of the topper's real on-bed one — exactly the "bedding gets messed up and isn't
+  // on the bed anymore" bug. Resolving in repeated passes over the original order instead — only
+  // stacking an item once its own parent has already been resolved (or has no parent to begin
+  // with, e.g. the bed itself) — guarantees every parent is correctly positioned before anything
+  // stacks on it, no matter how the save's own array happens to be ordered, while still resolving
+  // siblings (two pillows fanning out via pillowSideOffset, which counts how many are already
+  // resolved onto the same target) in their original relative order.
   _resolveLoadedStacking(savedItems, uidsByIndex) {
+    const ready = new Set(savedItems.map((it, i) => (it.stackedOnIndex == null ? i : -1)).filter((i) => i >= 0))
+    let pending = savedItems.map((_, i) => i).filter((i) => savedItems[i].stackedOnIndex != null)
+    while (pending.length) {
+      const next = []
+      let progressed = false
+      pending.forEach((i) => {
+        const it = savedItems[i]
+        if (!ready.has(it.stackedOnIndex)) {
+          next.push(i)
+          return
+        }
+        const childUid = uidsByIndex[i]
+        const parentUid = uidsByIndex[it.stackedOnIndex]
+        // A referenced parent item can be missing if its own model failed to load entirely (the
+        // box-placeholder fallback still registers, so this is a defensive check, not an expected
+        // path) — leave that one item resting on the floor instead of throwing.
+        if (childUid != null && parentUid != null) this.stackItemOn(childUid, parentUid)
+        ready.add(i)
+        progressed = true
+      })
+      // A stackedOnIndex chain that never resolves (points at a missing/never-ready item — a cycle
+      // or corrupt save, not something this app's own save path produces) would loop forever
+      // otherwise; give up and leave whatever's left at its floor position rather than hang.
+      if (!progressed) break
+      pending = next
+    }
+    // Locked items are meant to be immovable, full stop — pin them back to their exact saved
+    // x/z/rotY after the stacking pass above, so neither the topological reordering nor any future
+    // change to a stacking formula (a comforter's fit, a pillow's fan-out, …) can ever visibly
+    // shift one on load, even by a hair.
     savedItems.forEach((it, i) => {
-      if (it.stackedOnIndex == null) return
-      const childUid = uidsByIndex[i]
-      const parentUid = uidsByIndex[it.stackedOnIndex]
-      // A referenced parent item can be missing if its own model failed to load entirely (the
-      // box-placeholder fallback still registers, so this is a defensive check, not an expected
-      // path) — skip rather than throw, leaving that one item resting on the floor instead.
-      if (childUid == null || parentUid == null) return
-      this.stackItemOn(childUid, parentUid)
+      if (!it.locked || it.stackedOnIndex == null) return
+      const item = this.placedItems.find((p) => p.uid === uidsByIndex[i])
+      if (!item) return
+      item.mesh.position.x = it.x
+      item.mesh.position.z = it.z
+      item.mesh.rotation.y = it.rotY
     })
     // Re-link a saved comforter/bed dressing pair (see _applyBedDressing) and hide the bed frame
     // instantly — no fade here, this is a load, not a live interaction the user should watch happen.

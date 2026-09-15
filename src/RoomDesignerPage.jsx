@@ -439,7 +439,7 @@ function DesignEditor({ initialDesign, onExit }) {
                         title="Custom color"
                         style={{
                           width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', padding: 0,
-                          background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                          background: 'conic-gradient(red, yellow, lime, cyan, blue, red)',
                           border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
                         }}
                       >
@@ -565,7 +565,7 @@ function DesignEditor({ initialDesign, onExit }) {
                 title="Custom color"
                 style={{
                   width: 36, height: 36, borderRadius: '50%', cursor: 'pointer', padding: 0,
-                  background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)',
+                  background: 'conic-gradient(red, yellow, lime, cyan, blue, red)',
                   border: '1px solid var(--paper-shadow)', display: 'inline-block', position: 'relative', overflow: 'hidden',
                 }}
               >
