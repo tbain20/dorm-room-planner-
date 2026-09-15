@@ -131,7 +131,7 @@ export default function ProfilePage() {
   // passes state.from) if that's how we got here, otherwise the marketing homepage, same as
   // arriving via a direct link, the account-menu's plain "Profile" item, or a shared profile URL.
   const backTo = location.state?.from || '/'
-  const backLabel = location.state?.from ? '← Back to room planner' : '← Dorm Room Planner'
+  const backLabel = location.state?.from ? '← Back to room planner' : '← Roomex'
 
   const [profile, setProfile] = useState(null)
   const [notFound, setNotFound] = useState(false)

@@ -60,7 +60,7 @@ export default function BrowsePage() {
   const sentinelRef = useRef(null)
 
   useEffect(() => {
-    document.title = 'Browse — Dorm Room Planner'
+    document.title = 'Browse — Roomex'
   }, [])
 
   // Session-scoped state — cleared, not just left stale, on sign-out so a shared/public computer

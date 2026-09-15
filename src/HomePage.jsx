@@ -67,7 +67,7 @@ export default function HomePage() {
     <div className="home">
       <header className="home-nav">
         <div className="home-nav-inner">
-          <div className="home-logo">Dorm Room Planner</div>
+          <div className="home-logo">Roomex</div>
           <div className="home-nav-actions">
             <button className="home-btn home-btn-browse" onClick={() => navigate('/browse')}>Browse</button>
             {session ? (
@@ -80,7 +80,7 @@ export default function HomePage() {
       </header>
 
       <section className="home-hero">
-        <h1>Dorm Room Planner</h1>
+        <h1>Roomex</h1>
         <p className="home-tagline">
           Plan your dorm room in 3D, shop the exact furniture, and browse real student rooms for inspiration.
         </p>
@@ -162,7 +162,7 @@ export default function HomePage() {
       </section>
 
       <footer className="home-footer">
-        <span>Dorm Room Planner</span>
+        <span>Roomex</span>
         <span className="home-footer-links">
           <Link to="/terms">Terms of Service</Link>
           <Link to="/privacy">Privacy Policy</Link>

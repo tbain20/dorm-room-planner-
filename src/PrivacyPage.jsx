@@ -5,7 +5,7 @@ export default function PrivacyPage() {
   return (
     <LegalPageLayout title="Privacy Policy" updated="9/8/26">
       <p>
-        This Privacy Policy explains what information Dorm Room Planner ("we," "us," "our")
+        This Privacy Policy explains what information Roomex ("we," "us," "our")
         collects, how we use it, and your choices regarding that information.
       </p>
 

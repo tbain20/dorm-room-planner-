@@ -19,8 +19,8 @@ export default async function handler(req, res) {
   const supabaseUrl = process.env.VITE_SUPABASE_URL
   const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY
 
-  let title = 'Dorm Room Planner'
-  let description = 'A 3D dorm room layout, shared from Dorm Room Planner.'
+  let title = 'Roomex'
+  let description = 'A 3D dorm room layout, shared from Roomex.'
   let image = null
 
   if (supabaseUrl && supabaseAnonKey && id) {
@@ -65,7 +65,7 @@ ${image ? `<meta property="og:image" content="${esc(image)}">` : ''}
 <meta http-equiv="refresh" content="0; url=${esc(pageUrl)}">
 </head>
 <body>
-<p>${esc(title)} — <a href="${esc(pageUrl)}">view on Dorm Room Planner</a></p>
+<p>${esc(title)} — <a href="${esc(pageUrl)}">view on Roomex</a></p>
 </body>
 </html>`)
 }

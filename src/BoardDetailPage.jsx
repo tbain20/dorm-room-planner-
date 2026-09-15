@@ -28,7 +28,7 @@ export default function BoardDetailPage() {
           return
         }
         setBoard(data)
-        document.title = `${data.name} — Dorm Room Planner`
+        document.title = `${data.name} — Roomex`
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -38,7 +38,7 @@ export default function BoardDetailPage() {
   if (loading) {
     return (
       <div style={pageStyle}>
-        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
         <div className="skeleton" style={{ width: '40%', height: 28, marginTop: 16, marginBottom: 24 }} />
         <div className="gallery-grid">
           {[220, 300, 180, 260].map((h, i) => (
@@ -54,7 +54,7 @@ export default function BoardDetailPage() {
   if (notFound) {
     return (
       <div style={pageStyle}>
-        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
         <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 650, marginTop: 20 }}>This board isn't available</h1>
         <p style={{ color: 'var(--ink-soft)' }}>It may have been deleted, or made private by its owner.</p>
       </div>
@@ -65,7 +65,7 @@ export default function BoardDetailPage() {
 
   return (
     <div style={pageStyle}>
-      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
       <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 650, fontSize: 28, marginTop: 12, marginBottom: 4 }}>📁 {board.name}</h1>
       <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 24 }}>
         {byline} · {board.layouts.length} layout{board.layouts.length === 1 ? '' : 's'}

@@ -47,7 +47,7 @@ export default function JoinLayoutPage() {
       {!session ? (
         <>
           <p style={{ color: 'var(--ink-soft)', fontSize: 12.5, marginBottom: 12 }}>Sign in on the main app first, then come back to this link.</p>
-          <Link to="/app" state={{ openTab: 'saved' }} style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>← Sign in on Dorm Room Planner</Link>
+          <Link to="/app" state={{ openTab: 'saved' }} style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 600 }}>← Sign in on Roomex</Link>
         </>
       ) : (
         <>

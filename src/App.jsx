@@ -2469,7 +2469,7 @@ export default function App() {
                 </div>
                 {!myProfile?.is_designer && (
                   <a
-                    href={`mailto:${DESIGNER_APPLY_EMAIL}?subject=${encodeURIComponent('Designer application — Dorm Room Planner')}&body=${encodeURIComponent(`Account email: ${session.user.email}\n\nTell us a bit about your design background:`)}`}
+                    href={`mailto:${DESIGNER_APPLY_EMAIL}?subject=${encodeURIComponent('Designer application — Roomex')}&body=${encodeURIComponent(`Account email: ${session.user.email}\n\nTell us a bit about your design background:`)}`}
                     style={{ display: 'block', fontSize: 10.5, color: 'var(--sage)', marginBottom: 10, textDecoration: 'none', fontWeight: 600 }}
                   >
                     Want to publish layouts as a designer? Apply here →

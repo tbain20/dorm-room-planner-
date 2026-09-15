@@ -5,14 +5,14 @@ export default function TermsPage() {
   return (
     <LegalPageLayout title="Terms of Service" updated="9/8/26">
       <p>
-        Welcome to Dorm Room Planner (the "Service"), operated by Tyler Bain ("we," "us," "our").
+        Welcome to Roomex (the "Service"), operated by Tyler Bain ("we," "us," "our").
         By creating an account or using the Service, you agree to these Terms of Service ("Terms").
         If you don't agree, please don't use the Service.
       </p>
 
       <h2>1. What the Service Is</h2>
       <p>
-        Dorm Room Planner lets users create 3D dorm room layouts, browse and copy layouts created
+        Roomex lets users create 3D dorm room layouts, browse and copy layouts created
         by other users, add furniture and decor items to a shopping list, and access links to
         third-party retailers to purchase those items. Some furniture measurements are based on
         publicly available information (e.g. university-provided residence hall furniture

@@ -43,7 +43,7 @@ export default function LayoutDetailPage() {
         }
         setLayout(data)
         setLikesCount(data.likesCount)
-        document.title = `${data.name} — Dorm Room Planner`
+        document.title = `${data.name} — Roomex`
         incrementLayoutViewCount(id)
       })
       .finally(() => setLoading(false))
@@ -152,7 +152,7 @@ export default function LayoutDetailPage() {
   if (notFound) {
     return (
       <div style={pageStyle}>
-        <Link to="/" style={{ color: 'var(--accent)' }}>← Dorm Room Planner</Link>
+        <Link to="/" style={{ color: 'var(--accent)' }}>← Roomex</Link>
         <h1 style={{ ...headingStyle, marginTop: 20 }}>This layout isn't available</h1>
         <p style={{ color: 'var(--ink-soft)' }}>It may have been deleted, or made private by its owner.</p>
       </div>
@@ -161,7 +161,7 @@ export default function LayoutDetailPage() {
 
   return (
     <div style={pageStyle}>
-      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
       <h1 style={{ ...headingStyle, marginTop: 12, marginBottom: 4, fontSize: 26 }}>{layout.name}</h1>
       <div style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 4 }}>
         {layout.authorId && (
@@ -243,7 +243,7 @@ export default function LayoutDetailPage() {
 function LayoutDetailSkeleton({ pageStyle }) {
   return (
     <div style={pageStyle}>
-      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
       <div className="skeleton" style={{ width: '55%', height: 26, marginTop: 16, marginBottom: 8 }} />
       <div className="skeleton" style={{ width: '35%', height: 13, marginBottom: 20 }} />
       <div className="skeleton" style={{ width: '100%', aspectRatio: '4/3', marginBottom: 20 }} />

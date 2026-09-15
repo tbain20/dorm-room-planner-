@@ -43,7 +43,7 @@ export default function AdminCustomItemsPage() {
   if (!isAdmin) {
     return (
       <div style={pageStyle}>
-        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+        <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
         <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 650, marginTop: 20 }}>Not available</h1>
         <p style={{ color: 'var(--ink-soft)', marginBottom: 20 }}>This page is only for the app's own admin account.</p>
         {!session && <AuthPanel />}
@@ -53,7 +53,7 @@ export default function AdminCustomItemsPage() {
 
   return (
     <div style={pageStyle}>
-      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Dorm Room Planner</Link>
+      <Link to="/" style={{ color: 'var(--accent)', fontSize: 13 }}>← Roomex</Link>
       <h1 style={{ fontFamily: 'var(--font-serif)', fontWeight: 650, fontSize: 26, marginTop: 12, marginBottom: 4 }}>Custom item submissions</h1>
       <p style={{ color: 'var(--ink-soft)', fontSize: 13, marginBottom: 24 }}>
         Every item a user has added themselves — real signal for what's missing from the catalog. {items.length} total.

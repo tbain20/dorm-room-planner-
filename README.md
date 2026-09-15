@@ -1,4 +1,4 @@
-# Dorm Room Planner
+# Roomex
 
 A 3D dorm room layout tool — set your room dimensions, drag furniture in from a catalog,
 save layouts, and get a shopping list with retailer links. Built with Vite + React + Three.js,
