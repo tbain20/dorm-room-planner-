@@ -355,19 +355,23 @@ export const CATALOG = [
   // than a fabricated product pick. Still a real 3-entry tiered group so the tier-picker UI renders
   // normally. Uses newthrowPillow.glb (Tyler's real scan, replacing the original throwPillow.glb
   // scan — Draco-compressed down from an 18.7MB raw export to match this project's other models,
-  // same as every other real scan here) with the same pose options as bed-pillow. dims kept at the
-  // 1.6' cube already tuned for the original scan — _fitModelToDims's non-uniform per-axis scaling
-  // already stretched that scan's own real (non-cube) proportions to fit these same dims, so the
-  // new scan (closer to a cube natively) lands at the same in-room footprint with no dims change
-  // needed. dims bumped from a cosmetic 1.3' cube to 1.6' (~19") — closer to a real decorative
-  // throw pillow's size and less easily lost/hidden under a comforter or bed-pillow at the old scale.
+  // same as every other real scan here) with the same pose options as bed-pillow.
+  // dims: [1.6, 0.87, 1.44] — deliberately NOT the old [1.6, 1.6, 1.6] cube. _fitModelToDims
+  // (modelFit.js) scales each axis independently to hit dims exactly, so forcing this scan's own
+  // real (measured) proportions — 1.90' wide × 1.03' deep × 1.71' tall — into an exact cube meant
+  // stretching its depth axis alone by ~55%, which read as grossly stretched/warped in the room
+  // (Tyler's report). These dims instead scale the whole model uniformly (same ratio on every
+  // axis, keeping depth:width:height proportional to the real scan) down to a 1.6'-wide footprint,
+  // same target width the old cube used, with zero axis-specific distortion. The old scan's own
+  // proportions (1.9' wide × 0.69' deep × 1.81' tall — much flatter) happened to still read fine
+  // stretched into a cube; this rounder scan does not, hence the different dims here.
   // skipsComforter (added): a decorative throw pillow should land on the sheets/mattress level,
   // not perched on top of a placed comforter — same flag bed-pillow above already uses, same reason.
-  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4ypPLsv', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
-  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-budget', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'budget', name: 'MIULEE Corduroy Striped Throw Pillow Covers (Set of 4)', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4ypPLsv', dims: [1.6, 0.87, 1.44], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'moderate', name: 'Decorative Pillow (Target)', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 0.87, 1.44], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-premium', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'premium', name: 'Decorative Pillow (Target)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 0.87, 1.44], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
   // Eco-Friendly tier — Tyler's link pass gave the same generic Amazon search link as the moderate/premium tiers above (no single specific product), so this stays a generic pick too, same spirit as those two.
-  { id: 'decorative-pillow-eco', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'eco', name: 'Decorative Pillow (Amazon)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 1.6, 1.6], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
+  { id: 'decorative-pillow-eco', groupId: 'decorative-pillow', groupLabel: 'Decorative Pillows', tier: 'eco', name: 'Decorative Pillow (Amazon)', price: 35, retailer: 'Amazon', productUrl: 'https://amzn.to/467nHxZ', dims: [1.6, 0.87, 1.44], color: 0xc27a5e, category: 'Bedding', subcategory: 'Optional', modelUrl: '/models/newthrowPillow.glb', tintMaterial: true, bedOnly: true, colorable: true, hasPoseOptions: true, skipsComforter: true, relatedIds: ['comforter', 'bed-full', 'colgate-bed'] },
 
   // ---- Furniture & Organization ----
   // No plain "Twin XL Bed Frame" here anymore — colgate-bed (below, in PROVIDED_CATALOG) already
