@@ -3225,11 +3225,23 @@ export class RoomEngine {
   _applyPose(group, cat, pose) {
     const pivot = group.userData.posePivot
     if (!pivot) return
+    const [, d, h] = cat.dims
+    // "diagonal" is meant to lean the pillow mostly upright, tilted back ~30° off vertical — using
+    // whichever of depth/height is actually this item's *longer* axis when resting flat, not a
+    // single fixed angle. A plump, roughly-cube decorative pillow has height (dims[2]) as its
+    // taller resting axis, so tilting 30° off the *flat* pose (POSE_ANGLES.diagonal, -30°) already
+    // leans that long axis up correctly. A flat, elongated sleeping pillow has depth (dims[1]) as
+    // its real length instead — the same fixed -30° there barely lifts its short height edge,
+    // leaving the long depth edge lying almost flat and poking out sideways past the headboard
+    // instead of leaning up ("small side up" per Tyler's report, wanting "long side up"). Tilting
+    // 30° off *upright* (-90°) instead whenever depth is the longer axis fixes that: both shapes
+    // now tilt the same 30° off whichever pose (flat or upright) already stands their own long
+    // axis vertical, so the long axis is always what leans up.
+    const baseAngle = pose === 'diagonal' && d > h ? -Math.PI / 2 + Math.PI / 6 : (POSE_ANGLES[pose] ?? 0)
     // poseFlip (see catalog.js) mirrors the lean/stand direction for a pose-capable model whose own
     // "front" faces the opposite local way from the default POSE_ANGLES convention — unused by
     // either current pillow catalog entry, but left available for a future model that needs it.
-    const angle = (POSE_ANGLES[pose] ?? 0) * (cat.poseFlip ? -1 : 1)
-    const [, d, h] = cat.dims
+    const angle = baseAngle * (cat.poseFlip ? -1 : 1)
     pivot.rotation.x = angle
     pivot.position.y = (h / 2) * Math.abs(Math.cos(angle)) + (d / 2) * Math.abs(Math.sin(angle))
   }
