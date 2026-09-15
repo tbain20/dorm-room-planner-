@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://roomex-app.vercel.app/sitemap.xml
