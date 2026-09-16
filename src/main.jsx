@@ -12,6 +12,7 @@ import JoinLayoutPage from './JoinLayoutPage.jsx'
 import AdminCustomItemsPage from './AdminCustomItemsPage.jsx'
 import TermsPage from './TermsPage.jsx'
 import PrivacyPage from './PrivacyPage.jsx'
+import FeedbackWidget from './FeedbackWidget.jsx'
 import './index.css'
 import { Analytics } from '@vercel/analytics/react'
 // Attaches window.generateAllThumbnails() for regenerating catalog thumbnails — dev-only, see
@@ -46,6 +47,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="*" element={<App />} />
       </Routes>
     </BrowserRouter>
+    <FeedbackWidget />
     <Analytics />
   </React.StrictMode>,
 )

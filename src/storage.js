@@ -757,6 +757,22 @@ export async function submitReport(targetType, targetId, reason) {
   if (error) throw error
 }
 
+// Site-wide feedback widget (see FeedbackWidget.jsx, migration 023) — deliberately doesn't call
+// requireUser like submitReport above, since the whole point is letting signed-out visitors send
+// feedback too. `email` is optional (only in case a signed-out visitor wants a reply); `pageUrl`
+// is captured by the caller from window.location, not typed by the user.
+export async function submitFeedback(message, email, pageUrl) {
+  const client = requireClient()
+  const { data } = await client.auth.getUser()
+  const { error } = await client.from('feedback').insert({
+    user_id: data?.user?.id || null,
+    message,
+    email: email || null,
+    page_url: pageUrl,
+  })
+  if (error) throw error
+}
+
 // Comments — no auth required to read (RLS covers public-layout visibility); posting/deleting
 // need a session, same as everything else. Oldest first, like a normal comment thread.
 export async function listComments(layoutId) {
