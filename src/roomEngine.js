@@ -1400,8 +1400,8 @@ export class RoomEngine {
 
   // colorHex is passed for a dressesBed item (the throw blanket's "what color?" prompt in App.jsx
   // — see _applyBedDressing) and, more generally, for any colorable item added via a
-  // color-prompt-before-placing flow (rugs — see App.jsx's colorPrompt 'rug' kind) — every other
-  // catalog item ignores the second argument.
+  // color-prompt-before-placing flow (rugs and the comforter — see App.jsx's colorPrompt 'rug'/
+  // 'comforter' kinds) — every other catalog item ignores the second argument.
   addItem(catId, colorHex) {
     const cat = ALL_ITEMS.find((c) => c.id === catId)
     if (!cat) return
@@ -1434,6 +1434,7 @@ export class RoomEngine {
       this._loadItemMesh(loadCat, (mesh) => {
         const uid = this._registerItem(mesh, cat)
         this.stackItemOn(uid, target.uid)
+        if (colorHex != null && cat.colorable) this.setItemColor(uid, colorHex)
         this.selectItem(uid)
       })
       return

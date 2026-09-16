@@ -848,14 +848,14 @@ export default function App() {
   }
 
   // Single entry point for "add this catalog item" clicks (the main catalog list, its tiered
-  // group cards, and the "GOES WELL WITH"/+Room suggestions). Four groups ask what color before
+  // group cards, and the "GOES WELL WITH"/+Room suggestions). Five groups ask what color before
   // doing anything (see the colorPrompt modal below, and its own comment above the state
   // declaration): pillowcases and sheets have no placeable model of their own (they re-tint
   // something already in the room — pillows, a bed's mattress), the throw blanket dresses the
   // bed with a real model but still asks first so it renders in the chosen color instead of its
-  // own tier default, and a rug (a real placeable model) asks first purely per Tyler's request —
-  // added in that color instead of the catalog default + a later swatch pick. Every other catalog
-  // item is unaffected and just adds normally.
+  // own tier default, and the comforter and a rug (both real placeable models) ask first purely
+  // per Tyler's request — added in that color instead of the catalog default + a later swatch
+  // pick. Every other catalog item is unaffected and just adds normally.
   function handleAddCatalogItem(catalogId) {
     const cat = [...CATALOG, ...PROVIDED_CATALOG].find((c) => c.id === catalogId)
     if (cat && cat.recolorsPillows) {
@@ -868,6 +868,10 @@ export default function App() {
     }
     if (cat && cat.dressesBed && cat.groupId === 'blanket-throw') {
       setColorPrompt({ cat, kind: 'throw-blanket' })
+      return
+    }
+    if (cat && cat.isComforterLayer) {
+      setColorPrompt({ cat, kind: 'comforter' })
       return
     }
     if (cat && cat.isRug && cat.colorable) {
@@ -2975,6 +2979,7 @@ export default function App() {
               {colorPrompt.kind === 'sheets' && 'Choose a sheet color'}
               {colorPrompt.kind === 'pillowcases' && 'Choose a pillowcase color'}
               {colorPrompt.kind === 'throw-blanket' && 'Choose a throw blanket color'}
+              {colorPrompt.kind === 'comforter' && 'Choose a comforter color'}
               {colorPrompt.kind === 'rug' && 'Choose a rug color'}
             </h2>
             <div className="rsub">
@@ -2984,6 +2989,8 @@ export default function App() {
                 `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors ${cart.filter((c) => c.cat?.isBed).length > 1 ? "your selected bed's pillows" : 'every pillow already in your room'}.`}
               {colorPrompt.kind === 'throw-blanket' &&
                 `Pick a color for ${colorPrompt.cat.name} before it dresses your bed.`}
+              {colorPrompt.kind === 'comforter' &&
+                `Pick a color for ${colorPrompt.cat.name} before it's placed on your bed.`}
               {colorPrompt.kind === 'rug' &&
                 `Pick a color for ${colorPrompt.cat.name} before it's placed.`}
             </div>
@@ -2994,7 +3001,7 @@ export default function App() {
                   onClick={() => {
                     if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
-                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'comforter' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
                   title={`#${hex.toString(16).padStart(6, '0')}`}
@@ -3020,7 +3027,7 @@ export default function App() {
                     const hex = parseInt(e.target.value.slice(1), 16)
                     if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
-                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'comforter' || colorPrompt.kind === 'rug') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
                   style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}

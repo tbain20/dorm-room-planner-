@@ -204,6 +204,7 @@ function DesignEditor({ initialDesign, onExit }) {
     if (cat && cat.recolorsPillows) { setColorPrompt({ cat, kind: 'pillowcases' }); return }
     if (cat && cat.recolorsMattress) { setColorPrompt({ cat, kind: 'sheets' }); return }
     if (cat && cat.dressesBed && cat.groupId === 'blanket-throw') { setColorPrompt({ cat, kind: 'throw-blanket' }); return }
+    if (cat && cat.isComforterLayer) { setColorPrompt({ cat, kind: 'comforter' }); return }
     engineRef.current.addItem(catalogId)
   }
 
@@ -541,11 +542,13 @@ function DesignEditor({ initialDesign, onExit }) {
               {colorPrompt.kind === 'sheets' && 'Choose a sheet color'}
               {colorPrompt.kind === 'pillowcases' && 'Choose a pillowcase color'}
               {colorPrompt.kind === 'throw-blanket' && 'Choose a throw blanket color'}
+              {colorPrompt.kind === 'comforter' && 'Choose a comforter color'}
             </h2>
             <div className="rsub">
               {colorPrompt.kind === 'sheets' && `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors your mattress.`}
               {colorPrompt.kind === 'pillowcases' && `${colorPrompt.cat.name} has no shape of its own to place — pick a color and it recolors every pillow already in your room.`}
               {colorPrompt.kind === 'throw-blanket' && `Pick a color for ${colorPrompt.cat.name} before it dresses your bed.`}
+              {colorPrompt.kind === 'comforter' && `Pick a color for ${colorPrompt.cat.name} before it's placed on your bed.`}
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
               {BEDDING_COLOR_SWATCHES.map((hex) => (
@@ -554,7 +557,7 @@ function DesignEditor({ initialDesign, onExit }) {
                   onClick={() => {
                     if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
-                    else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'comforter') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
                   title={`#${hex.toString(16).padStart(6, '0')}`}
@@ -576,7 +579,7 @@ function DesignEditor({ initialDesign, onExit }) {
                     const hex = parseInt(e.target.value.slice(1), 16)
                     if (colorPrompt.kind === 'sheets') engineRef.current.applyMattressColor(hex, colorPrompt.cat.id)
                     else if (colorPrompt.kind === 'pillowcases') engineRef.current.applyPillowcaseColor(hex, colorPrompt.cat.id)
-                    else if (colorPrompt.kind === 'throw-blanket') engineRef.current.addItem(colorPrompt.cat.id, hex)
+                    else if (colorPrompt.kind === 'throw-blanket' || colorPrompt.kind === 'comforter') engineRef.current.addItem(colorPrompt.cat.id, hex)
                     setColorPrompt(null)
                   }}
                   style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', border: 'none', padding: 0 }}

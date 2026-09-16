@@ -181,7 +181,7 @@ const FULL_BED_HEIGHTS = { low: 0.4, standard: 0.8, lofted: 1.6 } // bed-full: 2
 //   which only ever ships in black/white, not the full bedding fabric palette).
 // - hasPoseOptions: shows the flat/diagonal/upright pose picker (see setItemPose in
 //   roomEngine.js) — a pillow-specific "how is it resting on the bed" control.
-export const BEDDING_COLOR_SWATCHES = [0xffffff, 0x8a8f94, 0x2f4257, 0x8a9a7b, 0xd9a6a1, 0x7a2e2e, 0x2a2a2a]
+export const BEDDING_COLOR_SWATCHES = [0xffffff, 0x8a8f94, 0x2f4257, 0x8a9a7b, 0x7a2e2e, 0x2a2a2a]
 
 export const CATALOG = [
   // ---- Bedding ----
