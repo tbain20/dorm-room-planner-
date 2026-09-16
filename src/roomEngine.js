@@ -262,6 +262,14 @@ export class RoomEngine {
     this.renderer.setSize(w, h)
   }
 
+  // Public re-measure, for callers that resize #canvas-wrap by some means other than the window's
+  // own 'resize' event (e.g. App.jsx's mobile furnish-it height drag handle, which resizes the
+  // container purely via a CSS custom property) — _onResize only ever fires from the window
+  // listener above, so nothing else would otherwise notice the container's new size.
+  resize() {
+    this._onResize()
+  }
+
   _animate(now) {
     this._raf = requestAnimationFrame(this._animate)
     // Capped at 100ms so a stalled/backgrounded tab resuming doesn't register as one giant pan

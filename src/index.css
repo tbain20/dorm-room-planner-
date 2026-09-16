@@ -76,6 +76,13 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 }
 #new-room-btn:hover{background:var(--accent-soft); color:var(--accent);}
 
+/* Mobile-only Room Planner takeover (App.jsx) — the "click out to bring Furnish it back" backdrop
+   and the drag-to-resize splitter between the 3D view and whatever's below it. Both stay display:
+   none here so they're fully inert on desktop; the max-width:760px block below is what actually
+   activates them. */
+.mobile-planner-backdrop{display:none;}
+.mobile-resize-handle{display:none;}
+
 #sidebar{
   width:340px; flex-shrink:0; background:var(--paper); color:var(--ink);
   display:flex; flex-direction:column; box-shadow:-12px 0 30px rgba(37,29,20,0.08);
@@ -460,12 +467,40 @@ html,body,#root{margin:0;height:100%;background:var(--bg);font-family:var(--font
 
 @media (max-width: 760px){
   #app{flex-direction:column; width:100%; height:auto; min-height:100vh; overflow:visible;}
-  #canvas-wrap{height:52vh; flex:none;}
+  /* --furnish-canvas-h is set inline on #canvas-wrap (App.jsx) from the .mobile-resize-handle drag
+     below; 52vh is just the fallback for a first paint before that inline value is read. */
+  #canvas-wrap{height:var(--furnish-canvas-h, 52vh); flex:none;}
   #titleblock{min-width:0; padding:12px 14px; max-width:60vw;}
   #titleblock h1{font-size:15px;}
   .dim-row input{width:44px; font-size:12px;}
   #hint{display:none;}
   #new-room-btn{display:none;}
+
+  /* Room Planner mobile takeover — closed, #titleblock stays the small top-left pill (just the
+     h1/Save/collapse-arrow row from App.jsx); .room-planner-body (the dimensions form, structure
+     buttons, measure tool, etc.) never renders here on mobile at all, even when "open" — see below.
+     Open (#app gets .room-planner-open — see App.jsx), it instead takes over Furnish it's spot: a
+     fixed bottom sheet with the same form, #sidebar hidden underneath it, and the transparent
+     .mobile-planner-backdrop over the 3D view standing in for "click out of it". This is what makes
+     the form reachable at all on a phone — floating it over the WebGL canvas at the old 52vh/60vw
+     size the way desktop does left too little of it actually tappable. */
+  #titleblock .room-planner-body{display:none;}
+  .room-planner-open #titleblock{
+    position:fixed; top:auto; left:0; right:0; bottom:0; width:100%; max-width:100%;
+    border-radius:16px 16px 0 0; max-height:70vh; overflow-y:auto; z-index:16;
+    padding-bottom:max(16px, env(safe-area-inset-bottom));
+  }
+  .room-planner-open #titleblock .room-planner-body{display:block;}
+  .room-planner-open #sidebar{display:none;}
+  .room-planner-open #selection-panel{display:none;}
+  .room-planner-open .mobile-resize-handle{display:none;}
+  .mobile-planner-backdrop{display:block; position:absolute; inset:0; z-index:4; background:transparent;}
+
+  .mobile-resize-handle{
+    display:flex; flex:none; align-items:center; justify-content:center; height:20px;
+    background:var(--paper); cursor:row-resize; touch-action:none; z-index:7;
+  }
+  .mobile-resize-handle-bar{width:40px; height:4px; border-radius:999px; background:var(--paper-shadow);}
   /* Bottom sheet, not the desktop floating card — position:fixed to the actual viewport (not
      #canvas-wrap, which is only 52vh tall) is what actually fixes the overlap bug: the old rule
      kept #selection-panel absolutely positioned *within* that short 52vh box, bottom-anchored

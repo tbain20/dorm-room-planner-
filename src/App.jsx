@@ -426,6 +426,13 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState(null)
   const [leaderboardError, setLeaderboardError] = useState('')
   const [roomPlannerCollapsed, setRoomPlannerCollapsed] = useState(false)
+  // Mobile-only "furnish it" section height (vh) — the boundary between #canvas-wrap and #sidebar
+  // is fixed at 52vh on desktop CSS's mobile breakpoint, but Tyler wants that draggable on phones
+  // (see the .mobile-resize-handle below). Applied as a CSS custom property on #canvas-wrap
+  // (--furnish-canvas-h) rather than an inline height so it's inert outside the mobile media query
+  // that actually reads it — no JS viewport check needed to keep this from also resizing desktop.
+  const [furnishHeightVh, setFurnishHeightVh] = useState(52)
+  const furnishResizeDragRef = useRef(false)
   const [openCategories, setOpenCategories] = useState(() => new Set())
   const [catalogSearch, setCatalogSearch] = useState('')
   const [checklistItems, setChecklistItems] = useState([])
@@ -453,7 +460,17 @@ export default function App() {
       unitSystem,
     })
     engineRef.current = engine
-    return () => engine.destroy()
+    // Notices #canvas-wrap's own size changing for reasons the window's 'resize' event can't see —
+    // the mobile furnish-it drag handle below resizes it purely via a CSS custom property, with no
+    // window resize event ever firing — and re-measures the renderer/camera to match (see
+    // roomEngine.js's resize()). Also covers the ordinary window-resize case redundantly, which is
+    // harmless (_onResize is idempotent).
+    const resizeObserver = new ResizeObserver(() => engine.resize())
+    resizeObserver.observe(canvasWrapRef.current)
+    return () => {
+      resizeObserver.disconnect()
+      engine.destroy()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -773,6 +790,25 @@ export default function App() {
     const next = { ...room, [key]: parseFloat(value) || room[key] }
     setRoom(next)
     engineRef.current?.setRoomDims(next.w, next.l, next.h)
+  }
+
+  // Mobile furnish-it height drag handle (.mobile-resize-handle, CSS-hidden outside the max-width:
+  // 760px breakpoint — see index.css) — lets the boundary between the 3D view and the panel below
+  // it (Furnish it, or the room planner form when it's replaced that panel — see roomPlannerCollapsed
+  // below) be dragged instead of staying fixed at 52vh. Pointer capture keeps the drag tracking even
+  // if the finger/cursor slides off the thin handle itself, same trick a native splitter would use.
+  function handleFurnishResizeStart(e) {
+    furnishResizeDragRef.current = true
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function handleFurnishResizeMove(e) {
+    if (!furnishResizeDragRef.current) return
+    const pct = (e.clientY / window.innerHeight) * 100
+    setFurnishHeightVh(Math.min(78, Math.max(22, pct)))
+  }
+  function handleFurnishResizeEnd(e) {
+    furnishResizeDragRef.current = false
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* already released */ }
   }
 
   // Room shape: one rectangular cutout/bump-out on a single wall (not a full polygon editor —
@@ -1503,8 +1539,16 @@ export default function App() {
   }
 
   return (
-    <div id="app">
-      <div id="canvas-wrap" ref={canvasWrapRef}>
+    <div id="app" className={!roomPlannerCollapsed ? 'room-planner-open' : undefined}>
+      <div id="canvas-wrap" ref={canvasWrapRef} style={{ '--furnish-canvas-h': `${furnishHeightVh}vh` }}>
+        {/* Mobile-only (see index.css's max-width:760px block) — while the Room Planner form has
+            taken over the Furnish it panel below, this transparent layer over the 3D view is the
+            "click out" target: tapping the room itself closes the form and brings Furnish it back.
+            Display:none everywhere else, so it never intercepts a desktop click or a mobile one
+            while the form is already closed. */}
+        {!roomPlannerCollapsed && (
+          <div className="mobile-planner-backdrop" onClick={() => setRoomPlannerCollapsed(true)} />
+        )}
         {notice && (
           <div
             style={{
@@ -1552,7 +1596,7 @@ export default function App() {
             </div>
           </div>
           {!roomPlannerCollapsed && (
-            <>
+            <div className="room-planner-body">
               <div className="sub">Set your dimensions, then start furnishing.</div>
               <div className="dim-row">
                 <label>Width</label>
@@ -1712,7 +1756,7 @@ export default function App() {
                   </>
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -2124,6 +2168,19 @@ export default function App() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Mobile-only splitter (CSS-hidden outside max-width:760px — see index.css) between the 3D
+          view and whatever's below it (Furnish it, or the Room Planner form once it's taken that
+          panel over). Drag anywhere on it to resize #canvas-wrap via --furnish-canvas-h. */}
+      <div
+        className="mobile-resize-handle"
+        onPointerDown={handleFurnishResizeStart}
+        onPointerMove={handleFurnishResizeMove}
+        onPointerUp={handleFurnishResizeEnd}
+        onPointerCancel={handleFurnishResizeEnd}
+      >
+        <div className="mobile-resize-handle-bar" />
       </div>
 
       <div id="sidebar">
