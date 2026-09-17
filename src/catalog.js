@@ -684,9 +684,11 @@ export const CATALOG = [
   { id: 'shower-caddy', name: 'Shower Caddy', price: 25, retailer: 'Amazon', productUrl: 'https://amzn.to/4iZVTD7', dims: [0.8, 0.5, 0.75], color: 0xaad4e8, category: 'Bathroom', subcategory: 'Shower', modelUrl: '/models/showerCaddy.glb', tintMaterial: true, colorable: true, relatedIds: ['chk:shower-shoes'] },
 
   // ---- Sleep & Comfort ----
-  // dims from Tyler's real product spec: 11.81"D x 11.81"W x 36.22"H (÷12) — was rendering much too
-  // big/wide. colorable added (every Sleep & Comfort item now has a color option).
-  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4j4gciK', dims: [0.98, 0.98, 3.02], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/towerFan.glb', tintMaterial: true, colorable: true, relatedIds: ['humidifier'] },
+  // Height kept at Tyler's real product spec (36.22"H ÷12 = 3.02) but width/depth cut down from
+  // the spec's 11.81" (that's the packaging/base footprint, not the actual slim bladeless tower
+  // body) to 6" per Tyler — was still reading way too wide/thick at 11.81". colorable added
+  // (every Sleep & Comfort item now has a color option).
+  { id: 'fan', name: 'DREO Tower Fan (Bladeless, 90° Oscillating)', price: 90, retailer: 'Amazon', productUrl: 'https://amzn.to/4j4gciK', dims: [0.5, 0.5, 3.02], color: 0xe4e4e4, category: 'Sleep & Comfort', modelUrl: '/models/towerFan.glb', tintMaterial: true, colorable: true, relatedIds: ['humidifier'] },
   // Desk Fan — real stated dims (11.1"W x 6.3"D x 10.9"H) convert to ~0.9 x 0.5 x 0.9 ft; price is
   // an estimate (not retrievable via automated fetch) — double-check before relying on it.
   { id: 'desk-fan', name: 'Amazon Basics Air Circulator Desk Fan', price: 20, retailer: 'Amazon', productUrl: 'https://amzn.to/3Va20eh', dims: [0.9, 0.5, 0.9], color: 0x2b2b2b, category: 'Sleep & Comfort', modelUrl: '/models/deskFan.glb', tintMaterial: true, colorable: true, relatedIds: ['fan'] },
