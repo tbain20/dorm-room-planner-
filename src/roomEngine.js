@@ -43,6 +43,19 @@ const FLOOR_POINT_MAX_DIST = 20
 // today — this is an alignment aid, not a hard collision block like a wall).
 const ITEM_SNAP_DISTANCE = 0.28
 
+// How much clear space (feet) a freshly-added item tries to leave between its own footprint and
+// everything already in the room — see _findOpenFloorSpot/_findOpenWallSpot. It's a target, not a
+// requirement: the search caps its "how open is this spot" score here, so once a candidate has
+// this much breathing room on every side it stops competing on openness and the most central spot
+// wins instead. That keeps a new item somewhere the user can immediately grab and drag it, rather
+// than banished to a far corner just because the corner happened to be emptier.
+const SPAWN_CLEARANCE = 1.0
+
+// Grid resolution (feet) for those same searches. Fine enough to find the gap between two pieces
+// of furniture, coarse enough that even a 25'x25' room is only ~2.6k candidate spots — each one
+// just a handful of rectangle comparisons, run once per item added.
+const SPAWN_SEARCH_STEP = 0.5
+
 // Box3.intersectsBox() treats touching boundaries (zero gap) as intersecting, which is exactly the
 // state two items end up in once _snapToNearbyItems snaps them flush against each other. Without
 // slack here, merely flush items would permanently read as "colliding" red instead of only items
@@ -1026,6 +1039,185 @@ export class RoomEngine {
     }
   }
 
+  // ---------- Open-spot placement ----------
+  // A brand-new item used to land at the room's center (give or take a foot of jitter), which
+  // meant every item after the first spawned inside whatever was already parked there — the user
+  // had to drag two overlapping pieces apart before they could even tell what they'd added. The
+  // searches below instead look for a patch of floor (or wall) that's actually free, preferring
+  // the most central one that still leaves SPAWN_CLEARANCE of room on every side.
+
+  // Separation between two axis-aligned floor rectangles (world x/z): positive is clear floor
+  // between them, 0 is exactly flush, negative means they overlap.
+  _rectGap(a, b) {
+    return Math.max(b.minX - a.maxX, a.minX - b.maxX, b.minZ - a.maxZ, a.minZ - b.maxZ)
+  }
+
+  // Same, for two world-space boxes — the wall search has to care about height as well, since two
+  // posters at different heights on the same wall aren't in each other's way at all.
+  _boxGap(a, b) {
+    return Math.max(
+      b.min.x - a.max.x, a.min.x - b.max.x,
+      b.min.y - a.max.y, a.min.y - b.max.y,
+      b.min.z - a.max.z, a.min.z - b.max.z,
+    )
+  }
+
+  // Floor rectangles a newly-added item shouldn't land on top of: every floor item already in the
+  // room, plus every door/window opening (which _clampItemToRoom would shove the item back out of
+  // anyway — better not to aim there in the first place than to have it jump somewhere
+  // unexpected the moment it's registered). Wall-mounted items are skipped entirely: they hang
+  // above the floor and obstruct nothing standing on it.
+  _occupiedFloorRects(newCat) {
+    const rects = []
+    for (const p of this.placedItems) {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      if (this._isWallMounted(p, cat)) continue
+      // A rug is a flat floor covering, not an obstruction — furniture standing on one is the
+      // whole point of it — so an existing rug only blocks another rug, two overlapping rugs
+      // being the one case that does read as a mistake.
+      if (cat?.isRug && !newCat?.isRug) continue
+      const [w, d] = this._footprint(p.mesh)
+      rects.push({
+        minX: p.mesh.position.x - w / 2, maxX: p.mesh.position.x + w / 2,
+        minZ: p.mesh.position.z - d / 2, maxZ: p.mesh.position.z + d / 2,
+      })
+    }
+    for (const feature of this.wallFeatures) {
+      const box = this._featureCollisionBox(feature)
+      rects.push({ minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z })
+    }
+    return rects
+  }
+
+  // Candidate coordinates along one axis for the searches below: multiples of the grid step
+  // anchored on the center (so the first item into an empty room lands dead center rather than
+  // half a step off it, whatever the room's dimensions happen to be), plus the two extremes so a
+  // crowded room can still park something flush against a wall. Center-first ordering also
+  // settles ties in favor of the more central spot.
+  _spawnAxisCandidates(limit) {
+    if (limit <= 0) return [0]
+    const out = [0]
+    for (let v = SPAWN_SEARCH_STEP; v < limit; v += SPAWN_SEARCH_STEP) out.push(v, -v)
+    out.push(limit, -limit)
+    return out
+  }
+
+  // True if this item's footprint sits fully inside the room at (x, z) — asked by moving the mesh
+  // there and seeing whether the room clamp moves it back, so the notch/bump-out geometry is
+  // handled by the same code that enforces it everywhere else rather than a second copy of it
+  // living here. Leaves the mesh at the tested position; the caller restores it.
+  _fitsInRoomAt(mesh, x, z) {
+    mesh.position.x = x
+    mesh.position.z = z
+    this._clampPositionOnly(mesh)
+    return Math.abs(mesh.position.x - x) < 1e-6 && Math.abs(mesh.position.z - z) < 1e-6
+  }
+
+  // Where a freshly-added floor item should land. Scans a grid of candidate centers across the
+  // room and keeps the best one, scored as "clearance first (capped at SPAWN_CLEARANCE and
+  // bucketed to the grid step, so near-ties don't decide anything), then closest to the room's
+  // center." Anything overlapping an existing item or a doorway is rejected outright. Returns
+  // null when nothing fits at all — an item larger than the room, or a room with no free floor
+  // left — which leaves the caller's own fallback in charge.
+  _findOpenFloorSpot(mesh, cat) {
+    const [w, d] = this._footprint(mesh)
+    const hw = w / 2, hd = d / 2
+    const halfW = this.room.w / 2 - hw
+    const halfL = this.room.l / 2 - hd
+    if (halfW < 0 || halfL < 0) return null
+    const blockers = this._occupiedFloorRects(cat)
+    const originalX = mesh.position.x
+    const originalZ = mesh.position.z
+    const xs = this._spawnAxisCandidates(halfW)
+    const zs = this._spawnAxisCandidates(halfL)
+    let best = null
+    let bestOpenness = -Infinity
+    let bestDist = Infinity
+    for (const x of xs) {
+      for (const z of zs) {
+        if (!this._fitsInRoomAt(mesh, x, z)) continue
+        const rect = { minX: x - hw, maxX: x + hw, minZ: z - hd, maxZ: z + hd }
+        let gap = Infinity
+        for (const b of blockers) {
+          gap = Math.min(gap, this._rectGap(rect, b))
+          if (gap < 0) break
+        }
+        if (gap < 0) continue
+        const openness = Math.round(Math.min(gap, SPAWN_CLEARANCE) / SPAWN_SEARCH_STEP)
+        const dist = Math.hypot(x, z)
+        if (openness > bestOpenness || (openness === bestOpenness && dist < bestDist)) {
+          best = { x, z }
+          bestOpenness = openness
+          bestDist = dist
+        }
+      }
+    }
+    mesh.position.x = originalX
+    mesh.position.z = originalZ
+    return best
+  }
+
+  // The wall-item counterpart to _occupiedFloorRects: every wall-mounted item already up, plus
+  // every door/window opening (a poster dropped right over the window it's covering is the wall
+  // version of spawning inside another item).
+  _occupiedWallBoxes() {
+    const boxes = []
+    for (const p of this.placedItems) {
+      const cat = ALL_ITEMS.find((c) => c.id === p.catalogId)
+      if (!this._isWallMounted(p, cat)) continue
+      boxes.push(new THREE.Box3().setFromObject(p.mesh))
+    }
+    for (const feature of this.wallFeatures) boxes.push(this._featureCollisionBox(feature))
+    return boxes
+  }
+
+  // Where a freshly-added wall item should hang: the first wall segment (in build order, so
+  // repeated adds stay predictable rather than hopping between walls) with a free span wide
+  // enough for it, at the most centered offset along that wall that clears everything already
+  // mounted there. Same clearance-then-center scoring as the floor search, at the eye-level
+  // height _defaultWallPlacement picks. Returns null when no wall has room.
+  _findOpenWallSpot(cat, targetY) {
+    if (!this.wallMeshes || !this.wallMeshes.length) return null
+    const [w, depth, height] = cat.dims
+    const boxes = this._occupiedWallBoxes()
+    for (const { mesh: wallMesh, normal } of this.wallMeshes) {
+      const span = wallMesh.geometry?.parameters?.width
+      if (!span || span < w) continue
+      const tangent = new THREE.Vector3(1, 0, 0).applyQuaternion(wallMesh.quaternion)
+      // Every wall segment is axis-aligned (see buildRoom's addWall), so the item's half-extents
+      // along world x/z are just its width and depth projected onto those two axes — no general
+      // oriented-box math needed.
+      const halfX = Math.abs(tangent.x) * (w / 2) + Math.abs(normal.x) * (depth / 2)
+      const halfZ = Math.abs(tangent.z) * (w / 2) + Math.abs(normal.z) * (depth / 2)
+      let best = null
+      let bestOpenness = -Infinity
+      let bestDist = Infinity
+      for (const along of this._spawnAxisCandidates((span - w) / 2)) {
+        const cx = wallMesh.position.x + tangent.x * along + normal.x * (depth / 2)
+        const cz = wallMesh.position.z + tangent.z * along + normal.z * (depth / 2)
+        const box = new THREE.Box3(
+          new THREE.Vector3(cx - halfX, targetY - height / 2, cz - halfZ),
+          new THREE.Vector3(cx + halfX, targetY + height / 2, cz + halfZ),
+        )
+        let gap = Infinity
+        for (const b of boxes) {
+          gap = Math.min(gap, this._boxGap(box, b))
+          if (gap < 0) break
+        }
+        if (gap < 0) continue
+        const openness = Math.round(Math.min(gap, SPAWN_CLEARANCE) / SPAWN_SEARCH_STEP)
+        const dist = Math.abs(along)
+        if (openness > bestOpenness || (openness === bestOpenness && dist < bestDist)) {
+          best = { x: cx, z: cz, rotY: wallMesh.rotation.y }
+          bestOpenness = openness
+          bestDist = dist
+        }
+      }
+      if (best) return best
+    }
+    return null
+  }
+
   // Keeps a stacked item's footprint within the item it's resting on, the same way
   // _clampItemToRoom keeps a floor item within the room's walls — you can slide a TV around on a
   // desk, but not off the edge of it. If the item on top is bigger than its base along some axis
@@ -1481,9 +1673,20 @@ export class RoomEngine {
       if (cat.wallMountable) {
         this._defaultWallPlacement(mesh, cat)
       } else {
-        const jitter = (Math.random() - 0.5) * 2
-        mesh.position.x = jitter
-        mesh.position.z = jitter
+        // Land on open floor rather than at the room's center, so a new item never spawns inside
+        // something already placed there and is always sitting somewhere the user can grab and
+        // drag it straight away. The old center-ish jitter stays as the fallback for a room with
+        // no free spot left at all (see _findOpenFloorSpot) — an item overlapping something is
+        // still better than one that silently never appears.
+        const spot = this._findOpenFloorSpot(mesh, cat)
+        if (spot) {
+          mesh.position.x = spot.x
+          mesh.position.z = spot.z
+        } else {
+          const jitter = (Math.random() - 0.5) * 2
+          mesh.position.x = jitter
+          mesh.position.z = jitter
+        }
       }
       const uid = this._registerItem(mesh, cat)
       if (colorHex != null && cat.colorable) this.setItemColor(uid, colorHex)
@@ -1552,10 +1755,21 @@ export class RoomEngine {
     if (!wallEntry) return
     const { mesh: wallMesh, normal } = wallEntry
     const [, depth, height] = cat.dims
+    const targetY = Math.min(Math.max(4.5, height / 2), Math.max(height / 2, this.room.h - height / 2))
+    // Prefer a genuinely free stretch of wall (which is usually this same first wall, just offset
+    // past whatever is already hanging on it) so two posters added back to back don't land on top
+    // of each other or over a window.
+    const spot = this._findOpenWallSpot(cat, targetY)
+    if (spot) {
+      mesh.position.set(spot.x, targetY, spot.z)
+      mesh.rotation.y = spot.rotY
+      return
+    }
+    // Every wall full (or too narrow for this item) — fall back to the old centered-with-jitter
+    // spot on the first wall, so the item still goes up somewhere the user can find and move it.
     const jitter = (Math.random() - 0.5) * 2
     const tangent = new THREE.Vector3(1, 0, 0).applyQuaternion(wallMesh.quaternion)
     const center = wallMesh.position
-    const targetY = Math.min(Math.max(4.5, height / 2), Math.max(height / 2, this.room.h - height / 2))
     mesh.position.set(
       center.x + tangent.x * jitter + normal.x * (depth / 2),
       targetY,
